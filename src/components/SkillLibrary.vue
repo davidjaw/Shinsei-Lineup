@@ -33,7 +33,6 @@
           <el-option label="被動" value="被動" />
           <el-option label="兵種" value="兵種" />
           <el-option label="陣法" value="陣法" />
-          <el-option label="內政" value="內政" />
         </el-select>
         <el-select v-model="filterRarity" placeholder="稀有度" clearable class="w-24" size="small">
           <el-option label="S" value="S" />
@@ -231,7 +230,7 @@ const isUsed = (skill: any) => {
     if (!skill || !skill.name) return false
 
     // Only applicable in select/browse mode
-    if (props.mode === 'manage' || skill.rarity !== 'S') return false
+    if (props.mode === 'manage') return false
 
     if (Array.isArray(props.usedSkills)) {
       return props.usedSkills.includes(skill.name)
