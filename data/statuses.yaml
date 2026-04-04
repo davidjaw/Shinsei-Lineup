@@ -1,0 +1,209 @@
+# Status Effect Dictionary — 信長之野望：真戰
+# Canonical CHT names from battle-system-design.md spec
+# Each status has ONE canonical name — no aliases
+
+# === Action Restriction (行動限制) ===
+威壓:
+  id: suppress
+  name: 威壓
+  category: action_restriction
+  description: 跳過整個回合，中斷蓄力中的戰法
+
+麻痺:
+  id: paralyze
+  name: 麻痺
+  category: action_restriction
+  description: 跳過回合及行動後階段，中斷蓄力中的戰法
+
+封擊:
+  id: disarm
+  name: 封擊
+  category: action_restriction
+  description: 無法進行普通攻擊
+
+無策:
+  id: exhaust
+  name: 無策
+  category: action_restriction
+  description: 無法發動主動戰法，中斷蓄力中的戰法
+
+混亂:
+  id: confuse
+  name: 混亂
+  category: action_restriction
+  description: 普通攻擊隨機攻擊友軍或敵軍
+
+疲弊:
+  id: weaken
+  name: 疲弊
+  category: action_restriction
+  description: 造成的所有傷害歸零
+
+# === Combat State (戰鬥狀態) ===
+閃避:
+  id: dodge
+  name: 閃避
+  category: combat_state
+  description: 迴避攻擊，不受傷害，阻止突擊觸發
+
+抵禦:
+  id: block
+  name: 抵禦
+  category: combat_state
+  description: 吸收傷害，突擊仍可觸發
+
+必中:
+  id: sure_hit
+  name: 必中
+  category: combat_state
+  description: 無視閃避與抵禦
+
+先攻:
+  id: vanguard
+  name: 先攻
+  category: combat_state
+  description: 本回合最先行動
+
+# === Combat Enhancement (戰鬥強化) ===
+連擊:
+  id: chain_strike
+  name: 連擊
+  category: combat_enhancement
+  description: 普通攻擊執行兩次
+
+破陣:
+  id: formation_break
+  name: 破陣
+  category: combat_enhancement
+  description: 屬性差計算時無視敵方防禦屬性
+
+亂舞:
+  id: wild_dance
+  name: 亂舞
+  category: combat_enhancement
+  description: 普通攻擊濺射額外目標
+
+# === Crit (會心/奇謀) ===
+會心:
+  id: physical_crit
+  name: 會心
+  category: crit
+  description: 增加兵刃會心機率
+
+奇謀:
+  id: tactical_crit
+  name: 奇謀
+  category: crit
+  description: 增加計略會心機率
+
+# === Lifesteal (吸血) ===
+離反:
+  id: physical_lifesteal
+  name: 離反
+  category: lifesteal
+  description: 兵刃攻擊時依傷害量回復兵力
+
+攻心:
+  id: tactical_lifesteal
+  name: 攻心
+  category: lifesteal
+  description: 計略攻擊時依傷害量回復兵力
+
+# === Healing (治療) ===
+休養:
+  id: recovery
+  name: 休養
+  category: healing
+  description: 每回合行動前回復傷兵
+
+禁療:
+  id: heal_reduction
+  name: 禁療
+  category: healing
+  description: 降低受到的治療量
+
+# === DoT (持續傷害) ===
+火傷:
+  id: burn
+  name: 火傷
+  category: dot
+  description: 每回合行動前受到計略傷害（智略）
+
+水攻:
+  id: flood
+  name: 水攻
+  category: dot
+  description: 每回合行動前受到計略傷害（智略）
+
+中毒:
+  id: poison
+  name: 中毒
+  category: dot
+  description: 每回合行動前受到計略傷害（智略）
+
+潰走:
+  id: rout
+  name: 潰走
+  category: dot
+  description: 每回合行動前受到兵刃傷害（武勇）
+
+消沉:
+  id: demoralize
+  name: 消沉
+  category: dot
+  description: 每回合行動前受到計略傷害（智略）
+
+# === Immunity (免疫) ===
+洞察:
+  id: insight
+  name: 洞察
+  category: immunity
+  description: 免疫所有行動限制狀態
+
+免疫:
+  id: immunity
+  name: 免疫
+  category: immunity
+  description: 免疫特定狀態
+
+# === Targeting Override (目標覆蓋) ===
+援護:
+  id: guard
+  name: 援護
+  category: targeting_override
+  description: 攔截對保護目標的普通攻擊
+
+挑釁:
+  id: taunt
+  name: 挑釁
+  category: targeting_override
+  description: 強制目標對自己普通攻擊
+
+牽制:
+  id: suppress_target
+  name: 牽制
+  category: targeting_override
+  description: 強制目標的技能效果轉向自己
+
+# === Special (for {dmg:xxx} and {stat:xxx}) ===
+_damage_types:
+  physical:
+    name: 兵刃
+  strategy:
+    name: 計略
+  true:
+    name: 真實
+
+_stats:
+  val:
+    name: 武勇
+  int:
+    name: 智略
+  lea:
+    name: 統率
+  spd:
+    name: 速度
+  cha:
+    name: 魅力
+  pol:
+    name: 政務

@@ -1,0 +1,839 @@
+skills:
+  勇猛無前:
+    name: 勇猛無前
+    type: 主動
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 40%
+    description: 使自身獲得{var:crit_rate_1:%}{status:會心}狀態，持續{var:duration}回合，並對敵軍單體造成兵刃傷害（傷害率{var:damage_1:%}），有{var:extra_trigger_chance:%}機率（{scale:spd}）再次使自身獲得{var:crit_rate_2:%}{status:會心}狀態（最多疊加{var:max_stacks}次），並對另一名敵軍造成兵刃傷害（傷害率{var:damage_2:%}）
+    vars:
+      crit_rate_1:
+        base: 0.125
+        max: 0.25
+      duration: 2
+      damage_1:
+        base: 0.58
+        max: 1.16
+      extra_trigger_chance:
+        base: 0.325
+        max: 0.65
+      crit_rate_2:
+        base: 0.075
+        max: 0.15
+      max_stacks: 2
+      damage_2:
+        base: 0.49
+        max: 0.98
+    _action: add
+    source_hero: 柿崎景家
+  越後二天:
+    name: 越後二天
+    type: 突擊
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 45%→90%
+    description: 普通攻擊之後，對目標造成{var:dmg1}兵刃傷害，並有{var:silence_prob}幾率施加{status:無策}狀態，持續{var:duration}回合；若目標已處於{status:無策}狀態，則恢復自身兵力（治療率{var:heal}，受{scale:武勇}影響）；隨後有{var:extra_prob}幾率額外對敵軍單體造成一次兵刃傷害（傷害率{var:dmg2}）。該戰法每成功發動一次，使施加{status:無策}的幾率增加{var:prob_inc}，最多增加{var:max_stacks}次。
+    vars:
+      dmg1:
+        base: 0.58
+        max: 1.08
+      silence_prob: 0.4
+      duration: 1
+      heal:
+        base: 0.39
+        max: 0.78
+      extra_prob: 0.5
+      dmg2:
+        base: 0.54
+        max: 1.08
+      prob_inc: 0.1
+      max_stacks: 3
+    _action: add
+    unique_hero: 柿崎景家
+    is_unique: true
+  疾風迅雷:
+    name: 疾風迅雷
+    type: 指揮
+    rarity: S
+    target: 敵軍群體
+    activation_rate: 1.0
+    description: 戰鬥中，有 {var:trigger_chance}{scale:武勇}機率對敵方群體 ({var:target_count}人)
+      分別造成兵刃傷害 (傷害率 {var:damage_rate})，有 {var:status_chance}{scale:武勇}機率使其進入持續{var:status_duration}回合的{status:麻痺}狀態。若目標處於{status:麻痺}狀態，恢復我軍單體兵力
+      (恢復率 {var:heal_rate}{scale:武勇})。
+    commander_description: 若目標處於{status:麻痺}狀態，有 {var:extra_trigger_chance}{scale:武勇}機率額外對敵方單體發動{var:extra_trigger_count}次該戰法，不能重複觸發。
+    vars:
+      trigger_chance:
+        base: 0.225
+        max: 0.45
+      target_count: 2
+      damage_rate:
+        base: 0.38
+        max: 0.76
+      status_chance:
+        base: 0.25
+        max: 0.5
+      status_duration: 1
+      heal_rate:
+        base: 0.48
+        max: 0.96
+      extra_trigger_chance:
+        base: 0.08
+        max: 0.16
+      extra_trigger_count: 1
+    _action: add
+    unique_hero: 立花闇千代
+    is_unique: true
+  惠風和雨:
+    name: 惠風和雨
+    type: 指揮
+    rarity: S
+    target: 我方群體
+    activation_rate: 1.0
+    description: 戰鬥中，偶數回合，有{var:trigger_rate_even}機率治療我軍群體（{var:target_count}人）（治療率{var:heal_rate}，受{scale:智略}影響）；若自身為女性武將，則奇數回合也有{var:trigger_rate_odd}機率（受{scale:魅力}影響）治療我軍群體（{var:target_count}人）（治療率{var:heal_rate}，受{scale:智略}影響）。
+    vars:
+      trigger_rate_even:
+        base: 0.4
+        max: 0.8
+      heal_rate:
+        base: 0.61
+        max: 1.22
+      trigger_rate_odd:
+        base: 0.1
+        max: 0.2
+      target_count: 2
+    _action: add
+    source_hero: 立花闇千代
+  電光石火:
+    name: 電光石火
+    type: 主動
+    rarity: S
+    target: 敵軍群體
+    activation_rate: 0.4
+    description: 對敵軍群體（{var:target_count}人）造成兵刃傷害(傷害率{var:dmg})，隨後使隨機友軍單體統率增加{var:stat_inc}點並{status:援護}自身，持續{var:duration}回合
+    vars:
+      target_count: 2
+      dmg:
+        base: 0.48
+        max: 0.96
+      stat_inc:
+        base: 24
+        max: 48
+      duration: 2
+    _action: add
+    source_hero: 鈴木佐大夫
+  彈嵐雨霰:
+    name: 彈嵐雨霰
+    type: 主動
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 0.45
+    description: 對敵軍單體造成 {var:hits_min}-{var:hits_max} 次兵刃傷害（傷害率 {var:damage_rate}），有
+      {var:status_chance} 機率對其施加 {status:無策} 或 {status:封擊} 狀態（優先施加未重複的狀態），持續 {var:duration}
+      回合，若目標處於持續性減益狀態中，機率增加 {var:extra_chance}。該戰法發動後進入 {var:cooldown} 回合冷卻時間。
+    commander_description: 造成 {var:commander_hits} 次傷害的機率增加至 {var:commander_hits_chance}。
+    vars:
+      hits_min: 2
+      hits_max: 3
+      damage_rate:
+        base: 0.63
+        max: 1.26
+      status_chance:
+        base: 0.375
+        max: 0.75
+      duration: 1
+      extra_chance:
+        base: 0.075
+        max: 0.15
+      cooldown: 1
+      commander_hits: 3
+      commander_hits_chance: 0.75
+    _action: add
+    unique_hero: 鈴木佐大夫
+    is_unique: true
+  剛毅木訥:
+    name: 剛毅木訥
+    type: 指揮
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 1.0
+    description: 友軍群體（{var:target_count}人）每回合首次受到傷害時，自身有{var:proc_rate}機率對造成傷害的敵軍武將造成兵刃傷害（傷害率{var:dmg_rate}），並恢復受到傷害的友軍兵力（恢復率{var:heal_rate}，{scale:智略}）
+    commander_description: 使發動機率額外{scale:統率}
+    vars:
+      target_count: 2
+      proc_rate:
+        base: 0.225
+        max: 0.45
+      dmg_rate:
+        base: 0.43
+        max: 0.86
+      heal_rate:
+        base: 0.43
+        max: 0.86
+    _action: add
+    unique_hero: 加藤嘉明
+    is_unique: true
+  表裏比興:
+    name: 表裏比興
+    type: 主動
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 0.55
+    description: 對敵軍單體造成謀略傷害（傷害率{var:damage_rate}{scale:int}）並施加{status:混亂}狀態，持續{var:duration}回合，其下回合首次普通攻擊目標若為我軍，自身恢復目標兵力（恢復率{var:heal_rate}{scale:int}）。若為敵軍，自身對目標造成謀略傷害（傷害率{var:counter_damage_rate}{scale:int}）。若此戰法發動時目標已{status:混亂}，自身再對敵軍單體造成謀略傷害（傷害率{var:extra_damage_rate}{scale:int}，優先選擇其友軍）。
+    commander_description: 使被施加{status:混亂}狀態的敵方武將為自身分擔{var:share_damage_rate}{scale:int}傷害，持續{var:duration}回合。
+    vars:
+      damage_rate:
+        base: 0.71
+        max: 1.42
+      duration: 1
+      heal_rate:
+        base: 0.45
+        max: 0.9
+      counter_damage_rate:
+        base: 0.45
+        max: 0.9
+      extra_damage_rate:
+        base: 0.81
+        max: 1.92
+      share_damage_rate:
+        base: 0.015
+        max: 0.03
+    _action: add
+    unique_hero: 真田昌幸
+    is_unique: true
+  瞬息萬變:
+    name: 瞬息萬變
+    type: 主動
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 0.45
+    description: 對敵軍單體造成謀略傷害（傷害率{var:dmg1}，受{scale:智略}影響），並施加{status:混亂}狀態，持續{var:dur}回合，若其已{status:混亂}，則令另外{var:count}名敵軍武將對其造成傷害（傷害率{var:dmg2}，類型受該武將武勇或智略較高的一項影響）
+    vars:
+      dmg1:
+        base: 0.81
+        max: 1.62
+      dur: 1
+      count: 1
+      dmg2:
+        base: 0.79
+        max: 1.58
+    _action: add
+    source_hero: 真田昌幸
+  松柏之操:
+    name: 松柏之操
+    type: 指揮
+    rarity: S
+    target: 我方單體
+    activation_rate: 1.0
+    description: 使我軍大將除自帶戰法外的主動戰法發動機率增加{var:active_prob_inc}{scale:int}，每次獲得自身或友軍戰法的功能性狀態增益時，有{var:trigger_chance}{scale:int}幾率使自軍副將受到的傷害降低{var:dmg_red}{scale:int}，持續{var:duration}回合，最多疊加{var:max_stack}次
+    vars:
+      active_prob_inc:
+        base: 0.075
+        max: 0.15
+      trigger_chance:
+        base: 0.325
+        max: 0.65
+      dmg_red:
+        base: 0.025
+        max: 0.05
+      duration: 2
+      max_stack: 2
+    _action: add
+    unique_hero: 阿松
+    is_unique: true
+  奇策縱橫:
+    name: 奇策縱橫
+    type: 主動
+    rarity: S
+    target: 敵軍全體
+    activation_rate: 0.3
+    description: 準備{var:prep_turns}回合，對敵軍全體造成謀略傷害（傷害率{var:dmg_rate}，受{scale:智略}影響）
+    vars:
+      prep_turns: 1
+      dmg_rate:
+        base: 1.27
+        max: 2.54
+    _action: add
+    source_hero: 阿松
+  一舟軒:
+    name: 一舟軒
+    type: 主動
+    rarity: S
+    target: 友軍群體
+    activation_rate: 0.4
+    description: 恢復友軍群體（{var:target_num}人）兵力（恢復率{var:heal_rate}{scale:智略}），並有{var:prob}{scale:智略}機率使其獲得{var:stacks}次鐵壁，持續{var:duration}回合
+    vars:
+      target_num: 2
+      heal_rate:
+        base: 0.76
+        max: 1.52
+      prob:
+        base: 0.26
+        max: 0.52
+      stacks: 1
+      duration: 2
+    _action: add
+    unique_hero: 安宅冬康
+    is_unique: true
+  金城湯池:
+    name: 金城湯池
+    type: 主動
+    rarity: S
+    target: 敵軍群體
+    activation_rate: 0.4
+    description: '{status:牽制}敵軍群體（{var:target_count}人），並使自身受到戰法傷害降低{var:dmg_reduce}%{scale:智略}，持續{var:duration}回合，下個回合行動前恢復自身兵力（恢復率{var:heal_rate}%{scale:智略}）'
+    vars:
+      target_count: 2-3
+      dmg_reduce:
+        base: 0.075
+        max: 0.15
+      duration: 1
+      heal_rate:
+        base: 0.39
+        max: 0.78
+    _action: add
+    source_hero: 安宅冬康
+  樽俎折衝:
+    name: 樽俎折衝
+    type: 指揮
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 1
+    description: 行動前，有{var:prob}{scale:統率}機率對自身和敵軍單體施加{status:封擊}狀態，若自身處於{status:無策}狀態，改為施加{status:無策}狀態
+      (若同時處於{status:封擊}與{status:無策}狀態，施加兩種狀態)。除自身外若我軍仍有武將存活，使敵軍目標為自身分擔{var:share}{scale:統率}的傷害，持續{var:round}回合
+    commander_description: 分擔傷害的比例提升至{var:cmdr_share}{scale:統率}
+    vars:
+      prob:
+        base: 0.15
+        max: 0.3
+      share:
+        base: 0.02
+        max: 0.04
+      cmdr_share:
+        base: 0.035
+        max: 0.07
+      round: 2
+    _action: add
+    unique_hero: 伊達輝宗
+    is_unique: true
+  同盟姻親:
+    name: 同盟姻親
+    type: 主動
+    rarity: S
+    target: 自身與異性友軍單體
+    activation_rate: 40%
+    description: 使自身與異性友軍單體受到傷害降低{var:dmg_reduction}（{scale:智略}），並分擔{var:share_dmg}其受到的傷害，持續{var:duration}回合
+    vars:
+      dmg_reduction:
+        base: 0.1
+        max: 0.2
+      share_dmg:
+        base: 0.1
+        max: 0.2
+      duration: 2
+    _action: add
+    is_event_skill: true
+  離心背道:
+    name: 離心背道
+    type: 主動
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 35%
+    description: 準備1回合，對敵方大將造成兵刃傷害（傷害率{var:damage_rate}），並使其造成的傷害降低{var:damage_reduce}，持續2回合
+    vars:
+      damage_rate:
+        base: 1.76
+        max: 2.52
+      damage_reduce:
+        base: 0.25
+        max: 0.5
+    _action: add
+    is_event_skill: true
+  疑兵盜城:
+    name: 疑兵盜城
+    type: 主動
+    rarity: S
+    target: 敵軍群體
+    activation_rate: 35%
+    description: 使自身智略增加{var:int_boost}點（{scale:智略}），持續2回合，並使敵軍群體（2-3人）下次受到謀略傷害時，額外受到謀略傷害（傷害率{var:add_damage_rate}，{scale:智略}），持續2回合
+    vars:
+      int_boost:
+        base: 16.5
+        max: 33
+      add_damage_rate:
+        base: 0.53
+        max: 1.06
+    _action: add
+    is_event_skill: true
+  乘虛而入:
+    name: 乘虛而入
+    type: 突擊
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 35%
+    description: 普通攻擊之後，降低攻擊目標武勇與智略{var:stat_reduce}點，持續1回合。此外，若目標已處於{status:挑釁}或{status:牽制}狀態，則使自身獲得{var:dodge_rate}規避狀態，否則使攻擊目標進入{status:挑釁}及{status:牽制}狀態，持續1回合。
+    vars:
+      stat_reduce:
+        base: 70
+        max: 140
+      dodge_rate:
+        base: 0.175
+        max: 0.35
+    _action: add
+    is_event_skill: true
+  大器之蘊:
+    name: 大器之蘊
+    type: 指揮
+    rarity: A
+    target: 我軍群體
+    activation_rate: 100%
+    description: 第5回合起，每回合恢復我軍群體（2人）兵力（恢復率{var:heal_rate}，{scale:智略}）。
+    vars:
+      heal_rate:
+        base: 0.54
+        max: 1.08
+    _action: add
+    is_event_skill: true
+  立身之志:
+    name: 立身之志
+    type: 主動
+    rarity: S
+    target: 敵軍全體
+    activation_rate: 40%
+    description: 使敵軍全體進入{status:挑釁}狀態，並使自身統率提高{var:stat_boost_rate}，持續2回合
+    vars:
+      stat_boost_rate:
+        base: 0.225
+        max: 0.55
+    _action: add
+    is_event_skill: true
+  專橫專斷:
+    name: 專橫專斷
+    type: 主動
+    rarity: S
+    target: 自身
+    activation_rate: 40%
+    description: 使自身下次主動戰法造成兵刃傷害提高{var:damage_boost_base}，該戰法每次發動，使傷害提高效果增加{var:damage_boost_stack}，每第3次發動時，使敵軍單體進入{status:無策}狀態，持續1回合
+    vars:
+      damage_boost_base:
+        base: 0.24
+        max: 0.48
+      damage_boost_stack:
+        base: 0.06
+        max: 0.12
+    _action: add
+    is_event_skill: true
+  家中整飭:
+    name: 家中整飭
+    type: 主動
+    rarity: A
+    target: 敵軍單體
+    activation_rate: 35%
+    description: 對敵軍單體造成謀略傷害（傷害率{var:dmg}），並對其施加{status:封擊}效果，持續{var:duration}回合。
+    vars:
+      dmg:
+        base: 0.68
+        max: 1.36
+      duration: 2
+    _action: add
+    is_event_skill: true
+  破天轟鳴:
+    name: 破天轟鳴
+    type: 主動
+    rarity: A
+    target: 敵軍群體
+    activation_rate: 35%
+    description: 準備1回合，對敵軍群體（{var:target_count}人）施加{status:火傷}效果（傷害率{var:dmg}{scale:智略}）並降低統率{var:stat_reduce}點，持續{var:duration}回合。
+    vars:
+      target_count: 2
+      dmg:
+        base: 0.52
+        max: 1.05
+      stat_reduce:
+        base: 10
+        max: 20
+      duration: 2
+    _action: add
+    is_event_skill: true
+  合盟之陣:
+    name: 合盟之陣
+    type: 陣型
+    rarity: S
+    target: 我軍全體
+    activation_rate: 100%
+    description: 我軍{var:unit_count}人所屬勢力均不同，且我軍大將自帶戰法為主動或突擊時生效。戰鬥中，使我軍大將自帶戰法發動率增加{var:active_rate_inc}。每回合行動前，使兵力較高的副將造成的傷害提高{var:high_hp_dmg_inc}，受到的傷害降低{var:high_hp_dmg_dec}，兵力較低的副將造成傷害提高{var:low_hp_dmg_inc}，受到的傷害降低{var:low_hp_dmg_dec}。
+    vars:
+      unit_count: 3
+      active_rate_inc:
+        base: 0.065
+        max: 0.13
+      high_hp_dmg_inc:
+        base: 0.09
+        max: 0.18
+      high_hp_dmg_dec:
+        base: 0.05
+        max: 0.1
+      low_hp_dmg_inc:
+        base: 0.05
+        max: 0.1
+      low_hp_dmg_dec:
+        base: 0.09
+        max: 0.18
+    _action: add
+    is_event_skill: true
+  直言極諫:
+    name: 直言極諫
+    type: 主動
+    rarity: S
+    target: 我軍群體
+    activation_rate: 30%
+    description: 使我軍群體（{var:target_count}人）受到傷害降低{var:dmg_reduce}{scale:智略}，持續{var:duration}回合，最多疊加{var:max_stack}次。首回合行動前，使本戰法受到的發動率增加效果將翻倍並持續{var:duration}回合。
+    vars:
+      target_count: 2
+      dmg_reduce:
+        base: 0.12
+        max: 0.24
+      duration: 2
+      max_stack: 2
+    _action: add
+    is_event_skill: true
+  疑心暗鬼:
+    name: 疑心暗鬼
+    type: 被動
+    rarity: S
+    target: 自身
+    activation_rate: 100%
+    description: 使自身的自帶準備主動戰法發動率增加{var:active_rate_inc}{scale:智略}，自帶準備主動戰法開始準備時，自身增加{var:int_inc}點智略{scale:智略}，持續{var:duration}回合。
+    vars:
+      active_rate_inc:
+        base: 0.06
+        max: 0.12
+      int_inc:
+        base: 15
+        max: 30
+      duration: 2
+    _action: add
+    is_event_skill: true
+  南蠻東渡:
+    name: 南蠻東渡
+    type: 主動
+    rarity: A
+    target: 我軍群體
+    activation_rate: 50%
+    description: 準備{var:prep_round}回合後，恢復我軍群體（{var:target_min}-{var:target_max}人）兵力（恢復率{var:recovery_rate}{scale:智略}）。恢復南蠻好尚或南蠻信奉的友軍時，恢復率增加至{var:recovery_rate_bonus}{scale:智略}。
+    vars:
+      prep_round: 1
+      target_min: 2
+      target_max: 3
+      recovery_rate:
+        base: 0.72
+        max: 1.44
+      recovery_rate_bonus:
+        base: 0.86
+        max: 1.72
+    _action: add
+    is_event_skill: true
+heroes:
+  柿崎景家:
+    _action: add
+    name: 柿崎景家
+    rarity: 5
+    cost: 7
+    faction: 上杉
+    clan: 上杉
+    gender: 男
+    portrait: https://i.imgur.com/6sCMpSs.png
+    detail_url: ''
+    unique_skill: 越後二天
+    teachable_skill: 勇猛無前
+    assembly_skill: 先銳突擊
+    stats:
+      lea: 158
+      val: 225
+      int: 138
+      pol: 111
+      cha: 106
+      spd: 136
+    traits:
+    - name: 騎兵大將
+      description: 部隊的騎兵等級上升3級,等級上限增加1級
+      rank: S
+      active: true
+    - name: 先驅
+      description: 戰鬥前3回合,自身受到控制狀態時,有40%機率使其無效,最多生效2次
+      rank: A
+      active: true
+    - name: 血氣II
+      description: 造成兵刃傷害增加2.2%
+      rank: B
+      active: true
+    - name: 猛攻II
+      description: 我軍全體造成兵刃傷害增加1.8%
+      rank: C
+      active: true
+  立花闇千代:
+    _action: add
+    name: 立花闇千代
+    rarity: 5
+    cost: 7
+    faction: 群雄
+    clan: 大友
+    gender: 女
+    portrait: https://i.imgur.com/0BHuLVZ.png
+    detail_url: ''
+    unique_skill: 疾風迅雷
+    teachable_skill: 惠風和雨
+    assembly_skill: 姬武者同心
+    stats:
+      lea: 164
+      val: 202
+      int: 137
+      pol: 110
+      cha: 139
+      spd: 112
+    traits:
+    - name: 近衛齊射
+      description: 普通攻擊之後，有 20% 機率使目標進入麻痹狀態，每回合有 30% 機率無法行動，持續 2 回合。
+      rank: S
+      active: true
+    - name: 姬城督
+      description: 每造成 6 次兵刃傷害，恢復我軍兵力最低單體（恢復率 98%，受武勇影響），最多觸發 2 次。
+      rank: A
+      active: true
+    - name: 槍炮術II
+      description: 部隊的足輕、鐵炮等級上升 2 級。
+      rank: B
+      active: true
+    - name: 武威I
+      description: 武勇提升{var:rate}
+      vars:
+        rate: 0.02
+      rank: C
+      active: true
+  鈴木佐大夫:
+    _action: add
+    name: 鈴木佐大夫
+    rarity: 5
+    cost: 6
+    faction: 群雄
+    clan: 鈴木
+    gender: 男
+    portrait: https://i.imgur.com/k5BMzou.png
+    detail_url: ''
+    unique_skill: 彈嵐雨霰
+    teachable_skill: 電光石火
+    assembly_skill: 調遣民夫・優
+    stats:
+      lea: 100
+      val: 100
+      int: 100
+      pol: 100
+      cha: 100
+      spd: 100
+    traits:
+    - name: 鐵炮大將
+      description: 部隊鐵炮等級增加{var:lv_up}，等級上限增加{var:cap_up}
+      vars:
+        lv_up: 3
+        cap_up: 1
+      rank: S
+      active: true
+    - name: 牢固III
+      description: 受到傷害減少2%
+      rank: A
+      active: true
+    - name: 破敵II
+      description: 造成傷害增加1.6%
+      rank: B
+      active: true
+    - name: 靈巧II
+      description: 速度提高2.5%
+      rank: C
+      active: true
+  加藤嘉明:
+    _action: add
+    name: 加藤嘉明
+    rarity: 5
+    cost: 3
+    faction: 豐臣
+    clan: 豐臣
+    gender: 男
+    portrait: https://i.imgur.com/Uusk4ZH.png
+    detail_url: ''
+    unique_skill: 剛毅木訥
+    teachable_skill: 電光石火
+    assembly_skill: 擴張石產・優
+    stats:
+      lea: 100
+      val: 100
+      int: 100
+      pol: 100
+      cha: 100
+      spd: 100
+    traits:
+    - name: 弓槍術II
+      description: 部隊的足輕、弓兵等級上升2級
+      rank: S
+      active: true
+    - name: 武威II
+      description: 武勇提高2.5%
+      rank: A
+      active: true
+    - name: 智慧II
+      description: 智略提高2.5%
+      rank: B
+      active: true
+    - name: 牢固II
+      description: 受到傷害減少1.6%
+      rank: C
+      active: true
+  真田昌幸:
+    _action: add
+    name: 真田昌幸
+    rarity: 5
+    cost: 7
+    faction: 武田
+    clan: 真田
+    gender: 男
+    portrait: https://i.imgur.com/QnwbXSe.png
+    detail_url: ''
+    unique_skill: 表裏比興
+    teachable_skill: 瞬息萬變
+    assembly_skill: 六文錢之誓
+    stats:
+      lea: 177
+      val: 106
+      int: 234
+      pol: 145
+      cha: 230
+      spd: 76
+    traits:
+    - name: 老獪
+      description: 自身勢力將與大將保持一致，若勢力未發生改變時自身獲得8%攻心
+      rank: S
+      active: true
+    - name: 虛實
+      description: 行動後，若有敵軍武將處於混亂狀態，自身受到的傷害減少3%，持續1回合，友方真田家武將獲得50%的效果
+      rank: A
+      active: true
+    - name: 弓炮術II
+      description: 部隊的弓兵、鐵炮等級上升2級
+      rank: B
+      active: true
+    - name: 智慧I
+      description: 智力提升{var:int_up}
+      vars:
+        int_up: 0.02
+      rank: C
+      active: true
+  阿松:
+    _action: add
+    name: 阿松
+    rarity: 5
+    cost: 6
+    faction: 織田
+    clan: 織田
+    gender: 女
+    portrait: https://i.imgur.com/DfhYuCR.png
+    detail_url: ''
+    unique_skill: 松柏之操
+    teachable_skill: 奇策縱橫
+    assembly_skill: 姬武者同心
+    stats:
+      lea: 159
+      val: 71
+      int: 168
+      pol: 198
+      cha: 148
+      spd: 65
+    traits:
+    - name: 淑德
+      description: 戰鬥中，前2回合，我軍大將每回合首次被施加無策、封擊或者混亂狀態時，自身有80%幾率為其承擔。
+      rank: S
+      active: true
+    - name: 馬槍術I
+      description: 部隊的騎兵、足輕等級上升1級
+      rank: A
+      active: true
+    - name: 隱忍II
+      description: 使自身受到普通攻擊的機率降低
+      rank: B
+      active: true
+    - name: 守勢III
+      description: 我軍全體受到傷害減少1.6%
+      rank: C
+      active: true
+  安宅冬康:
+    _action: add
+    name: 安宅冬康
+    rarity: 5
+    cost: 5
+    faction: 群雄
+    clan: 三好
+    gender: 男
+    portrait: https://i.imgur.com/lSChHNF.png
+    detail_url: ''
+    unique_skill: 一舟軒
+    teachable_skill: 金城湯池
+    assembly_skill: 調遣民夫優
+    stats:
+      lea: 146
+      val: 72
+      int: 163
+      pol: 144
+      cha: 121
+      spd: 84
+    traits:
+    - name: 弓術III
+      description: 部隊的弓兵等級上升3級
+      rank: S
+      active: true
+    - name: 固守III
+      description: 我軍全體受到兵刃傷害減少2.2%
+      rank: A
+      active: true
+    - name: 堅固II
+      description: 我軍全體受到謀略傷害減少3%
+      rank: B
+      active: true
+    - name: 隱忍I
+      description: 使自身受到普通攻擊的機率略微降低
+      rank: C
+      active: true
+  伊達輝宗:
+    _action: add
+    name: 伊達輝宗
+    rarity: 5
+    cost: 5
+    faction: 群雄
+    clan: 伊達
+    gender: 男
+    portrait: https://i.imgur.com/xY0E6uF.png
+    detail_url: ''
+    unique_skill: 樽俎折衝
+    teachable_skill: 金城湯池
+    assembly_skill: 擴張石產優
+    stats:
+      lea: 155
+      val: 81
+      int: 135
+      pol: 156
+      cha: 143
+      spd: 89
+    traits:
+    - name: 領兵III
+      description: 統率提高3%
+      rank: S
+      active: true
+    - name: 馬炮術I
+      description: 部隊的騎兵、鐵炮等級上升1級
+      rank: A
+      active: true
+    - name: 防護III
+      description: 受到兵刃傷害減少2.8%
+      rank: B
+      active: true
+    - name: 剛猛I
+      description: 自身受到普通攻擊的機率小幅提高
+      vars: {}
+      rank: C
+      active: true
