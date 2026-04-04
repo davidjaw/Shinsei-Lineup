@@ -93,9 +93,9 @@ def apply_skill_overrides(skills: list[dict], overrides: dict) -> list[dict]:
             clean.setdefault("commander_description", "")
             clean.setdefault("source_hero", "")
             clean.setdefault("unique_hero", "")
-            clean.setdefault("is_unique", False)
+            clean.setdefault("is_unique", bool(clean.get("unique_hero")))
             clean.setdefault("is_teachable", not ov.get("is_event_skill", False))
-            clean.setdefault("is_fixed", False)
+            clean.setdefault("is_fixed", clean.get("is_unique", False) and not clean.get("is_teachable", False))
             clean.setdefault("icon", "")
             clean.setdefault("tags", [])
             clean.setdefault("brief_description", "")
@@ -213,9 +213,21 @@ def fix_skill_name(name: str) -> str:
     return SKILL_NAME_FIXES.get(name, name)
 
 
+VALID_SKILL_TYPES = {"被動", "主動", "指揮", "突擊", "兵種", "陣法"}
+
+
+def normalize_skill_type(t: str) -> str:
+    if t in VALID_SKILL_TYPES:
+        return t
+    cleaned = t.replace("戰法", "").replace("战法", "").strip()
+    return cleaned if cleaned in VALID_SKILL_TYPES else t
+
+
 def postprocess_skill(skill: dict) -> dict:
     """Normalize a single skill entry after all merges/overrides."""
     skill["name"] = fix_skill_name(skill.get("name", ""))
+    if skill.get("type"):
+        skill["type"] = normalize_skill_type(skill["type"])
     for field in ("description", "commander_description"):
         if skill.get(field):
             skill[field] = normalize_status_refs(skill[field])
@@ -327,7 +339,7 @@ def build_skills(crawled: dict, translated: dict) -> list[dict]:
             "unique_hero": source_hero if is_unique else "",
             "is_unique": is_unique,
             "is_teachable": bool(cr.get("is_teachable")),
-            "is_fixed": is_unique,
+            "is_fixed": is_unique and not cr.get("is_teachable"),
             "icon": "",
             "tags": tr.get("tags", []),
             "brief_description": tr.get("brief_description", ""),

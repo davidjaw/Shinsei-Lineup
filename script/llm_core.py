@@ -52,6 +52,9 @@ When referencing status effects in {status:name}, you MUST use ONLY these canoni
 """ + CANONICAL_STATUSES + """
 Do NOT use synonyms or aliases (e.g., use 挑釁 not 嘲諷, use 威壓 not 震懾, use 混亂 not 恐慌, use 封擊 not 繳械, use 奇謀 not 奇策).
 
+Skill type MUST be exactly one of: 被動, 主動, 指揮, 突擊, 兵種, 陣法
+Do NOT append 戰法 (e.g., use 被動 not 被動戰法).
+
 Template syntax rules:
 - In `description`, replace numeric values that scale with level with variable refs: {var:variable_name}
   - Example: "10%→20%の会心" → "{var:crit_rate}的會心"
@@ -60,8 +63,14 @@ Template syntax rules:
     Keep these percentages as plain text if they don't scale with level.
     Example: "施加30%{status:麻痺}狀態" — the 30% is the status intensity, keep as-is.
     Only use {var:} if the percentage changes between lv1 and lv10.
-- In `vars`, define every variable with `base` (lv1) and `max` (lv10) as raw numbers (0.1 not 10%).
-  - Fixed values (no scaling): just a number.
+- In `vars`, each variable must specify its unit type:
+  - Percentages/ratios (傷害率, 機率, 會心率, etc.): store as raw decimal (0.1 for 10%), do NOT add `type` (percent is default).
+    Example: damage_rate: {base: 0.58, max: 1.16}
+  - Absolute values (點數, stat points like 武勇+60, 統率-18, etc.): store the actual number AND add `type: flat`.
+    Example: valor_buff: {base: 60, max: 120, type: flat}
+  - Counts/turns/stacks (回合, 次數, 層數, 人數): store as plain integer, do NOT add `type`.
+    Example: duration: 2, max_stacks: 3, target_count: 2
+  - Fixed values (no level scaling): just a number (or number with type: flat if it's stat points).
 - Stat dependency: add `scale: stat_name` in the var (use Chinese: 武勇, 智略, 統率, 速度, 魅力, 政務)
 - In description, use {scale:stat} which renders as "受stat影響". So write "（{scale:智略}）" NOT "（受{scale:智略}影響）"
 - ONLY use {status:name} when explicitly referencing a canonical status effect (麻痺, 混亂, etc.). Do NOT convert verbs like 治療/恢復 into {status:休養}.

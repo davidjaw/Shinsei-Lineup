@@ -29,6 +29,7 @@ export function useTemplateParser() {
     }
     if (v && typeof v === 'object' && 'base' in v && 'max' in v) {
       const val = isMax ? v.max : v.base
+      if (v.type === 'flat') return String(val)
       return typeof val === 'number' ? formatAsPercent(val) : String(val)
     }
     return String(v)
