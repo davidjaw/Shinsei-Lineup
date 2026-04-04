@@ -1,0 +1,28 @@
+{
+  "name": "nobunaga-lineup-builder",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "data": "python3 script/build_frontend_data.py && python3 script/check_data_integrity.py",
+    "dev": "npm run data && vite",
+    "build": "npm run data && vite build",
+    "deploy:alt": "npm run build && cp -r dist/* ../nobunaga-deploy/ && cd ../nobunaga-deploy && git add . && git commit -m \"Update site\" && git push",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "vite-plugin-singlefile": "^2.0.0",
+    "vue-tsc": "^1.8.22"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "autoprefixer": "^10.4.23",
+    "element-plus": "^2.13.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "vue": "^3.3.4"
+  }
+}
