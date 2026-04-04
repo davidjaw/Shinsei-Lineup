@@ -1,5 +1,5 @@
 <template>
-  <el-container class="h-screen w-full bg-slate-50">
+  <el-container class="w-full bg-slate-50" style="height: 100dvh">
     <el-header class="bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-50">
       <div class="flex items-center gap-4">
         <!-- Mobile Menu Button -->
@@ -68,7 +68,7 @@
       </div>
     </el-header>
 
-    <el-main class="p-0 overflow-hidden h-[calc(100vh-60px-32px)]">
+    <el-main class="p-0 overflow-hidden" style="height: calc(100dvh - 60px - 32px)">
       
       <!-- View 1: Lineup Builder (Default) -->
       <div v-if="!isEditingInventory" class="flex flex-col md:flex-row h-full">

@@ -42,6 +42,8 @@
         background: #555; 
       }
       [v-cloak] { display: none; }
+      /* Fix mobile viewport: 100vh includes address bar on mobile browsers */
+      html, body, #app { height: 100dvh; }
     </style>
   </head>
   <body>
