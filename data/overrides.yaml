@@ -454,63 +454,35 @@ skills:
       duration: 2
     _action: add
     is_event_skill: true
-  合盟之陣:
-    name: 合盟之陣
-    type: 陣型
-    rarity: S
-    target: 我軍全體
-    activation_rate: 100%
-    description: 我軍{var:unit_count}人所屬勢力均不同，且我軍大將自帶戰法為主動或突擊時生效。戰鬥中，使我軍大將自帶戰法發動率增加{var:active_rate_inc}。每回合行動前，使兵力較高的副將造成的傷害提高{var:high_hp_dmg_inc}，受到的傷害降低{var:high_hp_dmg_dec}，兵力較低的副將造成傷害提高{var:low_hp_dmg_inc}，受到的傷害降低{var:low_hp_dmg_dec}。
-    vars:
-      unit_count: 3
-      active_rate_inc:
-        base: 0.065
-        max: 0.13
-      high_hp_dmg_inc:
-        base: 0.09
-        max: 0.18
-      high_hp_dmg_dec:
-        base: 0.05
-        max: 0.1
-      low_hp_dmg_inc:
-        base: 0.05
-        max: 0.1
-      low_hp_dmg_dec:
-        base: 0.09
-        max: 0.18
-    _action: add
-    is_event_skill: true
-  直言極諫:
-    name: 直言極諫
-    type: 主動
-    rarity: S
-    target: 我軍群體
-    activation_rate: 30%
-    description: 使我軍群體（{var:target_count}人）受到傷害降低{var:dmg_reduce}{scale:智略}，持續{var:duration}回合，最多疊加{var:max_stack}次。首回合行動前，使本戰法受到的發動率增加效果將翻倍並持續{var:duration}回合。
-    vars:
-      target_count: 2
-      dmg_reduce:
-        base: 0.12
-        max: 0.24
-      duration: 2
-      max_stack: 2
-    _action: add
-    is_event_skill: true
-  疑心暗鬼:
-    name: 疑心暗鬼
+  斬雷神:
+    name: 斬雷神
     type: 被動
     rarity: S
-    target: 自身
+    target: 自己
     activation_rate: 100%
-    description: 使自身的自帶準備主動戰法發動率增加{var:active_rate_inc}{scale:智略}，自帶準備主動戰法開始準備時，自身增加{var:int_inc}點智略{scale:智略}，持續{var:duration}回合。
+    description: 戰鬥中，每回合獲得1層蓄勢，若蓄勢層數大於等於2且自身未處於{status:威壓}狀態時，消耗全部蓄勢層數，獲得{var:crit_rate1}的{status:會心}狀態及{var:valor_buff1}武勇，持續1回合，若蓄勢層數大於2時，則額外獲得{var:crit_rate2}的{status:會心}狀態及{var:valor_buff2}武勇。
     vars:
-      active_rate_inc:
-        base: 0.06
-        max: 0.12
-      int_inc:
-        base: 15
-        max: 30
-      duration: 2
+      crit_rate1:
+        base: 0.25
+        max: 0.5
+      valor_buff1:
+        base: 60
+        max: 120
+        type: flat
+      crit_rate2:
+        base: 0.125
+        max: 0.25
+      valor_buff2:
+        base: 30
+        max: 60
+        type: flat
+    brief_description: 蓄勢爆發獲得會心與武勇屬性
+    tags:
+    - 被動觸發
+    - 回合觸發
+    - 施加狀態
+    - 提升屬性
+    - 武勇系
     _action: add
     is_event_skill: true
   南蠻東渡:
@@ -519,17 +491,94 @@ skills:
     rarity: A
     target: 我軍群體
     activation_rate: 50%
-    description: 準備{var:prep_round}回合後，恢復我軍群體（{var:target_min}-{var:target_max}人）兵力（恢復率{var:recovery_rate}{scale:智略}）。恢復南蠻好尚或南蠻信奉的友軍時，恢復率增加至{var:recovery_rate_bonus}{scale:智略}。
+    description: 準備1回合後，恢復我軍群體（2-3人）兵力（恢復率{var:heal_rate}，{scale:智略}）。恢復南蠻好尚或南蠻信奉的友軍時，恢復率增加至{var:bonus_heal_rate}。
     vars:
-      prep_round: 1
-      target_min: 2
-      target_max: 3
-      recovery_rate:
+      heal_rate:
         base: 0.72
         max: 1.44
-      recovery_rate_bonus:
+        scale: 智略
+      bonus_heal_rate:
         base: 0.86
         max: 1.72
+    brief_description: 準備後治療群體，南蠻友軍加成
+    tags:
+    - 主動發動
+    - 治療
+    - 智略系
+    _action: add
+    is_event_skill: true
+  疑心暗鬼:
+    name: 疑心暗鬼
+    type: 被動
+    rarity: S
+    target: 自己
+    activation_rate: 100%
+    description: 使自身的自帶準備主動戰法發動率增加{var:rate_buff}（{scale:智略}），自帶準備主動戰法開始準備時，自身增加{var:intel_buff}智略（{scale:智略}），持續2回合。
+    vars:
+      rate_buff:
+        base: 0.06
+        max: 0.12
+        scale: 智略
+      intel_buff:
+        base: 15
+        max: 30
+        type: flat
+        scale: 智略
+    brief_description: 提升準備戰法發動率並增加智略
+    tags:
+    - 被動觸發
+    - 提升屬性
+    - 智略系
+    _action: add
+    is_event_skill: true
+  直言極諫:
+    name: 直言極諫
+    type: 主動
+    rarity: S
+    target: 我軍群體
+    activation_rate: 30%
+    description: 使我軍群體（2人）受到傷害降低{var:damage_reduction}（{scale:智略}），持續2回合，最多疊加2次。首回合行動前，使本戰法受到的發動率增加效果將翻倍並持續2回合。
+    vars:
+      damage_reduction:
+        base: 0.12
+        max: 0.24
+        scale: 智略
+    brief_description: 群體傷害降低，首回合強化發動率
+    tags:
+    - 主動發動
+    - 增益
+    - 智略系
+    _action: add
+    is_event_skill: true
+  合盟之陣:
+    name: 合盟之陣
+    type: 陣法
+    rarity: S
+    target: 我軍全體
+    activation_rate: 100%
+    description: 我軍3人所屬勢力均不同，且我軍大將自帶戰法為主動或突擊時生效。戰鬥中，使我軍大將自帶戰法發動率增加{var:commander_rate_buff}。每回合行動前，使兵力較高的副將造成的傷害提高{var:high_hp_dmg_up}，受到的傷害降低{var:high_hp_dmg_down}；兵力較低的副將造成傷害提高{var:low_hp_dmg_up}，受到的傷害降低{var:low_hp_dmg_down}。
+    vars:
+      commander_rate_buff:
+        base: 0.065
+        max: 0.13
+      high_hp_dmg_up:
+        base: 0.09
+        max: 0.18
+      high_hp_dmg_down:
+        base: 0.05
+        max: 0.1
+      low_hp_dmg_up:
+        base: 0.05
+        max: 0.1
+      low_hp_dmg_down:
+        base: 0.09
+        max: 0.18
+    brief_description: 三勢力組隊提升發動率與副將攻防
+    tags:
+    - 被動觸發
+    - 增益
+    - 提升屬性
+    - 條件觸發
     _action: add
     is_event_skill: true
 heroes:
