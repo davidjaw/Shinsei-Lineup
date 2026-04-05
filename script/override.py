@@ -23,7 +23,7 @@ from pathlib import Path
 
 from llm_core import (
     CANONICAL_STATUSES, COMMON_RULES, SKILL_TAGS, DEFAULT_MODEL,
-    call_gemini, parse_llm_output,
+    call_gemini, parse_llm_output, autofix_frontend,
 )
 
 OVERRIDES_FILE = "data/overrides.yaml"
@@ -338,6 +338,11 @@ def _process_skill_with_llm(info: dict, model: str) -> tuple[str, dict] | None:
     if result is None:
         print(f"  [error] Failed to parse LLM response for '{name}'")
         return None
+
+    # Auto-fix known LLM issues (override results are flat, not nested under frontend)
+    fixes = autofix_frontend(result)
+    if fixes:
+        print(f"    [autofix] {'; '.join(fixes)}")
 
     result["_action"] = "add"
     result["name"] = name
@@ -654,6 +659,9 @@ Process ALL {count} skills."""
 
 def _apply_metadata(result: dict, info: dict) -> dict:
     """Apply _action and ownership metadata to a parsed skill result."""
+    fixes = autofix_frontend(result)
+    if fixes:
+        print(f"    [autofix] {'; '.join(fixes)}")
     result["_action"] = "add"
     if info["is_event"]:
         result["is_event_skill"] = True
@@ -780,6 +788,108 @@ def _add_skill_for_hero(skill_name: str, label: str, hero_name: str, model: str)
 # Main
 # ---------------------------------------------------------------------------
 
+def _call_claude(prompt: str, model: str = "haiku") -> str:
+    import subprocess as _sp
+    result = _sp.run(
+        ["claude", "-p", "--model", model],
+        input=prompt, capture_output=True, text=True, timeout=300,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:300]}")
+    return result.stdout.strip()
+
+
+def claude_test(num: int = 10, model: str = "haiku"):
+    """Run sample prompts through Claude CLI for testing. No files saved."""
+    import random
+    skills = load_existing_skills()
+    if not skills:
+        print("[error] No translated skills found.")
+        return
+
+    items = list(skills.items())
+    samples = random.sample(items, min(num, len(items)))
+
+    # Test 1: modify-skill
+    target_key, target_data = samples[0]
+    skill_yaml = yaml.dump(
+        {target_key: target_data},
+        allow_unicode=True, default_flow_style=False, sort_keys=False,
+    )
+    prompt = _build_modify_prompt(skill_yaml, "倍率從20變成35")
+    print(f"\n{'='*60}")
+    print(f"TEST 1: modify-skill ({target_key})")
+    print(f"{'='*60}")
+    try:
+        raw = _call_claude(prompt, model=model)
+        parsed = parse_llm_output(raw)
+        if parsed and not parsed.get("_rejected"):
+            print(f"  Changes: {list(parsed.keys())}")
+            print(yaml.dump(parsed, allow_unicode=True, default_flow_style=False, sort_keys=False))
+        elif parsed and parsed.get("_rejected"):
+            print(f"  [rejected] {parsed.get('reason', '?')}")
+        else:
+            print(f"  [PARSE FAIL] {raw[:300]}")
+    except Exception as e:
+        print(f"  [ERROR] {e}")
+
+    # Test 2: add-skill
+    info = {
+        "name": "測試技能", "type": "主動", "rarity": "S",
+        "target": "敵軍單體", "is_event": False,
+        "source_hero": "測試武將", "unique_hero": "",
+        "description": "對敵軍單體造成58%→116%兵刃傷害（受武勇影響），並有30%機率施加麻痺狀態，持續2回合",
+    }
+    prompt2 = _build_add_skill_prompt(info)
+    print(f"\n{'='*60}")
+    print(f"TEST 2: add-skill")
+    print(f"{'='*60}")
+    try:
+        raw = _call_claude(prompt2, model=model)
+        parsed = parse_llm_output(raw)
+        if parsed:
+            print(f"  name: {parsed.get('name', '?')}")
+            print(f"  desc: {parsed.get('description', '?')[:80]}")
+            print(f"  vars: {list(parsed.get('vars', {}).keys())}")
+        else:
+            print(f"  [PARSE FAIL] {raw[:300]}")
+    except Exception as e:
+        print(f"  [ERROR] {e}")
+
+    # Test 3: quick-batch with crawled data
+    crawled_path = Path("data/skills_crawled.yaml")
+    if crawled_path.exists():
+        crawled = yaml.safe_load(crawled_path.read_text("utf-8"))
+        crawled_items = list(crawled.items())
+        quick_samples = random.sample(crawled_items, min(num, len(crawled_items)))
+        queue = []
+        for name, sk in quick_samples:
+            raw_text = f"{name} ({sk.get('rarity', '?')})\n種類：{sk.get('type', '?')}\n發動機率：{sk.get('activation_rate', '?')}\n效果：{sk.get('description', '')}"
+            queue.append({
+                "raw_input": raw_text, "is_event": False,
+                "unique_hero": sk.get("source_hero", "") if sk.get("is_unique") else "",
+                "source_hero": sk.get("source_hero", "") if not sk.get("is_unique") else "",
+            })
+        prompt3 = _build_quick_batch_prompt(queue)
+        print(f"\n{'='*60}")
+        print(f"TEST 3: quick-batch ({len(queue)} skills)")
+        print(f"Skills: {', '.join(n for n, _ in quick_samples)}")
+        print(f"{'='*60}")
+        try:
+            raw = _call_claude(prompt3, model=model)
+            parsed = parse_llm_output(raw)
+            if parsed:
+                for key, val in parsed.items():
+                    name = val.get("name", key) if isinstance(val, dict) else key
+                    print(f"  {key} → {name}")
+            else:
+                print(f"  [PARSE FAIL] {raw[:300]}")
+        except Exception as e:
+            print(f"  [ERROR] {e}")
+
+    print(f"\n[claude-test] Done. No files were modified.")
+
+
 def main():
     p = argparse.ArgumentParser(description="Interactive override manager for game data")
     p.add_argument("--modify-skill", action="store_true", help="Modify an existing skill")
@@ -787,7 +897,13 @@ def main():
     p.add_argument("--quick-add", action="store_true", help="Add a skill from natural language")
     p.add_argument("--add-hero", action="store_true", help="Add a new hero")
     p.add_argument("--model", default=DEFAULT_MODEL, help="Gemini model to use")
+    p.add_argument("--claude-test", action="store_true", help="Print sample prompts for Claude Code testing (no LLM call, no file writes)")
+    p.add_argument("--test-num", type=int, default=10, help="Number of random samples for --claude-test")
     args = p.parse_args()
+
+    if args.claude_test:
+        claude_test(num=args.test_num, model=args.model)
+        return
 
     if not any([args.modify_skill, args.add_skill, args.quick_add, args.add_hero]):
         print("Choose an action:")
