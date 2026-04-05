@@ -12,6 +12,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from paths import LLM_CACHE_DIR, OVERRIDES_YAML
+
 load_dotenv()
 
 # ---------------------------------------------------------------------------
@@ -20,7 +22,6 @@ load_dotenv()
 
 GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "")
 DEFAULT_MODEL = "gemini-3-flash-preview"
-CACHE_DIR = Path("data/.llm_cache")
 
 CANONICAL_STATUSES = (
     "威壓 麻痺 封擊 無策 混亂 疲弊 "
@@ -136,16 +137,16 @@ def call_gemini(prompt: str, model: str = DEFAULT_MODEL, timeout: int = 180) -> 
 # YAML parsing
 # ---------------------------------------------------------------------------
 
-def _clean_strings(obj):
+def clean_strings(obj):
     if isinstance(obj, str):
         lines = [line.rstrip() for line in obj.split("\n")]
         while lines and not lines[-1]:
             lines.pop()
         return "\n".join(lines)
     if isinstance(obj, dict):
-        return {k: _clean_strings(v) for k, v in obj.items()}
+        return {k: clean_strings(v) for k, v in obj.items()}
     if isinstance(obj, list):
-        return [_clean_strings(v) for v in obj]
+        return [clean_strings(v) for v in obj]
     return obj
 
 
@@ -164,18 +165,18 @@ def parse_llm_output(raw: str) -> dict | None:
 
     try:
         data = yaml.safe_load(text)
-        return _clean_strings(data)
+        return clean_strings(data)
     except yaml.YAMLError:
         # Try parsing frontend sections only (battle often has unquoted colons)
         try:
             parts = re.split(r"\nbattle:\s*\n", text, maxsplit=1)
             fe_data = yaml.safe_load(parts[0])
-            result = _clean_strings(fe_data) if fe_data else {}
+            result = clean_strings(fe_data) if fe_data else {}
             if len(parts) > 1:
                 try:
                     bt_data = yaml.safe_load("battle:\n" + parts[1])
                     if bt_data:
-                        result.update(_clean_strings(bt_data))
+                        result.update(clean_strings(bt_data))
                 except yaml.YAMLError:
                     pass
             return result if result else None
@@ -233,7 +234,7 @@ def autofix_frontend(fe: dict) -> list[str]:
 # Cache
 # ---------------------------------------------------------------------------
 
-def load_llm_cache(key: str, cache_dir: Path = CACHE_DIR) -> dict | None:
+def load_llm_cache(key: str, cache_dir: Path = LLM_CACHE_DIR) -> dict | None:
     path = cache_dir / f"{key}.yaml"
     if path.exists():
         try:
@@ -243,7 +244,7 @@ def load_llm_cache(key: str, cache_dir: Path = CACHE_DIR) -> dict | None:
     return None
 
 
-def save_llm_cache(key: str, data: dict, cache_dir: Path = CACHE_DIR):
+def save_llm_cache(key: str, data: dict, cache_dir: Path = LLM_CACHE_DIR):
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_dir / f"{key}.yaml"
     path.write_text(
@@ -252,7 +253,19 @@ def save_llm_cache(key: str, data: dict, cache_dir: Path = CACHE_DIR):
     )
 
 
-def save_raw_cache(label: str, raw_text: str, cache_dir: Path = CACHE_DIR):
+def save_raw_cache(label: str, raw_text: str, cache_dir: Path = LLM_CACHE_DIR):
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_dir / f"{label}.raw.txt"
     path.write_text(raw_text, "utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Overrides
+# ---------------------------------------------------------------------------
+
+def load_overrides() -> dict:
+    """Load overrides.yaml if it exists. Returns dict with clean strings."""
+    if not OVERRIDES_YAML.exists():
+        return {}
+    data = yaml.safe_load(OVERRIDES_YAML.read_text("utf-8"))
+    return clean_strings(data) if isinstance(data, dict) else {}

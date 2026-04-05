@@ -14,13 +14,12 @@ Usage:
 import json
 import sys
 
-HEROES_PATH = ".build/heros.json"
-SKILLS_PATH = ".build/skills.json"
+from paths import HEROES_JSON, SKILLS_JSON
 
 
 def check():
-    heroes = json.load(open(HEROES_PATH, encoding="utf-8"))
-    skills = json.load(open(SKILLS_PATH, encoding="utf-8"))
+    heroes = json.loads(HEROES_JSON.read_text("utf-8"))
+    skills = json.loads(SKILLS_JSON.read_text("utf-8"))
 
     errors = []
 

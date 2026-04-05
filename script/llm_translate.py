@@ -19,26 +19,23 @@ Examples:
 
 import argparse
 import json
-import subprocess
 import sys
 import yaml
 from pathlib import Path
 from tqdm import tqdm
 
+from claude_test import call_claude
 from llm_core import (
     CANONICAL_STATUSES, COMMON_RULES, SKILL_TAGS, DEFAULT_MODEL,
     call_gemini, parse_llm_output, autofix_frontend,
     load_llm_cache, save_llm_cache, save_raw_cache,
 )
-
-SKILLS_INPUT = "data/skills_crawled.yaml"
-TRAITS_INPUT = "data/traits_crawled.yaml"
-HEROES_INPUT = "data/heroes_crawled.yaml"
-SKILLS_TRANSLATED_OUTPUT = "data/skills_translated.yaml"
-SKILLS_BATTLE_OUTPUT = "data/skills_battle.yaml"
-TRAITS_TRANSLATED_OUTPUT = "data/traits_translated.yaml"
-TRAITS_BATTLE_OUTPUT = "data/traits_battle.yaml"
-HEROES_TRANSLATED_OUTPUT = "data/heroes_translated.yaml"
+from paths import (
+    HEROES_CRAWLED, SKILLS_CRAWLED, TRAITS_CRAWLED,
+    SKILLS_TRANSLATED, SKILLS_BATTLE,
+    TRAITS_TRANSLATED, TRAITS_BATTLE,
+    HEROES_TRANSLATED,
+)
 DEFAULT_BATCH_SIZE = 5
 
 BATTLE_EXAMPLE = """\
@@ -403,16 +400,15 @@ def validate_frontend_quality(data: dict) -> list[str]:
 # Processing
 # ---------------------------------------------------------------------------
 
-def _load_existing_yaml(path: str) -> dict:
-    p = Path(path)
-    if p.exists():
-        data = yaml.safe_load(p.read_text("utf-8"))
+def _load_existing_yaml(path: Path) -> dict:
+    if path.exists():
+        data = yaml.safe_load(path.read_text("utf-8"))
         return data if isinstance(data, dict) else {}
     return {}
 
 
-def _save_yaml(path: str, data: dict):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
+def _save_yaml(path: Path, data: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
@@ -553,9 +549,9 @@ def process_skills(
     model: str = DEFAULT_MODEL,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ):
-    skills = yaml.safe_load(Path(SKILLS_INPUT).read_text("utf-8"))
+    skills = yaml.safe_load(Path(SKILLS_CRAWLED).read_text("utf-8"))
     if not skills:
-        print("[error] No skills found in", SKILLS_INPUT)
+        print("[error] No skills found in", SKILLS_CRAWLED)
         sys.exit(1)
 
     targets = list(skills.items())
@@ -590,8 +586,8 @@ def process_skills(
             all_failed.extend(failed)
 
     # Merge into output files — force overwrites existing entries
-    frontend_skills = {} if force else _load_existing_yaml(SKILLS_TRANSLATED_OUTPUT)
-    battle_skills = {} if force else _load_existing_yaml(SKILLS_BATTLE_OUTPUT)
+    frontend_skills = {} if force else _load_existing_yaml(SKILLS_TRANSLATED)
+    battle_skills = {} if force else _load_existing_yaml(SKILLS_BATTLE)
 
     new_fe, new_bt = 0, 0
     for name, data in all_results.items():
@@ -606,12 +602,12 @@ def process_skills(
             if is_new:
                 new_bt += 1
 
-    _save_yaml(SKILLS_TRANSLATED_OUTPUT, frontend_skills)
-    _save_yaml(SKILLS_BATTLE_OUTPUT, battle_skills)
+    _save_yaml(SKILLS_TRANSLATED, frontend_skills)
+    _save_yaml(SKILLS_BATTLE, battle_skills)
 
     updated = len(all_results) - new_fe
-    tqdm.write(f"\n[done] {len(frontend_skills)} frontend skills ({new_fe} new, {updated} updated) → {SKILLS_TRANSLATED_OUTPUT}")
-    tqdm.write(f"[done] {len(battle_skills)} battle skills → {SKILLS_BATTLE_OUTPUT}")
+    tqdm.write(f"\n[done] {len(frontend_skills)} frontend skills ({new_fe} new, {updated} updated) → {SKILLS_TRANSLATED}")
+    tqdm.write(f"[done] {len(battle_skills)} battle skills → {SKILLS_BATTLE}")
     if all_failed:
         tqdm.write(f"[warn] {len(all_failed)} failed:")
         for name, err in all_failed:
@@ -628,9 +624,9 @@ def process_traits(
     model: str = DEFAULT_MODEL,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ):
-    traits = yaml.safe_load(Path(TRAITS_INPUT).read_text("utf-8"))
+    traits = yaml.safe_load(Path(TRAITS_CRAWLED).read_text("utf-8"))
     if not traits:
-        print("[error] No traits found in", TRAITS_INPUT)
+        print("[error] No traits found in", TRAITS_CRAWLED)
         sys.exit(1)
 
     targets = list(traits.items())
@@ -673,8 +669,8 @@ def process_traits(
             all_results.update(results)
             all_failed.extend(failed)
 
-    frontend_traits = {} if force else _load_existing_yaml(TRAITS_TRANSLATED_OUTPUT)
-    battle_traits = {} if force else _load_existing_yaml(TRAITS_BATTLE_OUTPUT)
+    frontend_traits = {} if force else _load_existing_yaml(TRAITS_TRANSLATED)
+    battle_traits = {} if force else _load_existing_yaml(TRAITS_BATTLE)
 
     new_fe, new_bt = 0, 0
     for name, data in all_results.items():
@@ -689,11 +685,11 @@ def process_traits(
             if is_new:
                 new_bt += 1
 
-    _save_yaml(TRAITS_TRANSLATED_OUTPUT, frontend_traits)
-    _save_yaml(TRAITS_BATTLE_OUTPUT, battle_traits)
+    _save_yaml(TRAITS_TRANSLATED, frontend_traits)
+    _save_yaml(TRAITS_BATTLE, battle_traits)
 
-    tqdm.write(f"\n[done] {len(frontend_traits)} frontend traits ({new_fe} new) → {TRAITS_TRANSLATED_OUTPUT}")
-    tqdm.write(f"[done] {len(battle_traits)} battle traits → {TRAITS_BATTLE_OUTPUT}")
+    tqdm.write(f"\n[done] {len(frontend_traits)} frontend traits ({new_fe} new) → {TRAITS_TRANSLATED}")
+    tqdm.write(f"[done] {len(battle_traits)} battle traits → {TRAITS_BATTLE}")
     if all_failed:
         tqdm.write(f"[warn] {len(all_failed)} failed:")
         for name, err in all_failed:
@@ -773,9 +769,9 @@ def process_heroes(
     model: str = DEFAULT_MODEL,
     batch_size: int = 25,
 ):
-    raw_data = yaml.safe_load(Path(HEROES_INPUT).read_text("utf-8"))
+    raw_data = yaml.safe_load(Path(HEROES_CRAWLED).read_text("utf-8"))
     if not raw_data:
-        print("[error] No heroes found in", HEROES_INPUT)
+        print("[error] No heroes found in", HEROES_CRAWLED)
         sys.exit(1)
 
     # Input is a list; extract unique (name, faction, clan) tuples
@@ -807,7 +803,7 @@ def process_heroes(
         all_failed.extend(failed)
 
     # Merge into output
-    hero_translated = {} if force else _load_existing_yaml(HEROES_TRANSLATED_OUTPUT)
+    hero_translated = {} if force else _load_existing_yaml(HEROES_TRANSLATED)
 
     new_count = 0
     for name, data in all_results.items():
@@ -816,10 +812,10 @@ def process_heroes(
         if is_new:
             new_count += 1
 
-    _save_yaml(HEROES_TRANSLATED_OUTPUT, hero_translated)
+    _save_yaml(HEROES_TRANSLATED, hero_translated)
 
     updated = len(all_results) - new_count
-    tqdm.write(f"\n[done] {len(hero_translated)} heroes ({new_count} new, {updated} updated) → {HEROES_TRANSLATED_OUTPUT}")
+    tqdm.write(f"\n[done] {len(hero_translated)} heroes ({new_count} new, {updated} updated) → {HEROES_TRANSLATED}")
     if all_failed:
         tqdm.write(f"[warn] {len(all_failed)} failed:")
         for name, err in all_failed:
@@ -828,23 +824,12 @@ def process_heroes(
     return all_results
 
 
-def _call_claude(prompt: str, model: str = "haiku") -> str:
-    """Call Claude CLI in non-interactive mode via stdin."""
-    result = subprocess.run(
-        ["claude", "-p", "--model", model],
-        input=prompt, capture_output=True, text=True, timeout=300,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:300]}")
-    return result.stdout.strip()
-
-
 def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model: str = "haiku"):
     """Run prompts through Claude CLI for testing. No files saved."""
     import random
 
     if kind == "skills":
-        data = yaml.safe_load(Path(SKILLS_INPUT).read_text("utf-8"))
+        data = yaml.safe_load(Path(SKILLS_CRAWLED).read_text("utf-8"))
         items = list(data.items())
         samples = random.sample(items, min(num, len(items)))
         batches = [samples[i:i + batch_size] for i in range(0, len(samples), batch_size)]
@@ -855,7 +840,7 @@ def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model:
             print(f"BATCH {i+1}/{len(batches)}: {names}")
             print(f"{'='*60}")
             try:
-                raw = _call_claude(prompt, model=model)
+                raw = call_claude(prompt, model=model)
                 parsed = parse_llm_output(raw)
                 if parsed is None:
                     print(f"[PARSE FAIL] Raw:\n{raw[:500]}")
@@ -884,7 +869,7 @@ def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model:
             except Exception as e:
                 print(f"  [ERROR] {e}")
     elif kind == "traits":
-        data = yaml.safe_load(Path(TRAITS_INPUT).read_text("utf-8"))
+        data = yaml.safe_load(Path(TRAITS_CRAWLED).read_text("utf-8"))
         items = list(data.items())
         samples = random.sample(items, min(num, len(items)))
         batches = [samples[i:i + batch_size] for i in range(0, len(samples), batch_size)]
@@ -895,7 +880,7 @@ def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model:
             print(f"BATCH {i+1}/{len(batches)}: {names}")
             print(f"{'='*60}")
             try:
-                raw = _call_claude(prompt, model=model)
+                raw = call_claude(prompt, model=model)
                 parsed = parse_llm_output(raw)
                 if parsed is None:
                     print(f"[PARSE FAIL] Raw:\n{raw[:500]}")
@@ -910,7 +895,7 @@ def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model:
             except Exception as e:
                 print(f"  [ERROR] {e}")
     elif kind == "heroes":
-        data = yaml.safe_load(Path(HEROES_INPUT).read_text("utf-8"))
+        data = yaml.safe_load(Path(HEROES_CRAWLED).read_text("utf-8"))
         items = [(h["name"], h.get("faction", ""), h.get("clan", "")) for h in data if h.get("name")]
         samples = random.sample(items, min(num, len(items)))
         prompt = build_hero_batch_prompt(samples)
@@ -918,7 +903,7 @@ def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model:
         print(f"HEROES ({len(samples)} samples)")
         print(f"{'='*60}")
         try:
-            raw = _call_claude(prompt, model=model)
+            raw = call_claude(prompt, model=model)
             parsed = parse_llm_output(raw)
             if parsed is None:
                 print(f"[PARSE FAIL] Raw:\n{raw[:500]}")

@@ -8,7 +8,7 @@ Reads:
   data/traits_translated.yaml
 
 Outputs:
-  data/heros.json   (array of heroes)
+  data/heroes.json  (array of heroes)
   data/skills.json  (array of skills)
 
 Usage:
@@ -20,15 +20,13 @@ import re
 import yaml
 from pathlib import Path
 
-HEROES_INPUT = "data/heroes_crawled.yaml"
-HEROES_TRANSLATED = "data/heroes_translated.yaml"
-SKILLS_CRAWLED = "data/skills_crawled.yaml"
-SKILLS_TRANSLATED = "data/skills_translated.yaml"
-TRAITS_TRANSLATED = "data/traits_translated.yaml"
-STATUSES_INPUT = "data/statuses.yaml"
-OVERRIDES_INPUT = "data/overrides.yaml"
-HEROES_OUTPUT = ".build/heros.json"
-SKILLS_OUTPUT = ".build/skills.json"
+from llm_core import clean_strings, load_overrides
+from paths import (
+    HEROES_CRAWLED, HEROES_TRANSLATED, SKILLS_CRAWLED,
+    SKILLS_TRANSLATED, SKILLS_BATTLE, TRAITS_TRANSLATED,
+    STATUSES_YAML,
+    HEROES_JSON, SKILLS_JSON, STATUSES_JSON,
+)
 
 # LLM skill name corrections (wrong CHT → correct CHT)
 SKILL_NAME_FIXES = {
@@ -65,21 +63,12 @@ def deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def _load_yaml_optional(path: str) -> dict:
-    p = Path(path)
-    if not p.exists():
+def _load_yaml_optional(path: Path) -> dict:
+    if not path.exists():
         return {}
-    data = yaml.safe_load(p.read_text("utf-8"))
+    data = yaml.safe_load(path.read_text("utf-8"))
     return data if isinstance(data, dict) else {}
 
-
-def load_overrides() -> dict:
-    """Load overrides.yaml if it exists. Returns {skills: {}, heroes: []}."""
-    p = Path(OVERRIDES_INPUT)
-    if not p.exists():
-        return {}
-    data = yaml.safe_load(p.read_text("utf-8"))
-    return clean_strings(data) if isinstance(data, dict) else {}
 
 
 def apply_skill_overrides(skills: list[dict], overrides: dict) -> list[dict]:
@@ -164,16 +153,6 @@ def ensure_str(val) -> str:
         return f"{val * 100:.0f}%"
     return str(val).strip() if val is not None else ""
 
-
-def clean_strings(obj):
-    """Recursively strip trailing whitespace from all string values."""
-    if isinstance(obj, str):
-        return obj.strip()
-    if isinstance(obj, dict):
-        return {k: clean_strings(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [clean_strings(v) for v in obj]
-    return obj
 
 
 SCALE_ALIASES = {
@@ -394,21 +373,21 @@ def build_skills(crawled: dict, translated: dict, battle: dict) -> list[dict]:
 
 
 def main():
-    heroes_raw = yaml.safe_load(Path(HEROES_INPUT).read_text("utf-8"))
-    crawled = yaml.safe_load(Path(SKILLS_CRAWLED).read_text("utf-8"))
-    translated = yaml.safe_load(Path(SKILLS_TRANSLATED).read_text("utf-8"))
-    traits_translated = yaml.safe_load(Path(TRAITS_TRANSLATED).read_text("utf-8"))
+    heroes_raw = yaml.safe_load(HEROES_CRAWLED.read_text("utf-8"))
+    crawled = yaml.safe_load(SKILLS_CRAWLED.read_text("utf-8"))
+    translated = yaml.safe_load(SKILLS_TRANSLATED.read_text("utf-8"))
+    traits_translated = yaml.safe_load(TRAITS_TRANSLATED.read_text("utf-8"))
 
     # Load hero name translations (optional)
     heroes_translated = {}
-    ht_path = Path(HEROES_TRANSLATED)
+    ht_path = HEROES_TRANSLATED
     if ht_path.exists():
         heroes_translated = yaml.safe_load(ht_path.read_text("utf-8")) or {}
 
     # Build JP→CHT skill name map from translated data
     skill_name_map = {jp_key: tr.get("name", jp_key) for jp_key, tr in translated.items()}
 
-    battle = _load_yaml_optional("data/skills_battle.yaml")
+    battle = _load_yaml_optional(SKILLS_BATTLE)
 
     heroes = build_heroes(heroes_raw, traits_translated, skill_name_map, heroes_translated)
     skills = build_skills(crawled, translated, battle)
@@ -426,17 +405,17 @@ def main():
     # Post-process: normalize text, fix types, sort
     heroes, skills = postprocess(heroes, skills)
 
-    Path(HEROES_OUTPUT).parent.mkdir(parents=True, exist_ok=True)
-    Path(HEROES_OUTPUT).write_text(
+    HEROES_JSON.parent.mkdir(parents=True, exist_ok=True)
+    HEROES_JSON.write_text(
         json.dumps(heroes, ensure_ascii=False, indent=2), "utf-8"
     )
-    Path(SKILLS_OUTPUT).write_text(
+    SKILLS_JSON.write_text(
         json.dumps(skills, ensure_ascii=False, indent=2), "utf-8"
     )
 
     # Build statuses.json from YAML
-    statuses_yaml = yaml.safe_load(Path("data/statuses.yaml").read_text("utf-8"))
-    Path(HEROES_OUTPUT).parent.joinpath("statuses.json").write_text(
+    statuses_yaml = yaml.safe_load(STATUSES_YAML.read_text("utf-8"))
+    STATUSES_JSON.write_text(
         json.dumps(statuses_yaml, ensure_ascii=False, indent=2), "utf-8"
     )
 
@@ -445,8 +424,8 @@ def main():
         1 for h in heroes for t in h["traits"] if t["name"] != t.get("name_jp", t["name"])
     )
     heroes_with_cht = sum(1 for h in heroes if h.get("name") != h.get("name_jp"))
-    print(f"[done] {len(heroes)} heroes → {HEROES_OUTPUT}")
-    print(f"[done] {len(skills)} skills → {SKILLS_OUTPUT}")
+    print(f"[done] {len(heroes)} heroes → {HEROES_JSON}")
+    print(f"[done] {len(skills)} skills → {SKILLS_JSON}")
     print(f"[info] {heroes_with_cht} hero names translated to CHT")
     print(f"[info] {traits_with_translation} traits translated to CHT")
     if override_count:

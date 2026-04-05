@@ -34,12 +34,12 @@ import yaml
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
+from paths import (
+    CRAWL_CACHE_DIR, HERO_INDEX_CACHE,
+    HEROES_CRAWLED, SKILLS_CRAWLED, ASSEMBLY_CRAWLED,
+)
+
 DEFAULT_INDEX_URL = "https://game8.jp/nobunaga-shinsen/737773"
-CACHE_DIR = Path("data/.crawl_cache")
-INDEX_PATH = CACHE_DIR / "_hero_index.json"
-HEROES_OUTPUT = "data/heroes_crawled.yaml"
-SKILLS_OUTPUT = "data/skills_crawled.yaml"
-ASSEMBLY_OUTPUT = "data/assembly_skills_crawled.yaml"
 DEFAULT_TIMEOUT = 15
 
 # JP skill type → normalized key
@@ -91,7 +91,7 @@ def crawl_delay():
 
 def _detail_cache_path(url: str) -> Path:
     slug = urlparse(url).path.strip("/").replace("/", "_")
-    return CACHE_DIR / f"{slug}.json"
+    return CRAWL_CACHE_DIR / f"{slug}.json"
 
 
 def load_detail_cache(url: str) -> dict | None:
@@ -102,20 +102,20 @@ def load_detail_cache(url: str) -> dict | None:
 
 
 def save_detail_cache(url: str, data: dict):
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    CRAWL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     path = _detail_cache_path(url)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
 
 
 def load_index() -> list[dict] | None:
-    if INDEX_PATH.exists():
-        return json.loads(INDEX_PATH.read_text("utf-8"))
+    if HERO_INDEX_CACHE.exists():
+        return json.loads(HERO_INDEX_CACHE.read_text("utf-8"))
     return None
 
 
 def save_index(heroes: list[dict]):
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    INDEX_PATH.write_text(json.dumps(heroes, ensure_ascii=False, indent=2), "utf-8")
+    CRAWL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    HERO_INDEX_CACHE.write_text(json.dumps(heroes, ensure_ascii=False, indent=2), "utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -443,9 +443,9 @@ def crawl(
     refresh_index: bool = False,
     force: bool = False,
     timeout: float = DEFAULT_TIMEOUT,
-    heroes_path: str = HEROES_OUTPUT,
-    skills_path: str = SKILLS_OUTPUT,
-    assembly_path: str = ASSEMBLY_OUTPUT,
+    heroes_path: str = str(HEROES_CRAWLED),
+    skills_path: str = str(SKILLS_CRAWLED),
+    assembly_path: str = str(ASSEMBLY_CRAWLED),
 ):
     index_url = validate_url(index_url)
 
@@ -454,7 +454,7 @@ def crawl(
     heroes = load_index() if use_cached_index else None
 
     if heroes:
-        tqdm.write(f"[index] Loaded {len(heroes)} heroes from {INDEX_PATH}")
+        tqdm.write(f"[index] Loaded {len(heroes)} heroes from {HERO_INDEX_CACHE}")
     else:
         tqdm.write(f"[index] Fetching hero list: {index_url}")
         soup = fetch_page(index_url, timeout=timeout)
@@ -462,7 +462,7 @@ def crawl(
         tqdm.write(f"[index] Found {len(heroes)} heroes")
         if heroes:
             save_index(heroes)
-            tqdm.write(f"[index] Saved → {INDEX_PATH}")
+            tqdm.write(f"[index] Saved → {HERO_INDEX_CACHE}")
 
     if not heroes:
         tqdm.write("[error] No heroes found. Page structure may have changed.")
@@ -526,9 +526,9 @@ def crawl(
 def main():
     p = argparse.ArgumentParser(description="Crawl hero data from game8.jp")
     p.add_argument("--url", default=DEFAULT_INDEX_URL, help="Hero list page URL")
-    p.add_argument("--heroes-out", default=HEROES_OUTPUT, help="Heroes YAML output path")
-    p.add_argument("--skills-out", default=SKILLS_OUTPUT, help="Skills YAML output path")
-    p.add_argument("--assembly-out", default=ASSEMBLY_OUTPUT, help="Assembly skills YAML output path")
+    p.add_argument("--heroes-out", default=str(HEROES_CRAWLED), help="Heroes YAML output path")
+    p.add_argument("--skills-out", default=str(SKILLS_CRAWLED), help="Skills YAML output path")
+    p.add_argument("--assembly-out", default=str(ASSEMBLY_CRAWLED), help="Assembly skills YAML output path")
     p.add_argument("--detail", action="store_true", help="Enable stage 2 (crawl detail pages)")
     p.add_argument("--limit", type=int, help="Max heroes to crawl detail for")
     p.add_argument("--name", help="Filter heroes by name (substring match)")

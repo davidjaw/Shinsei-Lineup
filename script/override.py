@@ -21,31 +21,23 @@ import sys
 import yaml
 from pathlib import Path
 
+from claude_test import call_claude
 from llm_core import (
     CANONICAL_STATUSES, COMMON_RULES, SKILL_TAGS, DEFAULT_MODEL,
-    call_gemini, parse_llm_output, autofix_frontend,
+    call_gemini, parse_llm_output, autofix_frontend, load_overrides,
 )
-
-OVERRIDES_FILE = "data/overrides.yaml"
-SKILLS_TRANSLATED = "data/skills_translated.yaml"
-TRAITS_TRANSLATED = "data/traits_translated.yaml"
-HEROES_OUTPUT = ".build/heros.json"
-SKILLS_OUTPUT = ".build/skills.json"
+from paths import (
+    OVERRIDES_YAML, SKILLS_CRAWLED,
+    SKILLS_TRANSLATED, TRAITS_TRANSLATED,
+    HEROES_JSON, SKILLS_JSON,
+)
 
 BACK_CMD = "<"
 
 
-def load_overrides() -> dict:
-    p = Path(OVERRIDES_FILE)
-    if p.exists():
-        data = yaml.safe_load(p.read_text("utf-8"))
-        return data if isinstance(data, dict) else {"skills": {}, "heroes": {}}
-    return {"skills": {}, "heroes": {}}
-
-
 def save_overrides(data: dict):
-    Path(OVERRIDES_FILE).parent.mkdir(parents=True, exist_ok=True)
-    with open(OVERRIDES_FILE, "w", encoding="utf-8") as f:
+    OVERRIDES_YAML.parent.mkdir(parents=True, exist_ok=True)
+    with open(OVERRIDES_YAML, "w", encoding="utf-8") as f:
         yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
 
@@ -55,18 +47,16 @@ class GoBack(Exception):
 
 def load_existing_skills() -> dict:
     """Load translated skills for reference during modifications."""
-    p = Path(SKILLS_TRANSLATED)
-    if p.exists():
-        data = yaml.safe_load(p.read_text("utf-8"))
+    if SKILLS_TRANSLATED.exists():
+        data = yaml.safe_load(SKILLS_TRANSLATED.read_text("utf-8"))
         return data if isinstance(data, dict) else {}
     return {}
 
 
 def load_existing_traits() -> dict:
     """Load translated traits for lookup during hero creation."""
-    p = Path(TRAITS_TRANSLATED)
-    if p.exists():
-        data = yaml.safe_load(p.read_text("utf-8"))
+    if TRAITS_TRANSLATED.exists():
+        data = yaml.safe_load(TRAITS_TRANSLATED.read_text("utf-8"))
         return data if isinstance(data, dict) else {}
     return {}
 
@@ -252,7 +242,7 @@ def do_modify_skill(model: str):
             existing[k] = v
     overrides["skills"][target_key] = existing
     save_overrides(overrides)
-    print(f"[done] Override saved for '{target_key}' in {OVERRIDES_FILE}")
+    print(f"[done] Override saved for '{target_key}' in {OVERRIDES_YAML}")
 
 
 # ---------------------------------------------------------------------------
@@ -407,7 +397,7 @@ def do_add_skill(model: str):
     for name, result in results:
         overrides["skills"][name] = result
     save_overrides(overrides)
-    print(f"[done] {len(results)} skill(s) added to {OVERRIDES_FILE}")
+    print(f"[done] {len(results)} skill(s) added to {OVERRIDES_YAML}")
 
 
 # ---------------------------------------------------------------------------
@@ -557,7 +547,7 @@ def do_add_hero(model: str):
     overrides.setdefault("heroes", {})
     overrides["heroes"][collected["name"]] = hero
     save_overrides(overrides)
-    print(f"[done] Hero '{collected['name']}' added to {OVERRIDES_FILE}")
+    print(f"[done] Hero '{collected['name']}' added to {OVERRIDES_YAML}")
 
     # Check if referenced skills exist, offer to add them
     missing_skills = []
@@ -744,7 +734,7 @@ def do_quick_add_skill(model: str):
 
     if added:
         save_overrides(overrides)
-        print(f"\n[done] {added}/{len(queue)} skill(s) added to {OVERRIDES_FILE}")
+        print(f"\n[done] {added}/{len(queue)} skill(s) added to {OVERRIDES_YAML}")
     else:
         print("\n[done] No skills added.")
 
@@ -781,22 +771,12 @@ def _add_skill_for_hero(skill_name: str, label: str, hero_name: str, model: str)
     overrides.setdefault("skills", {})
     overrides["skills"][name] = result
     save_overrides(overrides)
-    print(f"[done] Skill '{name}' added to {OVERRIDES_FILE}")
+    print(f"[done] Skill '{name}' added to {OVERRIDES_YAML}")
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-
-def _call_claude(prompt: str, model: str = "haiku") -> str:
-    import subprocess as _sp
-    result = _sp.run(
-        ["claude", "-p", "--model", model],
-        input=prompt, capture_output=True, text=True, timeout=300,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:300]}")
-    return result.stdout.strip()
 
 
 def claude_test(num: int = 10, model: str = "haiku"):
@@ -821,7 +801,7 @@ def claude_test(num: int = 10, model: str = "haiku"):
     print(f"TEST 1: modify-skill ({target_key})")
     print(f"{'='*60}")
     try:
-        raw = _call_claude(prompt, model=model)
+        raw = call_claude(prompt, model=model)
         parsed = parse_llm_output(raw)
         if parsed and not parsed.get("_rejected"):
             print(f"  Changes: {list(parsed.keys())}")
@@ -845,7 +825,7 @@ def claude_test(num: int = 10, model: str = "haiku"):
     print(f"TEST 2: add-skill")
     print(f"{'='*60}")
     try:
-        raw = _call_claude(prompt2, model=model)
+        raw = call_claude(prompt2, model=model)
         parsed = parse_llm_output(raw)
         if parsed:
             print(f"  name: {parsed.get('name', '?')}")
@@ -857,7 +837,7 @@ def claude_test(num: int = 10, model: str = "haiku"):
         print(f"  [ERROR] {e}")
 
     # Test 3: quick-batch with crawled data
-    crawled_path = Path("data/skills_crawled.yaml")
+    crawled_path = SKILLS_CRAWLED
     if crawled_path.exists():
         crawled = yaml.safe_load(crawled_path.read_text("utf-8"))
         crawled_items = list(crawled.items())
@@ -876,7 +856,7 @@ def claude_test(num: int = 10, model: str = "haiku"):
         print(f"Skills: {', '.join(n for n, _ in quick_samples)}")
         print(f"{'='*60}")
         try:
-            raw = _call_claude(prompt3, model=model)
+            raw = call_claude(prompt3, model=model)
             parsed = parse_llm_output(raw)
             if parsed:
                 for key, val in parsed.items():
