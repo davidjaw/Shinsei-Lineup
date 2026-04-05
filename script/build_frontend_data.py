@@ -65,6 +65,14 @@ def deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _load_yaml_optional(path: str) -> dict:
+    p = Path(path)
+    if not p.exists():
+        return {}
+    data = yaml.safe_load(p.read_text("utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
 def load_overrides() -> dict:
     """Load overrides.yaml if it exists. Returns {skills: {}, heroes: []}."""
     p = Path(OVERRIDES_INPUT)
@@ -94,7 +102,8 @@ def apply_skill_overrides(skills: list[dict], overrides: dict) -> list[dict]:
             clean.setdefault("source_hero", "")
             clean.setdefault("unique_hero", "")
             clean.setdefault("is_unique", bool(clean.get("unique_hero")))
-            clean.setdefault("is_teachable", not ov.get("is_event_skill", False))
+            # Teachable only if explicitly has source_hero or is_teachable set, NOT just "not event"
+            clean.setdefault("is_teachable", bool(clean.get("source_hero")))
             clean.setdefault("is_fixed", clean.get("is_unique", False) and not clean.get("is_teachable", False))
             clean.setdefault("icon", "")
             clean.setdefault("tags", [])
@@ -191,8 +200,13 @@ def normalize_status_refs(text: str) -> str:
         return f"{{scale:{canonical}}}"
     text = re.sub(r"\{status:([^}]+)\}", replace_status, text)
     text = re.sub(r"\{scale:([^}]+)\}", replace_scale, text)
+    # Fix LLM producing {var:name:%} → {var:name}%
+    text = re.sub(r"\{var:(\w+):%\}", r"{var:\1}%", text)
+    # Fix LLM wrapping {scale:} with redundant 受...影響
+    text = re.sub(r"受\{scale:([^}]+)\}影響", r"{scale:\1}", text)
     # Also fix plain-text occurrences of known aliases
     text = text.replace("知略", "智略")
+    text = text.replace("計略傷害", "謀略傷害")
     return text
 
 def normalize_vars(vars_dict: dict) -> dict:
@@ -200,7 +214,11 @@ def normalize_vars(vars_dict: dict) -> dict:
     out = {}
     for k, v in vars_dict.items():
         if isinstance(v, dict) and "scale" in v:
-            v = {**v, "scale": SCALE_ALIASES.get(v["scale"], v["scale"])}
+            scale = v["scale"]
+            if isinstance(scale, list):
+                scale = "/".join(str(s) for s in scale)
+            scale = SCALE_ALIASES.get(scale, scale)
+            v = {**v, "scale": scale}
         out[k] = v
     return out
 
@@ -311,15 +329,38 @@ def split_commander_description(desc: str) -> tuple[str, str]:
     return desc, ""
 
 
-def build_skills(crawled: dict, translated: dict) -> list[dict]:
+def _extract_commander_desc(tr: dict, battle: dict) -> str:
+    """Try multiple sources for commander description."""
+    # 1. Explicit field in frontend
+    if tr.get("commander_description"):
+        return tr["commander_description"]
+    # 2. bonus.commander in frontend
+    bonus = tr.get("bonus", {})
+    if isinstance(bonus, dict):
+        cmd = bonus.get("commander", {})
+        if isinstance(cmd, dict) and cmd.get("description"):
+            return cmd["description"]
+    # 3. bonus.commander in battle
+    bonus = battle.get("bonus", {})
+    if isinstance(bonus, dict):
+        cmd = bonus.get("commander", {})
+        if isinstance(cmd, dict) and cmd.get("description"):
+            return cmd["description"]
+    return ""
+
+
+def build_skills(crawled: dict, translated: dict, battle: dict) -> list[dict]:
     out = []
 
     for key in crawled:
         cr = crawled.get(key, {})
         tr = translated.get(key, {})
+        bt = battle.get(key, {})
 
         raw_desc = tr.get("description", cr.get("description", ""))
         description, commander_description = split_commander_description(raw_desc)
+        if not commander_description:
+            commander_description = _extract_commander_desc(tr, bt)
 
         name_cht = tr.get("name", key)
         is_unique = bool(cr.get("is_unique"))
@@ -367,8 +408,10 @@ def main():
     # Build JP→CHT skill name map from translated data
     skill_name_map = {jp_key: tr.get("name", jp_key) for jp_key, tr in translated.items()}
 
+    battle = _load_yaml_optional("data/skills_battle.yaml")
+
     heroes = build_heroes(heroes_raw, traits_translated, skill_name_map, heroes_translated)
-    skills = build_skills(crawled, translated)
+    skills = build_skills(crawled, translated, battle)
 
     # Apply overrides (highest priority)
     overrides = load_overrides()

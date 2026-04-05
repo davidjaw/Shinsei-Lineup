@@ -27,8 +27,8 @@ export function useTemplateParser() {
       if (asPercent || (v > 0 && v < 1)) return formatAsPercent(v)
       return String(v)
     }
-    if (v && typeof v === 'object' && 'base' in v && 'max' in v) {
-      const val = isMax ? v.max : v.base
+    if (v && typeof v === 'object' && 'base' in v) {
+      const val = isMax ? (v.max ?? v.base) : v.base
       if (v.type === 'flat') return String(val)
       return typeof val === 'number' ? formatAsPercent(val) : String(val)
     }
@@ -115,7 +115,16 @@ export function useTemplateParser() {
       segments.push({ type: 'text', value: text.substring(lastIndex) })
     }
 
-    return segments
+    // Add spacing between CJK characters and numbers/percentages
+    return segments.map(seg => {
+      if (seg.type !== 'text' || !seg.value) return seg
+      return {
+        ...seg,
+        value: seg.value
+          .replace(/([\u4e00-\u9fff])(\d)/g, '$1 $2')
+          .replace(/(\d(?:%)?)([\u4e00-\u9fff])/g, '$1 $2')
+      }
+    })
   }
 
   /**
