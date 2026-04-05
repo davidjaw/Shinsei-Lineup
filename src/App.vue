@@ -195,11 +195,11 @@
         
                                       <div class="flex-1 md:flex-none md:h-full w-full md:w-[35%] bg-white border-t md:border-t-0 md:border-l border-gray-200 flex flex-col shadow-xl z-40 min-h-0">
         
-                                        <el-tabs v-model="activeTab" class="flex-1 flex flex-col px-4 pt-2" stretch>                                <el-tab-pane label="武將庫" name="heros" class="h-full flex flex-col overflow-hidden">
+                                        <el-tabs v-model="activeTab" class="flex-1 flex flex-col px-4 pt-2" stretch>                                <el-tab-pane label="武將庫" name="heroes" class="h-full flex flex-col overflow-hidden">
                                    <HeroLibrary 
                                      mode="select" 
-                                     :used-heros="allUsedHeroNames" 
-                                     :owned-heros="ownedHeros"
+                                     :used-heroes="allUsedHeroNames" 
+                                     :owned-heroes="ownedHeroes"
                                      :filter-owned="showOwnedOnly"
                                      @update:filterOwned="val => showOwnedOnly = val"
                                      @select="selectHeroFromLibrary" 
@@ -224,12 +224,12 @@
               <div v-else class="h-full bg-white flex flex-col">
                 <div class="container mx-auto h-full flex flex-col p-4">
                   <el-tabs v-model="inventoryActiveTab" class="flex-1 flex flex-col" type="border-card">
-                    <el-tab-pane label="武將庫存" name="heros" class="h-full flex flex-col overflow-hidden">
+                    <el-tab-pane label="武將庫存" name="heroes" class="h-full flex flex-col overflow-hidden">
                        <HeroLibrary 
                          mode="manage" 
-                         :used-heros="[]" 
-                         :owned-heros="tempOwnedHeros"
-                         @update:ownedHeros="val => tempOwnedHeros = val"
+                         :used-heroes="[]" 
+                         :owned-heroes="tempOwnedHeroes"
+                         @update:ownedHeroes="val => tempOwnedHeroes = val"
                        />
                     </el-tab-pane>
                     <el-tab-pane label="戰法庫存" name="skills" class="h-full flex flex-col overflow-hidden">
@@ -421,11 +421,11 @@ const {
 } = useLineups()
 
 const {
-  ownedHeros,
+  ownedHeroes,
   ownedSkills,
   showOwnedOnly,
   isEditingInventory,
-  tempOwnedHeros,
+  tempOwnedHeroes,
   tempOwnedSkills,
   startEditingInventory,
   saveInventory,
@@ -459,10 +459,10 @@ const handleEquipSelect = (trait: Trait | null) => {
   }
 }
 
-const activeTab = ref('heros')
+const activeTab = ref('heroes')
 const skillSelectDialogVisible = ref(false)
 
-const inventoryActiveTab = ref('heros')
+const inventoryActiveTab = ref('heroes')
 
 // Interaction State
 type Role = 'main' | 'vice1' | 'vice2'
@@ -480,7 +480,7 @@ const mobileSidebarVisible = ref(false)
 // Actions
 const openHeroSelect = (role: Role) => {
   currentSelectingHeroRole.value = role
-  activeTab.value = 'heros'
+  activeTab.value = 'heroes'
 }
 
 const openMobileDetail = (role: Role) => {
@@ -576,7 +576,7 @@ const openShareDialog = () => {
 const shareLineup = (type: 'all' | 'current' | 'inventory') => {
   const data: ShareableData = {}
   if (type === 'inventory' || type === 'all') {
-    data.inv_h = ownedHeros.value
+    data.inv_h = ownedHeroes.value
     data.inv_s = ownedSkills.value
   }
   if (type === 'current') {
@@ -609,7 +609,7 @@ const shareLineup = (type: 'all' | 'current' | 'inventory') => {
   })
 }
 
-const { heros, skills } = useData()
+const { heroes, skills } = useData()
 
 const initFromHash = () => {
   if (window.location.hash) {
@@ -617,8 +617,8 @@ const initFromHash = () => {
       const b64 = window.location.hash.slice(1)
       const json = decodeURIComponent(escape(atob(b64)))
       const data = JSON.parse(json) as ShareableData
-            if (data.inventory) ownedHeros.value = data.inventory
-            if (data.inv_h) ownedHeros.value = data.inv_h
+            if (data.inventory) ownedHeroes.value = data.inventory
+            if (data.inv_h) ownedHeroes.value = data.inv_h
             if (data.inv_s) ownedSkills.value = data.inv_s
             
             // Auto-activate "Owned Only" filter if inventory data exists
@@ -634,7 +634,7 @@ const initFromHash = () => {
           const restore = (prefix: string, role: RoleData) => {
             const safeL = l as any
             const hName = safeL[prefix]
-            if (hName) role.hero = heros.value.find(h => h.name === hName) || null
+            if (hName) role.hero = heroes.value.find(h => h.name === hName) || null
             const s1Name = safeL[prefix + '_s1']
             if (s1Name) role.skill1 = skills.value.find(s => s.name === s1Name || s.name_jp === s1Name) || null
             const s2Name = safeL[prefix + '_s2']

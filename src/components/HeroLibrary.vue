@@ -62,7 +62,7 @@
 
     <!-- Grid -->
     <div class="flex-1 overflow-y-auto p-2" v-loading="loading">
-      <div v-if="filteredHeros.length === 0" class="text-center py-10 text-gray-400">
+      <div v-if="filteredHeroes.length === 0" class="text-center py-10 text-gray-400">
         無符合條件的武將
       </div>
       <div 
@@ -70,13 +70,13 @@
         :class="mode === 'manage' ? 'grid-cols-5 sm:grid-cols-8 md:grid-cols-10' : 'grid-cols-3 sm:grid-cols-4'"
       >
         <div 
-          v-for="hero in filteredHeros" 
+          v-for="hero in filteredHeroes" 
           :key="hero.name + hero.faction" 
           class="relative transition-all"
           :class="{ 
             'opacity-50 grayscale cursor-not-allowed': mode === 'select' && isUsed(hero.name),
-            'opacity-40': mode === 'select' && filterOwnedOnly && !props.ownedHeros.includes(hero.name),
-            'grayscale opacity-60': mode === 'manage' && !props.ownedHeros.includes(hero.name),
+            'opacity-40': mode === 'select' && filterOwnedOnly && !props.ownedHeroes.includes(hero.name),
+            'grayscale opacity-60': mode === 'manage' && !props.ownedHeroes.includes(hero.name),
             'cursor-pointer hover:scale-105': (mode === 'manage') || (mode === 'select' && !isUsed(hero.name))
           }"
           @click="handleClick(hero)"
@@ -89,7 +89,7 @@
           </div>
 
           <!-- Unowned Label (Manage Mode) -->
-           <div v-if="mode === 'manage' && !props.ownedHeros.includes(hero.name)" class="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+           <div v-if="mode === 'manage' && !props.ownedHeroes.includes(hero.name)" class="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
              <!-- Icon only for compact mode? Or just dimming is enough? -->
              <!-- <span class="bg-gray-800/70 text-white text-xs px-1 py-0.5 rounded">未擁有</span> -->
              <el-icon class="text-white bg-black/50 rounded-full p-1" :size="20"><Close /></el-icon>
@@ -106,13 +106,13 @@ import { Close } from '@element-plus/icons-vue'
 import { useData, Hero } from '../composables/useData'
 import HeroCard from './HeroCard.vue'
 
-const { heros, loading } = useData()
-const emit = defineEmits(['select', 'update:ownedHeros', 'update:filterOwned'])
+const { heroes, loading } = useData()
+const emit = defineEmits(['select', 'update:ownedHeroes', 'update:filterOwned'])
 
 const props = defineProps({
-  usedHeros: { type: Object as PropType<Set<string> | string[]>, default: () => [] },
+  usedHeroes: { type: Object as PropType<Set<string> | string[]>, default: () => [] },
   mode: { type: String as PropType<'select' | 'manage'>, default: 'select' },
-  ownedHeros: { type: Array as PropType<string[]>, default: () => [] },
+  ownedHeroes: { type: Array as PropType<string[]>, default: () => [] },
   filterOwned: { type: Boolean, default: false }
 })
 
@@ -131,11 +131,11 @@ const selectedCosts = ref<Set<number>>(new Set())
 const selectedFactions = ref<Set<string>>(new Set())
 
 const factions = computed(() => {
-  return [...new Set(heros.value.map(h => h.faction))].filter(Boolean).sort()
+  return [...new Set(heroes.value.map(h => h.faction))].filter(Boolean).sort()
 })
 
 const availableCosts = computed(() => {
-  return [...new Set(heros.value.map(h => h.cost))].sort((a, b) => b - a)
+  return [...new Set(heroes.value.map(h => h.cost))].sort((a, b) => b - a)
 })
 
 const toggleCost = (cost: number) => {
@@ -157,31 +157,31 @@ const resetFilters = () => {
   selectedFactions.value = new Set()
 }
 
-const filteredHeros = computed(() => {
-  return heros.value.filter(h => {
+const filteredHeroes = computed(() => {
+  return heroes.value.filter(h => {
     if (debouncedSearchQuery.value && !h.name.includes(debouncedSearchQuery.value)) return false
     if (selectedFactions.value.size > 0 && !selectedFactions.value.has(h.faction)) return false
     if (selectedCosts.value.size > 0 && !selectedCosts.value.has(h.cost)) return false
-    if (props.mode === 'select' && props.filterOwned && !props.ownedHeros.includes(h.name)) return false
+    if (props.mode === 'select' && props.filterOwned && !props.ownedHeroes.includes(h.name)) return false
     return true
   })
 })
 
 const isUsed = (name: string) => {
-  if (Array.isArray(props.usedHeros)) {
-    return props.usedHeros.includes(name)
+  if (Array.isArray(props.usedHeroes)) {
+    return props.usedHeroes.includes(name)
   }
-  return (props.usedHeros as Set<string>).has(name)
+  return (props.usedHeroes as Set<string>).has(name)
 }
 
 const toggleOwned = (name: string) => {
-  const newOwned = [...props.ownedHeros]
+  const newOwned = [...props.ownedHeroes]
   if (newOwned.includes(name)) {
     newOwned.splice(newOwned.indexOf(name), 1)
   } else {
     newOwned.push(name)
   }
-  emit('update:ownedHeros', newOwned)
+  emit('update:ownedHeroes', newOwned)
 }
 
 const handleClick = (hero: Hero) => {

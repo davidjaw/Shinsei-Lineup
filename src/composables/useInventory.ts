@@ -1,23 +1,23 @@
 import { ref } from 'vue'
 
 // State
-const ownedHeros = ref<string[]>([])
+const ownedHeroes = ref<string[]>([])
 const ownedSkills = ref<string[]>([])
 const showOwnedOnly = ref(false)
 
 const isEditingInventory = ref(false)
-const tempOwnedHeros = ref<string[]>([])
+const tempOwnedHeroes = ref<string[]>([])
 const tempOwnedSkills = ref<string[]>([])
 
 // Actions
 const startEditingInventory = () => {
-  tempOwnedHeros.value = [...ownedHeros.value]
+  tempOwnedHeroes.value = [...ownedHeroes.value]
   tempOwnedSkills.value = [...ownedSkills.value]
   isEditingInventory.value = true
 }
 
 const saveInventory = () => {
-  ownedHeros.value = [...tempOwnedHeros.value]
+  ownedHeroes.value = [...tempOwnedHeroes.value]
   ownedSkills.value = [...tempOwnedSkills.value]
   isEditingInventory.value = false
 }
@@ -27,17 +27,17 @@ const cancelEditingInventory = () => {
 }
 
 const clearInventory = () => {
-  ownedHeros.value = []
+  ownedHeroes.value = []
   ownedSkills.value = []
 }
 
 export function useInventory() {
   return {
-    ownedHeros,
+    ownedHeroes,
     ownedSkills,
     showOwnedOnly,
     isEditingInventory,
-    tempOwnedHeros,
+    tempOwnedHeroes,
     tempOwnedSkills,
     startEditingInventory,
     saveInventory,

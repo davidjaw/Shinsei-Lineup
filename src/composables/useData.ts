@@ -140,7 +140,7 @@ export interface Hero {
   traits?: Trait[]
 }
 
-import herosData from '../../.build/heros.json'
+import heroesData from '../../.build/heroes.json'
 import skillsData from '../../.build/skills.json'
 import statusesData from '../../.build/statuses.json'
 
@@ -155,7 +155,7 @@ const DEFAULT_ICONS: Record<string, string> = {
   '兵種': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_tsbz_chibeidui.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
 };
 
-const heros = ref<Hero[]>(herosData && Array.isArray(herosData) ? (herosData as unknown as Hero[]) : [])
+const heroes = ref<Hero[]>(heroesData && Array.isArray(heroesData) ? (heroesData as unknown as Hero[]) : [])
 const skills = ref<Skill[]>(skillsData && Array.isArray(skillsData) ? (skillsData as unknown as Skill[]).map(s => ({
   ...s,
   icon: s.icon || DEFAULT_ICONS[s.type] || ''
@@ -168,5 +168,5 @@ export function useData() {
   const fetchAllData = async () => {
     loading.value = false
   }
-  return { heros, skills, statuses, loading, fetchAllData }
+  return { heroes, skills, statuses, loading, fetchAllData }
 }

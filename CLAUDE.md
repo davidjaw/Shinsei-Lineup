@@ -29,7 +29,7 @@ game8.jp → crawl_heroes.py → llm_translate.py → build_frontend_data.py →
 - **LLM output**: `data/skills_translated.yaml`, `data/traits_translated.yaml`, `data/heroes_translated.yaml`
 - **Manual overrides**: `data/overrides.yaml` (committed to git, highest priority)
 - **Static definitions**: `data/statuses.yaml` (hand-maintained canonical status effects)
-- **Build output**: `.build/heros.json`, `.build/skills.json`, `.build/statuses.json` (gitignored)
+- **Build output**: `.build/heroes.json`, `.build/skills.json`, `.build/statuses.json` (gitignored)
 
 ### Frontend (Vue 3 + Element Plus + TailwindCSS)
 
