@@ -19,6 +19,7 @@ Examples:
 
 import argparse
 import json
+import subprocess
 import sys
 import yaml
 from pathlib import Path
@@ -26,7 +27,7 @@ from tqdm import tqdm
 
 from llm_core import (
     CANONICAL_STATUSES, COMMON_RULES, SKILL_TAGS, DEFAULT_MODEL,
-    call_gemini, parse_llm_output,
+    call_gemini, parse_llm_output, autofix_frontend,
     load_llm_cache, save_llm_cache, save_raw_cache,
 )
 
@@ -100,7 +101,7 @@ For EACH skill, output a YAML document under that skill's name as the top-level 
 
 ## `battle` — Structured extraction for battle engine
 - ALL text (including `bonus.commander.description`) must be in Traditional Chinese (繁體中文)
-- Extract variables into `vars` (same vars, base/max)
+- Extract variables into `vars` following COMMON_RULES exactly (do not add base/max to fixed values, do not omit max from scaling values)
 - Map effects to `do` blocks: trigger/when/to/do
 - Effect types: damage, heal, buff, debuff, applyStatus, removeStatus, addStack, roll, sequence, conditional
 - Trigger types: always, battleStart, turnStart, beforeAction, afterAction, beforeAttack, afterAttack, onDamaged, onHeal
@@ -146,6 +147,10 @@ Example frontend:
       base: 0.05
       max: 0.10
       scale: 武勇
+    stat_debuff:
+      base: 18
+      max: 36
+      type: flat
     max_charge: 12
     ally_count: 2
 
@@ -353,6 +358,47 @@ def validate_skill_entry(data: dict) -> list[str]:
     return errors
 
 
+def validate_frontend_quality(data: dict) -> list[str]:
+    """Post-LLM quality checks on frontend section. Auto-fixes what it can, returns hard errors only."""
+    fe = data.get("frontend", {})
+    if not isinstance(fe, dict):
+        return []
+
+    # Auto-fix known issues first
+    fixes = autofix_frontend(fe)
+    if fixes:
+        tqdm.write(f"    [autofix] {'; '.join(fixes)}")
+
+    # Now check for remaining hard errors
+    errors = []
+    desc = fe.get("description", "")
+    cmd_desc = fe.get("commander_description", "")
+    full_text = f"{desc} {cmd_desc}"
+    vars_dict = fe.get("vars", {})
+
+    import re as _re
+
+    # 1. English words in CHT description (var names leaking through)
+    english_words = _re.findall(r'(?<!\{var:)(?<!\{status:)(?<!\{scale:)(?<!\{dmg:)(?<!\{stat:)\b[a-zA-Z_]{3,}\b', full_text)
+    ok_words = {'var', 'status', 'scale', 'dmg', 'stat', 'base', 'max', 'flat'}
+    bad_words = [w for w in english_words if w.lower() not in ok_words]
+    if bad_words:
+        errors.append(f"English in description: {bad_words[:3]}")
+
+    # 2. {var:X} references not in vars
+    var_refs = _re.findall(r'\{var:(\w+)\}', full_text)
+    for ref in var_refs:
+        if ref not in vars_dict:
+            errors.append(f"{{var:{ref}}} not in vars")
+
+    # 3. base without max
+    for vk, vv in vars_dict.items():
+        if isinstance(vv, dict) and 'base' in vv and 'max' not in vv:
+            errors.append(f"vars.{vk} has base but no max")
+
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Processing
 # ---------------------------------------------------------------------------
@@ -443,15 +489,19 @@ def process_batch(
                 entry = parsed[first_key] if first_key else parsed
 
             errors = validate_skill_entry(entry)
-            if errors:
-                failed.append((name, "; ".join(errors)))
-                tqdm.write(f"  INVALID: {name} — {'; '.join(errors)}")
-            save_llm_cache(f"{cache_prefix}_{name}", entry)
-            results[name] = entry
+            quality = validate_frontend_quality(entry) if not errors else []
+            all_issues = errors + quality
+            if all_issues:
+                failed.append((name, "; ".join(all_issues)))
+                tqdm.write(f"  {'INVALID' if errors else 'QUALITY'}: {name} — {'; '.join(all_issues)}")
+            else:
+                save_llm_cache(f"{cache_prefix}_{name}", entry)
+                results[name] = entry
         else:
             # Batch output: keys may be translated (CHT) instead of original JP names.
             # Match by position: LLM preserves input order.
             parsed_values = list(parsed.values())
+            seen_names = set()
             for i, (name, _) in enumerate(uncached):
                 # Try exact match first, then positional
                 if name in parsed:
@@ -467,6 +517,23 @@ def process_batch(
                 if errors:
                     failed.append((name, "; ".join(errors)))
                     tqdm.write(f"  INVALID: {name} — {'; '.join(errors)}")
+                    continue
+
+                quality = validate_frontend_quality(entry)
+                if quality:
+                    failed.append((name, "; ".join(quality)))
+                    tqdm.write(f"  QUALITY: {name} — {'; '.join(quality)}")
+                    continue
+
+                # Check for duplicate translated names within this batch
+                fe_name = entry.get("frontend", {}).get("name", "")
+                if fe_name and fe_name in seen_names:
+                    failed.append((name, f"duplicate name '{fe_name}' in batch"))
+                    tqdm.write(f"  DUPE: {name} → '{fe_name}' conflicts with another skill in batch")
+                    continue
+                if fe_name:
+                    seen_names.add(fe_name)
+
                 save_llm_cache(f"{cache_prefix}_{name}", entry)
                 results[name] = entry
 
@@ -510,6 +577,17 @@ def process_skills(
         results, failed = process_batch(batch, model, force)
         all_results.update(results)
         all_failed.extend(failed)
+
+    # Auto-retry failed items one-by-one
+    if all_failed:
+        retry_names = {name for name, _ in all_failed}
+        retry_targets = [(n, s) for n, s in targets if n in retry_names]
+        tqdm.write(f"\n[retry] {len(retry_targets)} failed skills, retrying one-by-one...")
+        all_failed = []
+        for item in tqdm(retry_targets, desc="retry", unit="skill"):
+            results, failed = process_batch([item], model, force=True)
+            all_results.update(results)
+            all_failed.extend(failed)
 
     # Merge into output files — force overwrites existing entries
     frontend_skills = {} if force else _load_existing_yaml(SKILLS_TRANSLATED_OUTPUT)
@@ -578,6 +656,22 @@ def process_traits(
         )
         all_results.update(results)
         all_failed.extend(failed)
+
+    # Auto-retry failed items one-by-one
+    if all_failed:
+        retry_names = {name for name, _ in all_failed}
+        retry_targets = [(n, t) for n, t in targets if n in retry_names]
+        tqdm.write(f"\n[retry] {len(retry_targets)} failed traits, retrying one-by-one...")
+        all_failed = []
+        for item in tqdm(retry_targets, desc="retry", unit="trait"):
+            results, failed = process_batch(
+                [item], model, force=True,
+                single_prompt_fn=build_trait_single_prompt,
+                batch_prompt_fn=build_trait_batch_prompt,
+                cache_prefix="trait",
+            )
+            all_results.update(results)
+            all_failed.extend(failed)
 
     frontend_traits = {} if force else _load_existing_yaml(TRAITS_TRANSLATED_OUTPUT)
     battle_traits = {} if force else _load_existing_yaml(TRAITS_BATTLE_OUTPUT)
@@ -734,6 +828,113 @@ def process_heroes(
     return all_results
 
 
+def _call_claude(prompt: str, model: str = "haiku") -> str:
+    """Call Claude CLI in non-interactive mode via stdin."""
+    result = subprocess.run(
+        ["claude", "-p", "--model", model],
+        input=prompt, capture_output=True, text=True, timeout=300,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:300]}")
+    return result.stdout.strip()
+
+
+def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model: str = "haiku"):
+    """Run prompts through Claude CLI for testing. No files saved."""
+    import random
+
+    if kind == "skills":
+        data = yaml.safe_load(Path(SKILLS_INPUT).read_text("utf-8"))
+        items = list(data.items())
+        samples = random.sample(items, min(num, len(items)))
+        batches = [samples[i:i + batch_size] for i in range(0, len(samples), batch_size)]
+        for i, batch in enumerate(batches):
+            prompt = build_batch_prompt(batch) if len(batch) > 1 else build_single_prompt(batch[0][1])
+            names = ', '.join(n for n, _ in batch)
+            print(f"\n{'='*60}")
+            print(f"BATCH {i+1}/{len(batches)}: {names}")
+            print(f"{'='*60}")
+            try:
+                raw = _call_claude(prompt, model=model)
+                parsed = parse_llm_output(raw)
+                if parsed is None:
+                    print(f"[PARSE FAIL] Raw:\n{raw[:500]}")
+                    continue
+                # Validate each skill
+                for name, _ in batch:
+                    entry = parsed.get(name)
+                    if not entry:
+                        # Try positional
+                        vals = list(parsed.values())
+                        idx = [n for n, _ in batch].index(name)
+                        entry = vals[idx] if idx < len(vals) else None
+                    if not entry:
+                        print(f"  {name}: MISSING from output")
+                        continue
+                    errors = validate_skill_entry(entry)
+                    quality = validate_frontend_quality(entry) if not errors else []
+                    if errors or quality:
+                        print(f"  {name}: {'|'.join(errors + quality)}")
+                    else:
+                        fe = entry.get("frontend", {})
+                        print(f"  {name} → {fe.get('name', '?')} | {fe.get('type', '?')} | brief: {fe.get('brief_description', '?')}")
+                        print(f"    tags: {fe.get('tags', [])}")
+                        desc = fe.get('description', '')
+                        print(f"    desc: {desc[:80]}{'...' if len(desc) > 80 else ''}")
+            except Exception as e:
+                print(f"  [ERROR] {e}")
+    elif kind == "traits":
+        data = yaml.safe_load(Path(TRAITS_INPUT).read_text("utf-8"))
+        items = list(data.items())
+        samples = random.sample(items, min(num, len(items)))
+        batches = [samples[i:i + batch_size] for i in range(0, len(samples), batch_size)]
+        for i, batch in enumerate(batches):
+            prompt = build_trait_batch_prompt(batch) if len(batch) > 1 else build_trait_single_prompt(batch[0][1])
+            names = ', '.join(n for n, _ in batch)
+            print(f"\n{'='*60}")
+            print(f"BATCH {i+1}/{len(batches)}: {names}")
+            print(f"{'='*60}")
+            try:
+                raw = _call_claude(prompt, model=model)
+                parsed = parse_llm_output(raw)
+                if parsed is None:
+                    print(f"[PARSE FAIL] Raw:\n{raw[:500]}")
+                else:
+                    for name, _ in batch:
+                        entry = parsed.get(name)
+                        if entry:
+                            fe = entry.get("frontend", {})
+                            print(f"  {name} → {fe.get('name', '?')}: {fe.get('description', '?')[:60]}")
+                        else:
+                            print(f"  {name}: MISSING")
+            except Exception as e:
+                print(f"  [ERROR] {e}")
+    elif kind == "heroes":
+        data = yaml.safe_load(Path(HEROES_INPUT).read_text("utf-8"))
+        items = [(h["name"], h.get("faction", ""), h.get("clan", "")) for h in data if h.get("name")]
+        samples = random.sample(items, min(num, len(items)))
+        prompt = build_hero_batch_prompt(samples)
+        print(f"\n{'='*60}")
+        print(f"HEROES ({len(samples)} samples)")
+        print(f"{'='*60}")
+        try:
+            raw = _call_claude(prompt, model=model)
+            parsed = parse_llm_output(raw)
+            if parsed is None:
+                print(f"[PARSE FAIL] Raw:\n{raw[:500]}")
+            else:
+                for name, _, _ in samples:
+                    entry = parsed.get(name)
+                    if entry:
+                        print(f"  {name} → {entry.get('name', '?')} | {entry.get('faction', '?')}")
+                    else:
+                        print(f"  {name}: MISSING")
+        except Exception as e:
+            print(f"  [ERROR] {e}")
+
+    print(f"\n[claude-test] Done. No files were modified.")
+
+
 def main():
     p = argparse.ArgumentParser(description="LLM translate + extract skills, traits, and heroes")
     p.add_argument("--skills", action="store_true", help="Process skills only")
@@ -744,7 +945,14 @@ def main():
     p.add_argument("--force", action="store_true", help="Ignore cache, overwrite output")
     p.add_argument("--model", default=DEFAULT_MODEL, help="Gemini model to use")
     p.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Items per LLM call")
+    p.add_argument("--claude-test", action="store_true", help="Print prompts for Claude Code testing (no LLM call, no file writes)")
+    p.add_argument("--test-num", type=int, default=10, help="Number of random samples for --claude-test")
     args = p.parse_args()
+
+    if args.claude_test:
+        kind = "skills" if args.skills else "traits" if args.traits else "heroes" if args.heroes else "skills"
+        claude_test(kind=kind, num=args.test_num, batch_size=args.batch_size, model=args.model)
+        return
 
     # Default: all if none specified
     none_specified = not args.skills and not args.traits and not args.heroes
