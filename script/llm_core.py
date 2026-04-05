@@ -35,7 +35,7 @@ CANONICAL_STATUSES = (
 )
 
 SKILL_TAGS = (
-    "兵刃傷害 計略傷害 真實傷害 "
+    "兵刃傷害 謀略傷害 真實傷害 "
     "單體傷害 群體傷害 多段傷害 "
     "治療 增益 減益 控制 "
     "提升屬性 降低屬性 "
@@ -47,34 +47,69 @@ SKILL_TAGS = (
 )
 
 COMMON_RULES = """\
-IMPORTANT — Status Effect Names:
-When referencing status effects in {status:name}, you MUST use ONLY these canonical names:
+Translation style: 翻譯時，以三國志戰略版遊戲的技能描述口吻進行，用語簡潔精準，符合策略遊戲玩家的閱讀習慣。
+
+### JP→CHT Kanji Conversions (apply to ALL output fields):
+知略→智略, 撃→擊, 竜→龍, 発→發, 効→效, 覚→覺, 戦→戰, 総→總, 関→關, 豊→豐, 県→縣, 鉄→鐵, 条→條
+
+### Canonical Lists
+
+Status effects — use ONLY these names in {status:name}:
 """ + CANONICAL_STATUSES + """
-Do NOT use synonyms or aliases (e.g., use 挑釁 not 嘲諷, use 威壓 not 震懾, use 混亂 not 恐慌, use 封擊 not 繳械, use 奇謀 not 奇策).
+Do NOT use synonyms (挑釁 not 嘲諷, 威壓 not 震懾, 混亂 not 恐慌, 封擊 not 繳械, 奇謀 not 奇策).
 
-Skill type MUST be exactly one of: 被動, 主動, 指揮, 突擊, 兵種, 陣法
-Do NOT append 戰法 (e.g., use 被動 not 被動戰法).
+Skill type — MUST be exactly one of: 被動, 主動, 指揮, 突擊, 兵種, 陣法 (never append 戰法)
 
-Template syntax rules:
-- In `description`, replace numeric values that scale with level with variable refs: {var:variable_name}
-  - Example: "10%→20%の会心" → "{var:crit_rate}的會心"
-  - Variable names MUST match keys in `vars`
-  - EXCEPTION: Status effect intensity percentages (e.g., "30%麻痺", "90%封擊") describe how often the status actually takes effect once applied. These are distinct from the probability of applying the status.
-    Keep these percentages as plain text if they don't scale with level.
-    Example: "施加30%{status:麻痺}狀態" — the 30% is the status intensity, keep as-is.
-    Only use {var:} if the percentage changes between lv1 and lv10.
-- In `vars`, each variable must specify its unit type:
-  - Percentages/ratios (傷害率, 機率, 會心率, etc.): store as raw decimal (0.1 for 10%), do NOT add `type` (percent is default).
-    Example: damage_rate: {base: 0.58, max: 1.16}
-  - Absolute values (點數, stat points like 武勇+60, 統率-18, etc.): store the actual number AND add `type: flat`.
-    Example: valor_buff: {base: 60, max: 120, type: flat}
-  - Counts/turns/stacks (回合, 次數, 層數, 人數): store as plain integer, do NOT add `type`.
-    Example: duration: 2, max_stacks: 3, target_count: 2
-  - Fixed values (no level scaling): just a number (or number with type: flat if it's stat points).
-- Stat dependency: add `scale: stat_name` in the var (use Chinese: 武勇, 智略, 統率, 速度, 魅力, 政務)
-- In description, use {scale:stat} which renders as "受stat影響". So write "（{scale:智略}）" NOT "（受{scale:智略}影響）"
-- ONLY use {status:name} when explicitly referencing a canonical status effect (麻痺, 混亂, etc.). Do NOT convert verbs like 治療/恢復 into {status:休養}.
-- `activation_rate` must be a string: "35%" or "35%→90%" format. NOT a number.
+Stat names for {scale:}: 武勇, 智略, 統率, 速度, 魅力, 政務
+
+Damage type terminology: 兵刃傷害, 謀略傷害, 真實傷害 (NEVER use 計略傷害, always use 謀略傷害)
+
+### Template Syntax
+
+#### Naming
+- Each skill's CHT `name` MUST be unique — never translate two different skills to the same name.
+- If the JP name is already valid CHT (e.g., 火計), keep it as-is.
+
+#### {var:name} — Numeric variables
+- Decision rule: create a {var:} ONLY if the JP source shows the value changing across levels (→ notation, two values). Single fixed values = plain number.
+- Variable names: snake_case, English only. E.g., damage_rate, ally_count, stat_debuff.
+- NEVER put modifiers inside braces: write {var:name}% NOT {var:name:%}
+- vars format:
+  - Scaling values (differ lv1↔lv10): MUST have BOTH `base` AND `max`.
+    - Ratios: raw decimal, no `type`. E.g., damage_rate: {base: 0.58, max: 1.16}
+    - Stat points: actual number + `type: flat`. E.g., valor_buff: {base: 60, max: 120, type: flat}
+  - Fixed values (same at all levels): plain number, NO base/max. E.g., duration: 2
+
+#### {scale:stat} — Damage/effect scaling indicator
+- Frontend renders this as "受stat影響" — NEVER write 受{scale:X}影響 (doubles the wrapper)
+- Use ONLY when JP source indicates dependency (影響, 依存). Always wrap in parentheses: （{scale:智略}）
+- NEVER use for direct stat references: "統率降低" is plain text, NOT {scale:統率}降低
+
+#### {status:name} — Status effect references
+- ONLY for canonical status effects listed above.
+- 治療/恢復 are verbs, NOT {status:休養}
+
+#### Plain-text numbers (do NOT varify)
+- Status intensity: "30%麻痺" → "30%{status:麻痺}" (the 30% stays as plain text)
+- Fixed thresholds: "兵力50%以下" → plain text
+- Fixed target counts with no scaling: "敵軍2体" → "敵軍2人" (plain text)
+
+#### activation_rate
+- Must be a string: "35%" or "35%→90%". NOT a number.
+
+### COMMON MISTAKES — DO NOT DO THESE:
+| Wrong | Right | Why |
+| {var:name:%} | {var:name}% | Modifier outside braces |
+| {var:rate}% (ratio var) | {var:rate} (no %) | Ratio vars auto-render as %. Adding % doubles it |
+| 受{scale:智略}影響 | （{scale:智略}） | Frontend adds 受...影響 |
+| {scale:統率}降低6% | 統率降低{var:penalty} | {scale:} is for scaling only |
+| {status:休養} for 治療 | 治療 (plain text) | 休養 is a status, not a verb |
+| {base: 0.52, max: 0.52} | 0.52 | Same value = fixed |
+| {base: 1.34} (no max) | {base: 0.67, max: 1.34} | Scaling vars need both |
+| activation_rate: 0.35 | activation_rate: "35%" | Must be string with % |
+| type: 被動戰法 | type: 被動 | Never append 戰法 |
+| 知略 | 智略 | JP kanji → CHT |
+| 計略傷害 | 謀略傷害 | Correct damage type term |
 
 Output ONLY valid YAML. No markdown fences. No explanation."""
 
@@ -146,6 +181,52 @@ def parse_llm_output(raw: str) -> dict | None:
             return result if result else None
         except yaml.YAMLError:
             return None
+
+
+# ---------------------------------------------------------------------------
+# Auto-fix known LLM output issues
+# ---------------------------------------------------------------------------
+
+def autofix_frontend(fe: dict) -> list[str]:
+    """Auto-fix known LLM issues in a frontend dict. Returns list of fixes applied."""
+    fixes = []
+    vars_dict = fe.get("vars", {})
+
+    # Fix 1: {var:name}% where var is ratio → remove trailing %
+    for field in ("description", "commander_description"):
+        text = fe.get(field, "")
+        if not text:
+            continue
+        for vk, vv in vars_dict.items():
+            if isinstance(vv, dict) and "base" in vv and vv.get("type") != "flat":
+                pattern = rf"\{{var:{vk}\}}%"
+                if re.search(pattern, text):
+                    fe[field] = re.sub(pattern, f"{{var:{vk}}}", text)
+                    text = fe[field]
+                    fixes.append(f"removed trailing % after {{var:{vk}}}")
+
+    # Fix 2: {var:name:%} → {var:name}%
+    for field in ("description", "commander_description"):
+        text = fe.get(field, "")
+        if text and ":%}" in text:
+            fe[field] = re.sub(r"\{var:(\w+):%\}", r"{var:\1}%", text)
+            fixes.append("fixed {var:name:%} → {var:name}%")
+
+    # Fix 3: base == max → plain number
+    for vk, vv in list(vars_dict.items()):
+        if isinstance(vv, dict) and "base" in vv and "max" in vv and vv["base"] == vv["max"]:
+            val = vv["base"]
+            vars_dict[vk] = val
+            fixes.append(f"vars.{vk} base==max → {val}")
+
+    # Fix 4: 受{scale:X}影響 → {scale:X}
+    for field in ("description", "commander_description"):
+        text = fe.get(field, "")
+        if text and "受{scale:" in text:
+            fe[field] = re.sub(r"受\{scale:([^}]+)\}影響", r"{scale:\1}", text)
+            fixes.append("fixed 受{scale:X}影響 → {scale:X}")
+
+    return fixes
 
 
 # ---------------------------------------------------------------------------
