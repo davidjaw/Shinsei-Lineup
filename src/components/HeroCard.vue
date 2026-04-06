@@ -57,10 +57,6 @@ const props = defineProps({
     type: Object as PropType<Hero>,
     required: true
   },
-  showAptitude: {
-    type: Boolean,
-    default: true
-  },
   variant: {
     type: String as PropType<'lineup' | 'library'>,
     default: 'library' // Default to library to be safe for lists

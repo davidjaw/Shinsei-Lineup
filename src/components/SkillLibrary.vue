@@ -127,13 +127,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, PropType, watch, onMounted } from 'vue'
+import { ref, computed, PropType, watch } from 'vue'
 import { useData } from '../composables/useData'
 import { TRANSPARENT_GIF, formatRate as _formatRate } from '../constants/gameData'
 import SkillDescription from './SkillDescription.vue'
 import BriefDescription from './BriefDescription.vue'
-
-console.log('SkillLibrary.vue - script loading...')
 
 const props = defineProps({
   mode: { type: String as PropType<'browse' | 'select' | 'manage'>, default: 'browse' }, // 'browse' | 'select' | 'manage'
@@ -145,17 +143,6 @@ const props = defineProps({
 const emit = defineEmits(['select', 'update:ownedSkills', 'update:filterOwned', 'skill-drag-start', 'skill-drag-end'])
 
 const { skills, loading } = useData()
-console.log('🔍 SkillLibrary - after useData(). skills.value:', skills.value?.length || 'undefined/null')
-
-const skillsInitialized = computed(() => {
-  const initialized = skills.value && Array.isArray(skills.value) && skills.value.length > 0
-  console.log('🔍 skillsInitialized computed:', initialized, 'skills.value:', skills.value?.length)
-  return initialized
-})
-
-onMounted(() => {
-  console.log('🔍 SkillLibrary mounted. skills.value:', skills.value?.length)
-})
 
 const searchQuery = ref('')
 const debouncedSearchQuery = ref('')
@@ -170,31 +157,9 @@ watch(searchQuery, (newVal) => {
 
 const filterType = ref('')
 const filterRarity = ref('')
-const expandedSkill = ref<string | null>(null)
-const longPressTimer = ref<any>(null)
 const skillLibraryMaxLevel = ref(true)
-const LONG_PRESS_DURATION = 500 // ms
 
 const formatRate = (rateStr: string | undefined) => _formatRate(rateStr, skillLibraryMaxLevel.value)
-
-console.log('🔍 Creating refs - expandedSkill:', expandedSkill, 'longPressTimer:', longPressTimer)
-
-const startLongPress = (skillName: string) => {
-  console.log('🔍 startLongPress called with:', skillName)
-  if (longPressTimer.value) clearTimeout(longPressTimer.value)
-  longPressTimer.value = setTimeout(() => {
-    console.log('🔍 Setting expandedSkill to:', skillName)
-    expandedSkill.value = skillName
-  }, LONG_PRESS_DURATION)
-}
-
-const cancelLongPress = () => {
-  console.log('🔍 cancelLongPress called')
-  if (longPressTimer.value) {
-    clearTimeout(longPressTimer.value)
-    longPressTimer.value = null
-  }
-}
 
 const handleDragStart = (event: DragEvent, skill: any) => {
   if (event.dataTransfer) {
@@ -283,30 +248,7 @@ const handleSelect = (skill: any) => {
   // Cannot select if already used or is fixed skill
   if (!isSelectable(skill)) return
 
-  // Don't select if detail panel is expanded
-  if (expandedSkill.value && expandedSkill.value === skill.name) return
-
   emit('select', skill)
 }
 </script>
 
-<style scoped>
-.expand-enter-active, .expand-leave-active {
-  transition: all 200ms ease;
-}
-
-.expand-enter-from {
-  opacity: 0;
-  max-height: 0;
-}
-
-.expand-enter-to {
-  opacity: 1;
-  max-height: 500px;
-}
-
-.expand-leave-to {
-  opacity: 0;
-  max-height: 0;
-}
-</style>

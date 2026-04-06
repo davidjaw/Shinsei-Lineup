@@ -122,7 +122,7 @@
     </div>
     
     <!-- Equip Traits List (Add-on) -->
-    <div v-if="hero" class="mb-1 md:mb-2 px-1 md:px-2 md:order-4 md:grid md:grid-cols-2 md:gap-2 md:items-start">
+    <div v-if="hero" class="hidden md:grid mb-1 md:mb-2 px-1 md:px-2 md:order-4 md:grid-cols-2 md:gap-2 md:items-start">
        <span class="text-[10px] font-bold text-gray-500 ml-1 mb-1 md:col-span-2 md:mb-0.5">裝備特性:</span>
        <div class="grid grid-cols-4 md:grid-cols-4 gap-0.5 md:gap-1 md:col-span-2">
           <div
@@ -156,12 +156,12 @@
               <!-- Name + Tags on same line -->
               <div class="flex items-center gap-1 mb-0.5">
                 <div class="text-[9px] md:text-sm text-gray-600 truncate">{{ hero?.unique_skill || '---' }}</div>
-                <div v-if="uniqueSkillData?.tags?.length" class="flex gap-0.5">
+                <div v-if="uniqueSkillData?.tags?.length" class="hidden md:flex gap-0.5">
                   <span v-for="tag in uniqueSkillData.tags.slice(0, 2)" :key="tag" class="text-[7px] md:text-[8px] bg-blue-50 text-blue-600 px-0.5 rounded border border-blue-100 flex-shrink-0">{{ tag }}</span>
                 </div>
               </div>
               <!-- Brief Description in larger font -->
-              <BriefDescription v-if="uniqueSkillData?.brief_description" :text="uniqueSkillData.brief_description" class="text-[9px] md:text-sm italic" />
+              <BriefDescription v-if="uniqueSkillData?.brief_description" :text="uniqueSkillData.brief_description" class="text-[7px] md:text-sm italic" />
             </div>
           </div>
         </template>
@@ -234,12 +234,12 @@
               <div class="flex items-center gap-1 mb-0.5">
                 <div v-if="skill1" class="text-[9px] md:text-sm font-bold text-gray-800 truncate">{{ skill1.name }}</div>
                 <div v-else class="text-[9px] md:text-sm text-gray-400">習得</div>
-                <div v-if="skill1?.tags?.length" class="flex gap-0.5">
+                <div v-if="skill1?.tags?.length" class="hidden md:flex gap-0.5">
                   <span v-for="tag in skill1.tags.slice(0, 2)" :key="tag" class="text-[7px] md:text-[8px] bg-blue-50 text-blue-600 px-0.5 rounded border border-blue-100 flex-shrink-0">{{ tag }}</span>
                 </div>
               </div>
               <!-- Brief Description in larger font -->
-              <BriefDescription v-if="skill1?.brief_description" :text="skill1.brief_description" class="text-[9px] md:text-sm italic" />
+              <BriefDescription v-if="skill1?.brief_description" :text="skill1.brief_description" class="text-[7px] md:text-sm italic" />
             </div>
             <el-button v-if="skill1" link type="danger" size="small" class="!p-0 !h-auto" @click.stop="$emit('update:skill1', null)">
                 <el-icon :size="10"><Close /></el-icon>
@@ -312,12 +312,12 @@
               <div class="flex items-center gap-1 mb-0.5">
                 <div v-if="skill2" class="text-[9px] md:text-sm font-bold text-gray-800 truncate">{{ skill2.name }}</div>
                 <div v-else class="text-[9px] md:text-sm text-gray-400">習得</div>
-                <div v-if="skill2?.tags?.length" class="flex gap-0.5">
+                <div v-if="skill2?.tags?.length" class="hidden md:flex gap-0.5">
                   <span v-for="tag in skill2.tags.slice(0, 2)" :key="tag" class="text-[7px] md:text-[8px] bg-blue-50 text-blue-600 px-0.5 rounded border border-blue-100 flex-shrink-0">{{ tag }}</span>
                 </div>
               </div>
               <!-- Brief Description in larger font -->
-              <BriefDescription v-if="skill2?.brief_description" :text="skill2.brief_description" class="text-[9px] md:text-sm italic" />
+              <BriefDescription v-if="skill2?.brief_description" :text="skill2.brief_description" class="text-[7px] md:text-sm italic" />
             </div>
              <el-button v-if="skill2" link type="danger" size="small" class="!p-0 !h-auto" @click.stop="$emit('update:skill2', null)">
                 <el-icon :size="10"><Close /></el-icon>
@@ -363,7 +363,7 @@
             <div class="w-8 text-xs font-bold text-gray-600">{{ label }}</div>
             <div class="text-xs text-gray-400 w-8 text-right">{{ heroBaseStats[key] }}</div>
             <button class="px-1.5 py-0.5 text-xs rounded border hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-              :disabled="localBonus[key] <= -10"
+              :disabled="localBonus[key] <= 0"
               @click="adjustBonus(key, -10)">-10</button>
             <button class="px-1.5 py-0.5 text-xs rounded border hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
               :disabled="localBonus[key] <= 0"
@@ -416,7 +416,7 @@
 
 <script setup lang="ts">
 import { PropType, ref, watch, computed } from 'vue'
-import { Plus, Close, Edit, Setting, InfoFilled, Sort } from '@element-plus/icons-vue'
+import { Plus, Close, Edit, InfoFilled, Sort } from '@element-plus/icons-vue'
 import HeroCard from './HeroCard.vue'
 import RadarChart from './RadarChart.vue'
 import SkillDescription from './SkillDescription.vue'
@@ -424,7 +424,7 @@ import BriefDescription from './BriefDescription.vue'
 import { Hero, Skill, Trait, useData } from '../composables/useData'
 import { useTemplateParser } from '../composables/useTemplateParser'
 
-import { MOCK_EQUIP_TRAITS, TRANSPARENT_GIF, formatRate as _formatRate } from '../constants/gameData'
+import { MOCK_EQUIP_TRAITS, TRANSPARENT_GIF, formatRate as _formatRate, getTraitColor } from '../constants/gameData'
 
 const props = defineProps({
   title: String,
@@ -617,15 +617,6 @@ const toggleTrait = (index: number) => {
   const trait = localTraits.value[index]
   if (trait) {
     trait.active = !trait.active
-  }
-}
-
-const getTraitColor = (rank: string) => {
-  switch (rank) {
-    case 'S': return 'bg-yellow-50 border-yellow-300 text-yellow-700 font-bold'
-    case 'A': return 'bg-purple-50 border-purple-300 text-purple-700 font-bold'
-    case 'B': return 'bg-blue-50 border-blue-300 text-blue-700'
-    default: return 'bg-gray-50 border-gray-200 text-gray-500' // C / White
   }
 }
 

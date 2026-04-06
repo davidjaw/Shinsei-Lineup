@@ -459,7 +459,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Flag, Share, Delete, Edit, Close, Check, Menu } from '@element-plus/icons-vue'
 import LineupSlot from './components/LineupSlot.vue'
