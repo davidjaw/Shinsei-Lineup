@@ -83,6 +83,14 @@ const totalCost = computed(() => {
 })
 
 // Actions
+const swapRoles = (roleA: 'main' | 'vice1' | 'vice2', roleB: 'main' | 'vice1' | 'vice2') => {
+  if (roleA === roleB) return
+  const l = currentLineup.value
+  const temp = { ...l[roleA], stats: { ...l[roleA].stats }, equipTraits: [...l[roleA].equipTraits] }
+  l[roleA] = { ...l[roleB], stats: { ...l[roleB].stats }, equipTraits: [...l[roleB].equipTraits] }
+  l[roleB] = temp
+}
+
 const clearLineup = (type: 'all' | 'current') => {
   if (type === 'current') {
     currentLineup.value.main = emptyRole()
@@ -108,6 +116,7 @@ export function useLineups() {
     allUsedSkillNames,
     totalCost,
     emptyRole,
-    clearLineup
+    clearLineup,
+    swapRoles
   }
 }

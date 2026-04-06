@@ -4,6 +4,14 @@
     <div class="flex items-center justify-between border-b border-gray-100 pb-0.5 md:pb-2 px-1 md:px-0">
       <span class="font-bold text-gray-700 text-[10px] md:text-base">{{ title }}</span>
       <div class="flex items-center">
+        <!-- Swap Button (Mobile Only) -->
+        <el-button v-if="hero" link size="small"
+          class="md:hidden !p-0 !h-auto mr-1"
+          :class="isSwapSource ? 'text-indigo-500' : 'text-gray-400'"
+          @click.stop="$emit('swap-click')"
+        >
+          <el-icon><Sort /></el-icon>
+        </el-button>
         <!-- Info Button (Mobile Only) -->
         <el-button v-if="hero" link size="small" class="md:hidden !p-0 !h-auto mr-1" @click.stop="$emit('open-detail')">
            <el-icon class="text-indigo-400"><InfoFilled /></el-icon>
@@ -16,9 +24,25 @@
 
     <!-- Hero Slot -->
     <div
-      class="rounded border border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-indigo-300 transition-colors relative overflow-hidden group w-full aspect-[3/4] md:order-1"
+      class="rounded border-2 border-dashed flex items-center justify-center cursor-pointer transition-all relative overflow-hidden group w-full aspect-[3/4] md:order-1"
+      :class="isDragTarget
+        ? 'border-indigo-400 bg-indigo-50 scale-[1.02] shadow-md shadow-indigo-200'
+        : isSwapSource
+          ? 'border-indigo-500 ring-2 ring-indigo-500 border-gray-200'
+          : swapModeActive
+            ? 'border-indigo-300 ring-2 ring-indigo-200'
+            : 'border-gray-200 hover:border-indigo-300'"
+      :draggable="!!hero"
       @click="$emit('open-hero-select')"
+      @dragstart="handleHeroDragStart"
+      @dragend="$emit('hero-drag-end')"
+      @dragover.prevent
+      @drop.prevent="handleHeroDropEvent"
     >
+      <div v-if="isDragTarget" class="absolute inset-0 flex flex-col items-center justify-center z-10 bg-indigo-50/60 pointer-events-none">
+        <el-icon class="text-indigo-400 text-xl md:text-3xl"><Sort /></el-icon>
+        <span class="text-indigo-500 text-[8px] md:text-xs mt-1 font-medium">放置交換</span>
+      </div>
       <HeroCard v-if="hero" :hero="hero" class="w-full h-full border-none shadow-none pointer-events-none" />
       <div v-else class="text-gray-400 flex flex-col items-center py-2 md:py-10">
         <el-icon :size="16" class="md:text-3xl"><Plus /></el-icon>
@@ -176,15 +200,29 @@
         :title="skill1?.name"
         :width="240"
         trigger="hover"
-        :disabled="!skill1"
+        :disabled="!skill1 || skillDragging"
       >
         <template #reference>
-          <div 
-            class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border border-gray-200 hover:border-indigo-400 cursor-pointer transition-colors"
-            :class="{'ring-1 md:ring-2 ring-indigo-500 bg-indigo-50 border-indigo-500': focusedSkillSlot === 1}"
+          <div
+            class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border cursor-pointer transition-all"
+            :class="[
+              draggingSlot === 1 ? 'opacity-0' : '',
+              focusedSkillSlot === 1
+                ? 'ring-1 md:ring-2 ring-indigo-500 bg-indigo-50 border-indigo-500'
+                : dragOverSlot === 1
+                  ? 'border-indigo-500 bg-indigo-100 ring-2 ring-indigo-400 scale-[1.02]'
+                  : skillDragging
+                    ? 'border-dashed border-indigo-300 bg-indigo-50'
+                    : 'border-gray-200 hover:border-indigo-400'
+            ]"
+            :draggable="!!skill1"
             @click="$emit('open-skill-select', 1)"
+            @dragstart="(e) => handleSkillDragStart(e, 1)"
+            @dragend="draggingSlot = null; emit('skill-drag-end')"
             @dragover.prevent
-            @drop="(e) => handleDrop(e, 1)"
+            @dragenter="dragOverSlot = 1"
+            @dragleave="(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragOverSlot = null }"
+            @drop="(e) => { dragOverSlot = null; handleDrop(e, 1) }"
           >
             <img v-if="skill1" :src="skill1.icon" class="w-5 h-5 md:w-8 md:h-8 rounded bg-gray-200 object-cover flex-shrink-0" />
             <div v-else class="w-5 h-5 md:w-8 md:h-8 bg-gray-100 rounded flex items-center justify-center text-gray-400 flex-shrink-0">
@@ -240,15 +278,29 @@
         :title="skill2?.name"
         :width="240"
         trigger="hover"
-        :disabled="!skill2"
+        :disabled="!skill2 || skillDragging"
       >
         <template #reference>
-          <div 
-            class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border border-gray-200 hover:border-indigo-400 cursor-pointer transition-colors"
-             :class="{'ring-1 md:ring-2 ring-indigo-500 bg-indigo-50 border-indigo-500': focusedSkillSlot === 2}"
+          <div
+            class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border cursor-pointer transition-all"
+            :class="[
+              draggingSlot === 2 ? 'opacity-0' : '',
+              focusedSkillSlot === 2
+                ? 'ring-1 md:ring-2 ring-indigo-500 bg-indigo-50 border-indigo-500'
+                : dragOverSlot === 2
+                  ? 'border-indigo-500 bg-indigo-100 ring-2 ring-indigo-400 scale-[1.02]'
+                  : skillDragging
+                    ? 'border-dashed border-indigo-300 bg-indigo-50'
+                    : 'border-gray-200 hover:border-indigo-400'
+            ]"
+            :draggable="!!skill2"
             @click="$emit('open-skill-select', 2)"
+            @dragstart="(e) => handleSkillDragStart(e, 2)"
+            @dragend="draggingSlot = null; emit('skill-drag-end')"
             @dragover.prevent
-            @drop="(e) => handleDrop(e, 2)"
+            @dragenter="dragOverSlot = 2"
+            @dragleave="(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragOverSlot = null }"
+            @drop="(e) => { dragOverSlot = null; handleDrop(e, 2) }"
           >
             <img v-if="skill2" :src="skill2.icon" class="w-5 h-5 md:w-8 md:h-8 rounded bg-gray-200 object-cover flex-shrink-0" />
             <div v-else class="w-5 h-5 md:w-8 md:h-8 bg-gray-100 rounded flex items-center justify-center text-gray-400 flex-shrink-0">
@@ -364,7 +416,7 @@
 
 <script setup lang="ts">
 import { PropType, ref, watch, computed } from 'vue'
-import { Plus, Close, Edit, Setting, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Close, Edit, Setting, InfoFilled, Sort } from '@element-plus/icons-vue'
 import HeroCard from './HeroCard.vue'
 import RadarChart from './RadarChart.vue'
 import SkillDescription from './SkillDescription.vue'
@@ -372,7 +424,7 @@ import BriefDescription from './BriefDescription.vue'
 import { Hero, Skill, Trait, useData } from '../composables/useData'
 import { useTemplateParser } from '../composables/useTemplateParser'
 
-import { MOCK_EQUIP_TRAITS } from '../constants/gameData'
+import { MOCK_EQUIP_TRAITS, TRANSPARENT_GIF, formatRate as _formatRate } from '../constants/gameData'
 
 const props = defineProps({
   title: String,
@@ -382,7 +434,11 @@ const props = defineProps({
   skill2: Object as PropType<Skill | null>,
   stats: Object as PropType<any>,
   equipTraits: Array as PropType<Trait[]>,
-  focusedSkillSlot: Number as PropType<number | null>
+  focusedSkillSlot: Number as PropType<number | null>,
+  isSwapSource: { type: Boolean, default: false },
+  swapModeActive: { type: Boolean, default: false },
+  isDragTarget: { type: Boolean, default: false },
+  skillDragging: { type: Boolean, default: false }
 })
 
 const { skills } = useData()
@@ -394,16 +450,10 @@ const resolveTraitDesc = (trait: any) => {
 }
 
 const isMaxLevel = ref(true)
+const dragOverSlot = ref<number | null>(null)
+const draggingSlot = ref<number | null>(null)
 
-const formatRate = (rateStr: string | undefined) => {
-  if (!rateStr) return ''
-  const RANGE_REGEX = /(\d+(?:\.\d+)?%?)\s*(?:->|to|→)\s*(\d+(?:\.\d+)?%?)/
-  const match = rateStr.match(RANGE_REGEX)
-  if (match) {
-    return isMaxLevel.value ? match[2] : match[1]
-  }
-  return rateStr
-}
+const formatRate = (rateStr: string | undefined) => _formatRate(rateStr, isMaxLevel.value)
 
 const uniqueSkillData = computed(() => {
   if (!props.hero?.unique_skill) return null
@@ -420,7 +470,14 @@ const emit = defineEmits([
   'open-hero-select',
   'open-skill-select',
   'skill-drop',
-  'open-detail'
+  'open-detail',
+  'swap-click',
+  'hero-drag-start',
+  'hero-drag-end',
+  'hero-drop',
+  'skill-drag-start',
+  'skill-drag-end',
+  'skill-slot-drop'
 ])
 
 const removeHero = () => {
@@ -429,6 +486,19 @@ const removeHero = () => {
   emit('update:skill2', null)
   emit('update:equipTraits', [])
   // Reset stats to default not handled here explicitly but usually desired
+}
+
+const handleHeroDragStart = (event: DragEvent) => {
+  if (!props.hero) return
+  event.dataTransfer?.setData('application/hero-role', props.role as string)
+  event.dataTransfer!.effectAllowed = 'move'
+  emit('hero-drag-start')
+}
+
+const handleHeroDropEvent = (event: DragEvent) => {
+  if (event.dataTransfer?.types.includes('application/hero-role')) {
+    emit('hero-drop')
+  }
 }
 
 // Stats Editing
@@ -579,13 +649,29 @@ const selectEquipTrait = (trait: Trait | null) => {
   equipTraitDialogVisible.value = false
 }
 
-const handleDrop = (event: DragEvent, slotIdx: number) => {
+const handleSkillDragStart = (event: DragEvent, slotIdx: number) => {
+  const skill = slotIdx === 1 ? props.skill1 : props.skill2
+  event.dataTransfer?.setData('application/skill-slot', JSON.stringify({ role: props.role, slotIdx }))
+  event.dataTransfer!.effectAllowed = 'move'
+  const ghost = new Image()
+  ghost.src = TRANSPARENT_GIF
+  event.dataTransfer?.setDragImage(ghost, 0, 0)
+  draggingSlot.value = slotIdx
+  emit('skill-drag-start', skill)
+}
+
+const handleDrop = (event: DragEvent, targetSlotIdx: number) => {
   event.preventDefault()
+  if (event.dataTransfer?.types.includes('application/skill-slot')) {
+    const src = JSON.parse(event.dataTransfer.getData('application/skill-slot'))
+    emit('skill-slot-drop', src.role, src.slotIdx, targetSlotIdx)
+    return
+  }
   const skillData = event.dataTransfer?.getData('application/json')
   if (skillData) {
     try {
       const skill = JSON.parse(skillData)
-      emit('skill-drop', slotIdx, skill)
+      emit('skill-drop', targetSlotIdx, skill)
     } catch (e) {
       console.error('Invalid skill drop data')
     }

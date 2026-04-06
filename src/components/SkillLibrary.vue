@@ -69,6 +69,7 @@
               }"
               :draggable="isSelectable(skill)"
               @dragstart="(e) => handleDragStart(e, skill)"
+              @dragend="emit('skill-drag-end')"
               @click="handleSelect(skill)"
             >
               <img :src="skill.icon" class="w-10 h-10 rounded-lg bg-gray-200 object-cover flex-shrink-0" :class="{ 'grayscale': isUsed(skill) || isFixed(skill) }" />
@@ -128,6 +129,7 @@
 <script setup lang="ts">
 import { ref, computed, PropType, watch, onMounted } from 'vue'
 import { useData } from '../composables/useData'
+import { TRANSPARENT_GIF, formatRate as _formatRate } from '../constants/gameData'
 import SkillDescription from './SkillDescription.vue'
 import BriefDescription from './BriefDescription.vue'
 
@@ -140,7 +142,7 @@ const props = defineProps({
   filterOwned: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['select', 'update:ownedSkills', 'update:filterOwned'])
+const emit = defineEmits(['select', 'update:ownedSkills', 'update:filterOwned', 'skill-drag-start', 'skill-drag-end'])
 
 const { skills, loading } = useData()
 console.log('🔍 SkillLibrary - after useData(). skills.value:', skills.value?.length || 'undefined/null')
@@ -173,15 +175,7 @@ const longPressTimer = ref<any>(null)
 const skillLibraryMaxLevel = ref(true)
 const LONG_PRESS_DURATION = 500 // ms
 
-const formatRate = (rateStr: string | undefined) => {
-  if (!rateStr) return ''
-  const RANGE_REGEX = /(\d+(?:\.\d+)?%?)\s*(?:->|to|→)\s*(\d+(?:\.\d+)?%?)/
-  const match = rateStr.match(RANGE_REGEX)
-  if (match) {
-    return skillLibraryMaxLevel.value ? match[2] : match[1]
-  }
-  return rateStr
-}
+const formatRate = (rateStr: string | undefined) => _formatRate(rateStr, skillLibraryMaxLevel.value)
 
 console.log('🔍 Creating refs - expandedSkill:', expandedSkill, 'longPressTimer:', longPressTimer)
 
@@ -206,7 +200,11 @@ const handleDragStart = (event: DragEvent, skill: any) => {
   if (event.dataTransfer) {
     event.dataTransfer.setData('application/json', JSON.stringify(skill))
     event.dataTransfer.effectAllowed = 'copy'
+    const ghost = new Image()
+    ghost.src = TRANSPARENT_GIF
+    event.dataTransfer.setDragImage(ghost, 0, 0)
   }
+  emit('skill-drag-start', skill)
 }
 
 const filteredSkills = computed(() => {

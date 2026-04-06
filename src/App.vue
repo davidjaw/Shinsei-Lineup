@@ -141,8 +141,8 @@
                      <!-- Mobile: Compact Grid | Desktop: Grid -->
                      <div class="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 gap-0.5 md:gap-4 pb-0 md:pb-0 h-auto">
                         <div class="w-full md:min-w-0 md:h-full">
-                          <LineupSlot 
-                            title="大將" 
+                          <LineupSlot
+                            title="大將"
                             role="main"
                             v-model:hero="currentLineup.main.hero"
                             v-model:skill1="currentLineup.main.skill1"
@@ -150,15 +150,26 @@
                             v-model:stats="currentLineup.main.stats"
                             v-model:equipTraits="currentLineup.main.equipTraits"
                             :focused-skill-slot="currentSelectingSkillRole === 'main' ? currentSelectingSkillSlot : null"
+                            :is-swap-source="swapModeRole === 'main'"
+                            :swap-mode-active="swapModeRole !== null"
+                            :is-drag-target="dragSourceRole !== null && dragSourceRole !== 'main'"
+                            :skill-dragging="isSkillDragging"
                             @open-hero-select="openHeroSelect('main')"
                             @open-skill-select="(slotIdx) => handleSkillSlotClick('main', slotIdx)"
                             @skill-drop="(slotIdx, skill) => handleSkillDrop('main', slotIdx, skill)"
+                            @skill-drag-start="handleSkillDragStarted"
+                            @skill-drag-end="handleSkillDragEnded"
+                            @skill-slot-drop="(srcRole, srcSlot, tgtSlot) => handleSkillSlotDrop('main', srcRole, srcSlot, tgtSlot)"
                             @open-detail="openMobileDetail('main')"
+                            @swap-click="handleSwapAction('main')"
+                            @hero-drag-start="() => dragSourceRole = 'main'"
+                            @hero-drag-end="() => dragSourceRole = null"
+                            @hero-drop="() => handleHeroDrop('main')"
                           />
                         </div>
                         <div class="w-full md:min-w-0 md:h-full">
-                          <LineupSlot 
-                            title="副將" 
+                          <LineupSlot
+                            title="副將"
                             role="vice1"
                             v-model:hero="currentLineup.vice1.hero"
                             v-model:skill1="currentLineup.vice1.skill1"
@@ -166,15 +177,26 @@
                             v-model:stats="currentLineup.vice1.stats"
                             v-model:equipTraits="currentLineup.vice1.equipTraits"
                             :focused-skill-slot="currentSelectingSkillRole === 'vice1' ? currentSelectingSkillSlot : null"
+                            :is-swap-source="swapModeRole === 'vice1'"
+                            :swap-mode-active="swapModeRole !== null"
+                            :is-drag-target="dragSourceRole !== null && dragSourceRole !== 'vice1'"
+                            :skill-dragging="isSkillDragging"
                             @open-hero-select="openHeroSelect('vice1')"
                             @open-skill-select="(slotIdx) => handleSkillSlotClick('vice1', slotIdx)"
                             @skill-drop="(slotIdx, skill) => handleSkillDrop('vice1', slotIdx, skill)"
+                            @skill-drag-start="handleSkillDragStarted"
+                            @skill-drag-end="handleSkillDragEnded"
+                            @skill-slot-drop="(srcRole, srcSlot, tgtSlot) => handleSkillSlotDrop('vice1', srcRole, srcSlot, tgtSlot)"
                             @open-detail="openMobileDetail('vice1')"
+                            @swap-click="handleSwapAction('vice1')"
+                            @hero-drag-start="() => dragSourceRole = 'vice1'"
+                            @hero-drag-end="() => dragSourceRole = null"
+                            @hero-drop="() => handleHeroDrop('vice1')"
                           />
                         </div>
                         <div class="w-full md:min-w-0 md:h-full">
-                          <LineupSlot 
-                            title="副將" 
+                          <LineupSlot
+                            title="副將"
                             role="vice2"
                             v-model:hero="currentLineup.vice2.hero"
                             v-model:skill1="currentLineup.vice2.skill1"
@@ -182,10 +204,21 @@
                             v-model:stats="currentLineup.vice2.stats"
                             v-model:equipTraits="currentLineup.vice2.equipTraits"
                             :focused-skill-slot="currentSelectingSkillRole === 'vice2' ? currentSelectingSkillSlot : null"
+                            :is-swap-source="swapModeRole === 'vice2'"
+                            :swap-mode-active="swapModeRole !== null"
+                            :is-drag-target="dragSourceRole !== null && dragSourceRole !== 'vice2'"
+                            :skill-dragging="isSkillDragging"
                             @open-hero-select="openHeroSelect('vice2')"
                             @open-skill-select="(slotIdx) => handleSkillSlotClick('vice2', slotIdx)"
                             @skill-drop="(slotIdx, skill) => handleSkillDrop('vice2', slotIdx, skill)"
+                            @skill-drag-start="handleSkillDragStarted"
+                            @skill-drag-end="handleSkillDragEnded"
+                            @skill-slot-drop="(srcRole, srcSlot, tgtSlot) => handleSkillSlotDrop('vice2', srcRole, srcSlot, tgtSlot)"
                             @open-detail="openMobileDetail('vice2')"
+                            @swap-click="handleSwapAction('vice2')"
+                            @hero-drag-start="() => dragSourceRole = 'vice2'"
+                            @hero-drag-end="() => dragSourceRole = null"
+                            @hero-drop="() => handleHeroDrop('vice2')"
                           />
                         </div>
                      </div>
@@ -206,13 +239,15 @@
                                    />
                                 </el-tab-pane>
                                 <el-tab-pane label="戰法庫" name="skills" class="h-full flex flex-col overflow-hidden">
-                                   <SkillLibrary 
-                                     mode="select" 
-                                     :used-skills="allUsedSkillNames" 
+                                   <SkillLibrary
+                                     mode="select"
+                                     :used-skills="allUsedSkillNames"
                                      :owned-skills="ownedSkills"
                                      :filter-owned="showOwnedOnly"
                                      @update:filterOwned="val => showOwnedOnly = val"
                                      @select="selectSkillFromDialog"
+                                     @skill-drag-start="handleSkillDragStarted"
+                                     @skill-drag-end="handleSkillDragEnded"
                                    /> 
                                 </el-tab-pane>          
                      </el-tabs>
@@ -393,6 +428,34 @@
     </el-footer>
 
   </el-container>
+
+  <!-- Skill drag preview -->
+  <Teleport to="body">
+    <div v-if="draggingSkill"
+      class="fixed z-[9999] pointer-events-none select-none"
+      :style="{ left: dragPos.x + 16 + 'px', top: dragPos.y - 8 + 'px' }"
+    >
+      <div class="bg-white rounded-xl shadow-2xl border-2 border-indigo-400 p-3 w-64 max-h-72 overflow-hidden">
+        <div class="flex items-center gap-2 mb-2">
+          <img :src="draggingSkill.icon" class="w-10 h-10 rounded-lg bg-gray-100 object-cover flex-shrink-0" />
+          <div class="min-w-0">
+            <div class="font-bold text-sm text-gray-800 truncate">{{ draggingSkill.name }}</div>
+            <div class="flex items-center gap-1 mt-0.5">
+              <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ draggingSkill.type }}</span>
+              <span v-if="draggingSkill.rarity === 'S'" class="text-xs font-bold text-yellow-600">S</span>
+              <span v-if="draggingSkill.activation_rate" class="text-[10px] text-gray-400">{{ draggingSkill.activation_rate }}</span>
+            </div>
+          </div>
+        </div>
+        <SkillDescription
+          :description="draggingSkill.description"
+          :commander-description="draggingSkill.commander_description"
+          :is-max-level="true"
+          :vars="draggingSkill.vars"
+        />
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -400,6 +463,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Flag, Share, Delete, Edit, Close, Check, Menu } from '@element-plus/icons-vue'
 import LineupSlot from './components/LineupSlot.vue'
+import SkillDescription from './components/SkillDescription.vue'
 import HeroLibrary from './components/HeroLibrary.vue'
 import SkillLibrary from './components/SkillLibrary.vue'
 import MobileSlotDetail from './components/MobileSlotDetail.vue'
@@ -416,8 +480,9 @@ const {
   currentTeamName, 
   allUsedHeroNames, 
   allUsedSkillNames, 
-  totalCost, 
-  clearLineup: clearLineupData 
+  totalCost,
+  clearLineup: clearLineupData,
+  swapRoles
 } = useLineups()
 
 const {
@@ -470,6 +535,29 @@ const currentSelectingHeroRole = ref<Role | null>(null)
 const currentSelectingSkillRole = ref<Role | null>(null)
 const currentSelectingSkillSlot = ref<number | null>(null)
 
+// Swap State
+const swapModeRole = ref<Role | null>(null)
+const dragSourceRole = ref<Role | null>(null)
+
+// Skill drag preview
+const draggingSkill = ref<Skill | null>(null)
+const dragPos = ref({ x: 0, y: 0 })
+const isSkillDragging = computed(() => draggingSkill.value !== null)
+
+const onDragOverDoc = (e: DragEvent) => {
+  dragPos.value = { x: e.clientX, y: e.clientY }
+}
+
+const handleSkillDragStarted = (skill: Skill) => {
+  draggingSkill.value = skill
+  document.addEventListener('dragover', onDragOverDoc)
+}
+
+const handleSkillDragEnded = () => {
+  draggingSkill.value = null
+  document.removeEventListener('dragover', onDragOverDoc)
+}
+
 // Mobile Detail State
 const mobileDetailVisible = ref(false)
 const currentDetailRole = ref<Role | null>(null)
@@ -478,7 +566,31 @@ const currentDetailRole = ref<Role | null>(null)
 const mobileSidebarVisible = ref(false)
 
 // Actions
+const handleSwapAction = (role: Role) => {
+  if (swapModeRole.value === null) {
+    swapModeRole.value = role
+  } else if (swapModeRole.value === role) {
+    swapModeRole.value = null
+  } else {
+    swapRoles(swapModeRole.value, role)
+    swapModeRole.value = null
+    ElMessage.success('已交換槽位')
+  }
+}
+
+const handleHeroDrop = (targetRole: Role) => {
+  if (dragSourceRole.value && dragSourceRole.value !== targetRole) {
+    swapRoles(dragSourceRole.value, targetRole)
+    ElMessage.success('已交換槽位')
+  }
+  dragSourceRole.value = null
+}
+
 const openHeroSelect = (role: Role) => {
+  if (swapModeRole.value !== null) {
+    handleSwapAction(role)
+    return
+  }
   currentSelectingHeroRole.value = role
   activeTab.value = 'heroes'
 }
@@ -499,6 +611,17 @@ const handleSkillDrop = (role: Role, slotIdx: number, skill: Skill) => {
   if (slotIdx === 1) targetRole.skill1 = skill
   if (slotIdx === 2) targetRole.skill2 = skill
   ElMessage.success(`已習得 ${skill.name}`)
+}
+
+const handleSkillSlotDrop = (targetRole: Role, sourceRole: Role, sourceSlotIdx: number, targetSlotIdx: number) => {
+  const src = currentLineup.value[sourceRole]
+  const tgt = currentLineup.value[targetRole]
+  const srcSkill = sourceSlotIdx === 1 ? src.skill1 : src.skill2
+  const tgtSkill = targetSlotIdx === 1 ? tgt.skill1 : tgt.skill2
+  if (targetSlotIdx === 1) tgt.skill1 = srcSkill
+  else tgt.skill2 = srcSkill
+  if (sourceSlotIdx === 1) src.skill1 = tgtSkill
+  else src.skill2 = tgtSkill
 }
 
 const selectHeroFromLibrary = (hero: Hero) => {
