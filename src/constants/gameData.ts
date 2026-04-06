@@ -1,5 +1,15 @@
 import { Trait } from '../composables/useData'
 
+export const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+
+const RATE_RANGE_REGEX = /(\d+(?:\.\d+)?%?)\s*(?:->|to|→)\s*(\d+(?:\.\d+)?%?)/
+export const formatRate = (rateStr: string | undefined, maxLevel: boolean): string => {
+  if (!rateStr) return ''
+  const match = rateStr.match(RATE_RANGE_REGEX)
+  if (match) return maxLevel ? match[2] : match[1]
+  return rateStr
+}
+
 export const MOCK_EQUIP_TRAITS: Trait[] = [
   { name: '武力+5', rank: 'B', active: true, description: '武力提升5點' },
   { name: '統率+5', rank: 'B', active: true, description: '統率提升5點' },
