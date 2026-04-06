@@ -10,6 +10,15 @@ export const formatRate = (rateStr: string | undefined, maxLevel: boolean): stri
   return rateStr
 }
 
+export const getTraitColor = (rank: string): string => {
+  switch (rank) {
+    case 'S': return 'bg-yellow-50 border-yellow-300 text-yellow-700 font-bold'
+    case 'A': return 'bg-purple-50 border-purple-300 text-purple-700 font-bold'
+    case 'B': return 'bg-blue-50 border-blue-300 text-blue-700'
+    default: return 'bg-gray-50 border-gray-200 text-gray-500'
+  }
+}
+
 export const MOCK_EQUIP_TRAITS: Trait[] = [
   { name: '武力+5', rank: 'B', active: true, description: '武力提升5點' },
   { name: '統率+5', rank: 'B', active: true, description: '統率提升5點' },

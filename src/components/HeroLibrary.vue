@@ -75,7 +75,7 @@
           class="relative transition-all"
           :class="{ 
             'opacity-50 grayscale cursor-not-allowed': mode === 'select' && isUsed(hero.name),
-            'opacity-40': mode === 'select' && filterOwnedOnly && !props.ownedHeroes.includes(hero.name),
+            'opacity-40': mode === 'select' && filterOwned && !props.ownedHeroes.includes(hero.name),
             'grayscale opacity-60': mode === 'manage' && !props.ownedHeroes.includes(hero.name),
             'cursor-pointer hover:scale-105': (mode === 'manage') || (mode === 'select' && !isUsed(hero.name))
           }"

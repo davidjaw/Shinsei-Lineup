@@ -64,11 +64,12 @@ import { PropType, ref, watch } from 'vue'
 import { Edit, Plus } from '@element-plus/icons-vue'
 import RadarChart from './RadarChart.vue'
 import { Hero, Trait } from '../composables/useData'
+import { getTraitColor } from '../constants/gameData'
 import { useTemplateParser } from '../composables/useTemplateParser'
 
 const { parseTextToPlain } = useTemplateParser()
 const resolveTraitDesc = (trait: any) => {
-  if (!trait?.description) return '無描述'
+  if (!trait?.description) return '說明: 尚未建立資料'
   return parseTextToPlain(trait.description, false, (trait as any).vars)
 }
 
@@ -109,12 +110,4 @@ const toggleTrait = (index: number) => {
   }
 }
 
-const getTraitColor = (rank: string) => {
-  switch (rank) {
-    case 'S': return 'bg-yellow-50 border-yellow-200 text-yellow-800'
-    case 'A': return 'bg-purple-50 border-purple-200 text-purple-800'
-    case 'B': return 'bg-blue-50 border-blue-200 text-blue-800'
-    default: return 'bg-gray-50 border-gray-200 text-gray-500'
-  }
-}
 </script>
