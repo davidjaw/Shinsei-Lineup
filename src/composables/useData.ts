@@ -97,6 +97,7 @@ export interface Skill {
   is_unique?: boolean;
   is_teachable?: boolean;
   is_fixed?: boolean;
+  is_event_skill?: boolean;
   brief_description?: string;
   related_stats?: string[];
   rate?: [number, number];
@@ -119,6 +120,7 @@ export interface Trait {
 
 export interface Hero {
   name: string
+  name_jp?: string
   faction: string
   clan?: string
   cost: number

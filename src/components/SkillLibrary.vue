@@ -57,7 +57,7 @@
           placement="left"
           :width="280"
           trigger="hover"
-          :title="skill.unique_hero ? `${skill.name} (${skill.unique_hero})` : skill.name"
+          :title="skill.unique_hero ? `${skill.name} (${localizeHero(skill.unique_hero)})` : skill.name"
         >
           <template #reference>
             <div
@@ -81,6 +81,15 @@
                   <span v-if="isUsed(skill)" class="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-bold">已裝備</span>
                   <span v-if="isFixed(skill)" class="text-[10px] bg-purple-200 text-purple-700 px-1.5 py-0.5 rounded font-bold">固有</span>
                   <span v-if="mode === 'manage' && !ownedSkills.includes(skill.name)" class="text-[10px] bg-black/70 text-white px-1.5 py-0.5 rounded">未擁有</span>
+                  <span
+                    v-if="skill.is_event_skill"
+                    class="ml-auto text-[10px] text-gray-400 truncate text-right"
+                  >事件戰法</span>
+                  <span
+                    v-else-if="!isFixed(skill) && teachersBySkill.get(skill.name)?.length"
+                    class="ml-auto text-[10px] text-gray-400 truncate text-right"
+                    :title="'傳授: ' + teachersBySkill.get(skill.name)!.join('、')"
+                  >傳授: {{ teachersBySkill.get(skill.name)!.join('、') }}</span>
                 </div>
                 <BriefDescription v-if="skill.brief_description" :text="skill.brief_description" class="text-xs mt-1" />
                 <div v-else class="text-xs text-gray-500 mt-1 truncate">{{ skill.description || '暫無描述' }}</div>
@@ -142,7 +151,28 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'update:ownedSkills', 'update:filterOwned', 'skill-drag-start', 'skill-drag-end'])
 
-const { skills, loading } = useData()
+const { skills, heroes, loading } = useData()
+
+const teachersBySkill = computed(() => {
+  const map = new Map<string, string[]>()
+  for (const h of heroes.value || []) {
+    if (!h.teachable_skill) continue
+    const arr = map.get(h.teachable_skill) || []
+    arr.push(h.name)
+    map.set(h.teachable_skill, arr)
+  }
+  return map
+})
+
+const jpToCht = computed(() => {
+  const map = new Map<string, string>()
+  for (const h of heroes.value || []) {
+    if (h.name_jp) map.set(h.name_jp, h.name)
+  }
+  return map
+})
+
+const localizeHero = (jp?: string | null) => (jp && jpToCht.value.get(jp)) || jp || ''
 
 const searchQuery = ref('')
 const debouncedSearchQuery = ref('')
