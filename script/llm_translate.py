@@ -35,8 +35,68 @@ from paths import (
     SKILLS_TRANSLATED, SKILLS_BATTLE,
     TRAITS_TRANSLATED, TRAITS_BATTLE,
     HEROES_TRANSLATED,
+    TRANSLATION_FAILURES_JSON,
 )
 DEFAULT_BATCH_SIZE = 5
+
+# In-process accumulator for failures across all process_* runs in a single
+# invocation. Flushed to TRANSLATION_FAILURES_JSON in main().
+_FAILURE_LOG: dict[str, list[dict]] = {"skills": [], "traits": [], "heroes": []}
+
+
+def _record_failures(kind: str, failed: list[tuple[str, str]]):
+    for name, err in failed:
+        _FAILURE_LOG[kind].append({"name": name, "error": err})
+
+
+def _write_failure_manifest():
+    """Write a manifest with copy-pasteable suggested fixes for the admin.
+
+    Always overwrites the file: an empty manifest is itself useful (signals
+    "last run was clean"). The build is NOT failed here — check_data_integrity
+    is the gatekeeper.
+    """
+    has_any = any(_FAILURE_LOG.values())
+    # NOTE: do NOT suggest --force here. --force means "ignore cache and
+    # re-call the LLM". For LLM-side failures the cache miss already forces a
+    # call, so --force only burns extra quota. The admin can add --force
+    # manually if they actually want to re-translate something that succeeded
+    # but looks wrong.
+    suggestions: list[str] = []
+    for kind, items in _FAILURE_LOG.items():
+        if not items:
+            continue
+        names = sorted({item["name"] for item in items})
+        if len(names) == 1:
+            suggestions.append(
+                f'python3 script/llm_translate.py --{kind} --name "{names[0]}"'
+            )
+        else:
+            suggestions.append(f"python3 script/llm_translate.py --{kind}")
+    if suggestions:
+        suggestions.append(
+            "python3 script/build_frontend_data.py && python3 script/check_data_integrity.py"
+        )
+
+    manifest = {
+        "ok": not has_any,
+        "summary": {kind: len(items) for kind, items in _FAILURE_LOG.items()},
+        "failures": _FAILURE_LOG,
+        "suggested_actions": suggestions,
+    }
+    TRANSLATION_FAILURES_JSON.parent.mkdir(parents=True, exist_ok=True)
+    TRANSLATION_FAILURES_JSON.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), "utf-8"
+    )
+
+    if has_any:
+        total = sum(len(v) for v in _FAILURE_LOG.values())
+        tqdm.write(f"\n[warn] {total} item(s) failed translation. Manifest: {TRANSLATION_FAILURES_JSON}")
+        tqdm.write("[suggested actions — copy/paste to retry]")
+        for s in suggestions:
+            tqdm.write(f"  {s}")
+    else:
+        tqdm.write(f"\n[ok] No translation failures. Manifest: {TRANSLATION_FAILURES_JSON}")
 
 BATTLE_EXAMPLE = """\
 name: 軍神
@@ -585,9 +645,13 @@ def process_skills(
             all_results.update(results)
             all_failed.extend(failed)
 
-    # Merge into output files — force overwrites existing entries
-    frontend_skills = {} if force else _load_existing_yaml(SKILLS_TRANSLATED)
-    battle_skills = {} if force else _load_existing_yaml(SKILLS_BATTLE)
+    # Merge into output files. --force normally truncates, but ONLY when we're
+    # processing the full set; with --name/--limit truncating would wipe every
+    # untouched entry from the YAML (data loss). In filtered mode we always
+    # merge into the existing file.
+    full_run = name_filter is None and limit is None
+    frontend_skills = {} if (force and full_run) else _load_existing_yaml(SKILLS_TRANSLATED)
+    battle_skills = {} if (force and full_run) else _load_existing_yaml(SKILLS_BATTLE)
 
     new_fe, new_bt = 0, 0
     for name, data in all_results.items():
@@ -612,6 +676,7 @@ def process_skills(
         tqdm.write(f"[warn] {len(all_failed)} failed:")
         for name, err in all_failed:
             tqdm.write(f"  {name}: {err}")
+    _record_failures("skills", all_failed)
 
     return all_results
 
@@ -669,8 +734,9 @@ def process_traits(
             all_results.update(results)
             all_failed.extend(failed)
 
-    frontend_traits = {} if force else _load_existing_yaml(TRAITS_TRANSLATED)
-    battle_traits = {} if force else _load_existing_yaml(TRAITS_BATTLE)
+    full_run = name_filter is None and limit is None
+    frontend_traits = {} if (force and full_run) else _load_existing_yaml(TRAITS_TRANSLATED)
+    battle_traits = {} if (force and full_run) else _load_existing_yaml(TRAITS_BATTLE)
 
     new_fe, new_bt = 0, 0
     for name, data in all_results.items():
@@ -694,6 +760,7 @@ def process_traits(
         tqdm.write(f"[warn] {len(all_failed)} failed:")
         for name, err in all_failed:
             tqdm.write(f"  {name}: {err}")
+    _record_failures("traits", all_failed)
 
     return all_results
 
@@ -803,7 +870,8 @@ def process_heroes(
         all_failed.extend(failed)
 
     # Merge into output
-    hero_translated = {} if force else _load_existing_yaml(HEROES_TRANSLATED)
+    full_run = name_filter is None and limit is None
+    hero_translated = {} if (force and full_run) else _load_existing_yaml(HEROES_TRANSLATED)
 
     new_count = 0
     for name, data in all_results.items():
@@ -820,6 +888,7 @@ def process_heroes(
         tqdm.write(f"[warn] {len(all_failed)} failed:")
         for name, err in all_failed:
             tqdm.write(f"  {name}: {err}")
+    _record_failures("heroes", all_failed)
 
     return all_results
 
@@ -969,6 +1038,8 @@ def main():
             model=args.model,
             batch_size=args.batch_size,
         )
+
+    _write_failure_manifest()
 
 
 if __name__ == "__main__":

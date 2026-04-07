@@ -32,6 +32,7 @@ OVERRIDES_YAML = DATA_DIR / "overrides.yaml"
 HEROES_JSON = BUILD_DIR / "heroes.json"
 SKILLS_JSON = BUILD_DIR / "skills.json"
 STATUSES_JSON = BUILD_DIR / "statuses.json"
+TRANSLATION_FAILURES_JSON = BUILD_DIR / "translation_failures.json"
 
 # Crawl cache
 HERO_INDEX_CACHE = CRAWL_CACHE_DIR / "_hero_index.json"

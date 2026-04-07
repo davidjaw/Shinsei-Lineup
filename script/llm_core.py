@@ -236,12 +236,17 @@ def autofix_frontend(fe: dict) -> list[str]:
 
 def load_llm_cache(key: str, cache_dir: Path = LLM_CACHE_DIR) -> dict | None:
     path = cache_dir / f"{key}.yaml"
-    if path.exists():
-        try:
-            return yaml.safe_load(path.read_text("utf-8"))
-        except yaml.YAMLError:
-            return None
-    return None
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text("utf-8"))
+    except yaml.YAMLError:
+        return None
+    # Reject empty/non-dict cache entries so a corrupted file gets re-translated
+    # instead of silently returning a broken result.
+    if not isinstance(data, dict) or not data:
+        return None
+    return data
 
 
 def save_llm_cache(key: str, data: dict, cache_dir: Path = LLM_CACHE_DIR):

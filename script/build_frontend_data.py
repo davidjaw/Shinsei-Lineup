@@ -28,6 +28,11 @@ from paths import (
     HEROES_JSON, SKILLS_JSON, STATUSES_JSON,
 )
 
+# Untranslated-text warnings collected during build_skills/build_heroes.
+# Surfaced at end of main() so admin sees a summary, but does not fail the
+# build (check_data_integrity.py is the gatekeeper that fails CI).
+_BUILD_WARNINGS: list[str] = []
+
 # LLM skill name corrections (wrong CHT → correct CHT)
 SKILL_NAME_FIXES = {
     "盤石耽々": "盤石耽耽",
@@ -223,6 +228,7 @@ def normalize_skill_type(t: str) -> str:
 def postprocess_skill(skill: dict) -> dict:
     """Normalize a single skill entry after all merges/overrides."""
     skill["name"] = fix_skill_name(skill.get("name", ""))
+    skill["is_event_skill"] = bool(skill.get("is_event_skill", False))
     if skill.get("type"):
         skill["type"] = normalize_skill_type(skill["type"])
     for field in ("description", "commander_description"):
@@ -336,12 +342,22 @@ def build_skills(crawled: dict, translated: dict, battle: dict) -> list[dict]:
         tr = translated.get(key, {})
         bt = battle.get(key, {})
 
-        raw_desc = tr.get("description", cr.get("description", ""))
+        # Treat empty / whitespace-only translated description as missing,
+        # so we don't silently mask a translation gap with the JP source.
+        tr_desc = (tr.get("description") or "").strip()
+        if tr_desc:
+            raw_desc = tr_desc
+        else:
+            raw_desc = cr.get("description", "")
+            if raw_desc:
+                _BUILD_WARNINGS.append(f"skill '{key}': translated description missing, falling back to JP")
         description, commander_description = split_commander_description(raw_desc)
         if not commander_description:
             commander_description = _extract_commander_desc(tr, bt)
 
-        name_cht = tr.get("name", key)
+        name_cht = tr.get("name") or key
+        if not tr.get("name"):
+            _BUILD_WARNINGS.append(f"skill '{key}': translated name missing, using JP key")
         is_unique = bool(cr.get("is_unique"))
         source_hero = cr.get("source_hero", "")
 
@@ -430,6 +446,14 @@ def main():
     print(f"[info] {traits_with_translation} traits translated to CHT")
     if override_count:
         print(f"[info] {override_count} overrides applied")
+
+    if _BUILD_WARNINGS:
+        print(f"\n[warn] {len(_BUILD_WARNINGS)} translation gaps detected during build:")
+        for w in _BUILD_WARNINGS[:20]:
+            print(f"  {w}")
+        if len(_BUILD_WARNINGS) > 20:
+            print(f"  ... and {len(_BUILD_WARNINGS) - 20} more")
+        print("[hint] run: python3 script/llm_translate.py --skills    # to fill in missing translations")
 
 
 if __name__ == "__main__":
