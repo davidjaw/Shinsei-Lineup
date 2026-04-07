@@ -10,11 +10,25 @@
           prefix-icon="Search"
           class="flex-1 mr-2"
         />
-        <el-switch 
+        <button
+          class="relative px-2 py-1 text-xs rounded border mr-2 transition-colors flex-shrink-0"
+          :class="showFilters
+            ? 'bg-gray-700 text-white border-gray-700'
+            : 'bg-white text-gray-500 border-gray-300 hover:border-gray-500'"
+          @click="showFilters = !showFilters"
+          :title="showFilters ? '隱藏篩選' : '顯示篩選'"
+        >
+          篩選
+          <span
+            v-if="activeFilterCount > 0"
+            class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold"
+          >{{ activeFilterCount }}</span>
+        </button>
+        <el-switch
           :model-value="filterOwned"
           @update:model-value="val => $emit('update:filterOwned', val)"
-          inline-prompt 
-          active-text="已擁有" 
+          inline-prompt
+          active-text="已擁有"
           inactive-text="全部"
           v-if="mode === 'select'"
         />
@@ -23,7 +37,7 @@
          </div>
       </div>
 
-      <div class="space-y-1 pb-1">
+      <div v-show="showFilters" class="space-y-1 pb-1">
         <div class="flex items-center gap-1">
           <span class="text-xs text-gray-400 w-8 flex-shrink-0">Cost</span>
           <div class="flex gap-1 flex-wrap flex-1">
@@ -55,6 +69,20 @@
                 : 'bg-white text-gray-500 border-gray-300 hover:border-amber-300'"
               @click="toggleFaction(f)"
             >{{ f }}</button>
+          </div>
+        </div>
+        <div class="flex items-start gap-1">
+          <span class="text-xs text-gray-400 w-8 flex-shrink-0 mt-0.5">家門</span>
+          <div class="flex gap-1 flex-wrap">
+            <button
+              v-for="c in clans"
+              :key="'clan-' + c"
+              class="px-2 py-0.5 text-xs rounded border transition-colors"
+              :class="selectedClans.has(c)
+                ? 'bg-emerald-500 text-white border-emerald-500'
+                : 'bg-white text-gray-500 border-gray-300 hover:border-emerald-300'"
+              @click="toggleClan(c)"
+            >{{ c }}</button>
           </div>
         </div>
       </div>
@@ -127,11 +155,22 @@ watch(searchQuery, (newVal) => {
   }, 200)
 })
 
+const showFilters = ref(false)
 const selectedCosts = ref<Set<number>>(new Set())
 const selectedFactions = ref<Set<string>>(new Set())
+const selectedClans = ref<Set<string>>(new Set())
 
 const factions = computed(() => {
   return [...new Set(heroes.value.map(h => h.faction))].filter(Boolean).sort()
+})
+
+const clans = computed(() => {
+  const counts = new Map<string, number>()
+  for (const h of heroes.value) {
+    if (!h.clan) continue
+    counts.set(h.clan, (counts.get(h.clan) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c)
 })
 
 const availableCosts = computed(() => {
@@ -150,11 +189,19 @@ const toggleFaction = (faction: string) => {
   selectedFactions.value = next
 }
 
-const hasActiveFilters = computed(() => selectedCosts.value.size > 0 || selectedFactions.value.size > 0)
+const toggleClan = (clan: string) => {
+  const next = new Set(selectedClans.value)
+  next.has(clan) ? next.delete(clan) : next.add(clan)
+  selectedClans.value = next
+}
+
+const activeFilterCount = computed(() => selectedCosts.value.size + selectedFactions.value.size + selectedClans.value.size)
+const hasActiveFilters = computed(() => activeFilterCount.value > 0)
 
 const resetFilters = () => {
   selectedCosts.value = new Set()
   selectedFactions.value = new Set()
+  selectedClans.value = new Set()
 }
 
 const filteredHeroes = computed(() => {
@@ -162,6 +209,7 @@ const filteredHeroes = computed(() => {
     if (debouncedSearchQuery.value && !h.name.includes(debouncedSearchQuery.value)) return false
     if (selectedFactions.value.size > 0 && !selectedFactions.value.has(h.faction)) return false
     if (selectedCosts.value.size > 0 && !selectedCosts.value.has(h.cost)) return false
+    if (selectedClans.value.size > 0 && (!h.clan || !selectedClans.value.has(h.clan))) return false
     if (props.mode === 'select' && props.filterOwned && !props.ownedHeroes.includes(h.name)) return false
     return true
   })
