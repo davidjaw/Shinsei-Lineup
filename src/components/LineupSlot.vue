@@ -207,7 +207,9 @@
             class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border cursor-pointer transition-all"
             :class="[
               draggingSlot === 1 ? 'opacity-0' : '',
-              focusedSkillSlot === 1
+              isConflictSkill(skill1)
+                ? 'ring-1 md:ring-2 ring-red-500 bg-red-50 border-red-500'
+                : focusedSkillSlot === 1
                 ? 'ring-1 md:ring-2 ring-indigo-500 bg-indigo-50 border-indigo-500'
                 : dragOverSlot === 1
                   ? 'border-indigo-500 bg-indigo-100 ring-2 ring-indigo-400 scale-[1.02]'
@@ -285,7 +287,9 @@
             class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border cursor-pointer transition-all"
             :class="[
               draggingSlot === 2 ? 'opacity-0' : '',
-              focusedSkillSlot === 2
+              isConflictSkill(skill2)
+                ? 'ring-1 md:ring-2 ring-red-500 bg-red-50 border-red-500'
+                : focusedSkillSlot === 2
                 ? 'ring-1 md:ring-2 ring-indigo-500 bg-indigo-50 border-indigo-500'
                 : dragOverSlot === 2
                   ? 'border-indigo-500 bg-indigo-100 ring-2 ring-indigo-400 scale-[1.02]'
@@ -438,8 +442,12 @@ const props = defineProps({
   isSwapSource: { type: Boolean, default: false },
   swapModeActive: { type: Boolean, default: false },
   isDragTarget: { type: Boolean, default: false },
-  skillDragging: { type: Boolean, default: false }
+  skillDragging: { type: Boolean, default: false },
+  conflictingSkillNames: { type: Object as PropType<Set<string>>, default: () => new Set<string>() },
 })
+
+const isConflictSkill = (skill: Skill | null | undefined) =>
+  !!skill && props.conflictingSkillNames.has(skill.name)
 
 const { skills } = useData()
 const { parseTextToPlain } = useTemplateParser()

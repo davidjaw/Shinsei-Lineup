@@ -137,9 +137,17 @@
 
                 <!-- Center: Lineup Builder Area -->
                 <div class="flex-1 flex flex-col md:flex-row h-full overflow-hidden">
-                  <div class="flex-none md:flex-1 overflow-y-auto p-0.5 md:p-6 bg-slate-50">
+                  <div
+                    class="flex-none md:flex-1 overflow-y-auto p-0.5 md:p-6 bg-slate-50"
+                    @click.self="clearSkillFocus"
+                  >
                      <!-- Mobile: Compact Grid | Desktop: Grid -->
-                     <div class="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 gap-0.5 md:gap-4 pb-0 md:pb-0 h-auto">
+                     <div
+                       class="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-3 gap-0.5 md:gap-4 pb-0 md:pb-0 h-auto"
+                       :class="{ 'lineup-shake': lineupShakeActive }"
+                       @click.self="clearSkillFocus"
+                       @animationend="lineupShakeActive = false"
+                     >
                         <div class="w-full md:min-w-0 md:h-full">
                           <LineupSlot
                             title="大將"
@@ -154,6 +162,7 @@
                             :swap-mode-active="swapModeRole !== null"
                             :is-drag-target="dragSourceRole !== null && dragSourceRole !== 'main'"
                             :skill-dragging="isSkillDragging"
+                            :conflicting-skill-names="conflictingSkillNames"
                             @open-hero-select="openHeroSelect('main')"
                             @open-skill-select="(slotIdx) => handleSkillSlotClick('main', slotIdx)"
                             @skill-drop="(slotIdx, skill) => handleSkillDrop('main', slotIdx, skill)"
@@ -181,6 +190,7 @@
                             :swap-mode-active="swapModeRole !== null"
                             :is-drag-target="dragSourceRole !== null && dragSourceRole !== 'vice1'"
                             :skill-dragging="isSkillDragging"
+                            :conflicting-skill-names="conflictingSkillNames"
                             @open-hero-select="openHeroSelect('vice1')"
                             @open-skill-select="(slotIdx) => handleSkillSlotClick('vice1', slotIdx)"
                             @skill-drop="(slotIdx, skill) => handleSkillDrop('vice1', slotIdx, skill)"
@@ -208,6 +218,7 @@
                             :swap-mode-active="swapModeRole !== null"
                             :is-drag-target="dragSourceRole !== null && dragSourceRole !== 'vice2'"
                             :skill-dragging="isSkillDragging"
+                            :conflicting-skill-names="conflictingSkillNames"
                             @open-hero-select="openHeroSelect('vice2')"
                             @open-skill-select="(slotIdx) => handleSkillSlotClick('vice2', slotIdx)"
                             @skill-drop="(slotIdx, skill) => handleSkillDrop('vice2', slotIdx, skill)"
@@ -636,37 +647,97 @@ const selectHeroFromLibrary = (hero: Hero) => {
   }
 }
 
+const SKILL_SLOT_SEQUENCE: {r: Role, s: 1 | 2}[] = [
+  {r: 'main', s: 1}, {r: 'main', s: 2},
+  {r: 'vice1', s: 1}, {r: 'vice1', s: 2},
+  {r: 'vice2', s: 1}, {r: 'vice2', s: 2},
+]
+
 const advanceFocus = () => {
-  const sequence: {r: Role, s: number}[] = [
-    {r: 'main', s: 1}, {r: 'main', s: 2},
-    {r: 'vice1', s: 1}, {r: 'vice1', s: 2},
-    {r: 'vice2', s: 1}, {r: 'vice2', s: 2}
-  ]
-  
-  const currentIdx = sequence.findIndex(
+  const currentIdx = SKILL_SLOT_SEQUENCE.findIndex(
     item => item.r === currentSelectingSkillRole.value && item.s === currentSelectingSkillSlot.value
   )
-  
-  if (currentIdx !== -1 && currentIdx < sequence.length - 1) {
-    const next = sequence[currentIdx + 1]
+  if (currentIdx !== -1 && currentIdx < SKILL_SLOT_SEQUENCE.length - 1) {
+    const next = SKILL_SLOT_SEQUENCE[currentIdx + 1]
     handleSkillSlotClick(next.r, next.s)
+  } else {
+    // Last slot was just filled — clear focus so the next pick goes back to
+    // the auto-target flow instead of being stuck on the final slot.
+    clearSkillFocus()
   }
 }
 
+const findFirstEmptySkillSlot = () => {
+  for (const {r, s} of SKILL_SLOT_SEQUENCE) {
+    const role = currentLineup.value[r]
+    const slot = s === 1 ? role.skill1 : role.skill2
+    if (!slot) return {r, s}
+  }
+  return null
+}
+
+const lineupShakeActive = ref(false)
+const triggerLineupShake = () => {
+  lineupShakeActive.value = false
+  // Force restart the animation by toggling on next frame
+  requestAnimationFrame(() => { lineupShakeActive.value = true })
+}
+
+const clearSkillFocus = () => {
+  currentSelectingSkillRole.value = null
+  currentSelectingSkillSlot.value = null
+}
+
 const selectSkillFromDialog = (skill: Skill) => {
-  if (currentSelectingSkillRole.value && currentSelectingSkillSlot.value !== null) {
-    const role = currentLineup.value[currentSelectingSkillRole.value]
-    if (currentSelectingSkillSlot.value === 1) role.skill1 = skill
-    if (currentSelectingSkillSlot.value === 2) role.skill2 = skill
-    ElMessage.success(`已習得 ${skill.name}`)
-    
-    // Auto-advance
+  // 1. Use focused slot if any.
+  // 2. Otherwise auto-target the first empty slot in the standard sequence.
+  // 3. If none empty, shake the lineup grid to tell the user to focus a slot.
+  const hadFocus = !!currentSelectingSkillRole.value && currentSelectingSkillSlot.value !== null
+  let targetRole = currentSelectingSkillRole.value
+  let targetSlot = currentSelectingSkillSlot.value as 1 | 2 | null
+
+  if (!hadFocus) {
+    const empty = findFirstEmptySkillSlot()
+    if (!empty) {
+      triggerLineupShake()
+      ElMessage.warning('所有戰法欄位都已滿，請先點擊欲覆寫的欄位')
+      return
+    }
+    targetRole = empty.r
+    targetSlot = empty.s
+  }
+
+  const role = currentLineup.value[targetRole!]
+  if (targetSlot === 1) role.skill1 = skill
+  if (targetSlot === 2) role.skill2 = skill
+  ElMessage.success(`已習得 ${skill.name}`)
+
+  // Only advance focus when the user explicitly focused a slot first.
+  // Auto-targeted picks should keep focus cleared so subsequent clicks
+  // continue to use the "fill next empty" flow.
+  if (hadFocus) {
+    currentSelectingSkillRole.value = targetRole
+    currentSelectingSkillSlot.value = targetSlot
     advanceFocus()
-    
-  } else {
-     ElMessage.warning('請先點擊上方戰法欄位以指定位置')
   }
 }
+
+// Conflict detection: 兵種 and 陣法 may only have one active per team.
+// Returns the set of skill names that participate in a duplicate group.
+const conflictingSkillNames = computed(() => {
+  const buckets: Record<string, string[]> = { '兵種': [], '陣法': [] }
+  for (const {r, s} of SKILL_SLOT_SEQUENCE) {
+    const role = currentLineup.value[r]
+    const skill = s === 1 ? role.skill1 : role.skill2
+    if (!skill) continue
+    if (skill.type in buckets) buckets[skill.type].push(skill.name)
+  }
+  const out = new Set<string>()
+  for (const names of Object.values(buckets)) {
+    if (names.length > 1) names.forEach(n => out.add(n))
+  }
+  return out
+})
 
 const resetDialogVisible = ref(false)
 const openResetDialog = () => {
@@ -810,5 +881,15 @@ body {
 .skill-select-dialog .el-dialog__body {
   padding: 10px 20px 20px;
   overflow: hidden;
+}
+@keyframes lineup-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-6px); }
+  40%      { transform: translateX(6px); }
+  60%      { transform: translateX(-4px); }
+  80%      { transform: translateX(4px); }
+}
+.lineup-shake {
+  animation: lineup-shake 0.4s ease-in-out;
 }
 </style>
