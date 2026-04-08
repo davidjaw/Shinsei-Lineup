@@ -36,14 +36,14 @@
     </div>
 
     <!-- Info -->
-    <div class="flex flex-col gap-1" :class="compact ? 'p-1' : 'p-2'">
-      <div 
+    <div v-if="!hideName" class="flex flex-col gap-1" :class="compact ? 'p-1' : 'p-2'">
+      <div
         class="font-bold text-gray-800 truncate text-center"
         :class="compact ? 'text-[10px]' : 'text-sm'"
       >
         {{ hero.name }}
       </div>
-      
+
     </div>
   </div>
 </template>
@@ -62,6 +62,10 @@ const props = defineProps({
     default: 'library' // Default to library to be safe for lists
   },
   compact: {
+    type: Boolean,
+    default: false
+  },
+  hideName: {
     type: Boolean,
     default: false
   }

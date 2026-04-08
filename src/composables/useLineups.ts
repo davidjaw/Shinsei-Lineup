@@ -15,6 +15,7 @@ export interface RoleData {
     spd: number
   }
   equipTraits: (Trait | null)[]
+  breakthrough: number  // 0-5, controls which traits are active
 }
 
 export interface Lineup {
@@ -32,7 +33,8 @@ const emptyRole = (): RoleData => ({
   skill1: null,
   skill2: null,
   stats: { ...defaultStats },
-  equipTraits: [null, null, null, null]
+  equipTraits: [null, null, null, null],
+  breakthrough: 0
 })
 
 const lineups = reactive<Lineup[]>(Array.from({ length: 5 }, (_, i) => ({

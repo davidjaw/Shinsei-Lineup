@@ -157,6 +157,7 @@
                             v-model:skill2="currentLineup.main.skill2"
                             v-model:stats="currentLineup.main.stats"
                             v-model:equipTraits="currentLineup.main.equipTraits"
+                            v-model:breakthrough="currentLineup.main.breakthrough"
                             :focused-skill-slot="currentSelectingSkillRole === 'main' ? currentSelectingSkillSlot : null"
                             :is-swap-source="swapModeRole === 'main'"
                             :swap-mode-active="swapModeRole !== null"
@@ -185,6 +186,7 @@
                             v-model:skill2="currentLineup.vice1.skill2"
                             v-model:stats="currentLineup.vice1.stats"
                             v-model:equipTraits="currentLineup.vice1.equipTraits"
+                            v-model:breakthrough="currentLineup.vice1.breakthrough"
                             :focused-skill-slot="currentSelectingSkillRole === 'vice1' ? currentSelectingSkillSlot : null"
                             :is-swap-source="swapModeRole === 'vice1'"
                             :swap-mode-active="swapModeRole !== null"
@@ -213,6 +215,7 @@
                             v-model:skill2="currentLineup.vice2.skill2"
                             v-model:stats="currentLineup.vice2.stats"
                             v-model:equipTraits="currentLineup.vice2.equipTraits"
+                            v-model:breakthrough="currentLineup.vice2.breakthrough"
                             :focused-skill-slot="currentSelectingSkillRole === 'vice2' ? currentSelectingSkillSlot : null"
                             :is-swap-source="swapModeRole === 'vice2'"
                             :swap-mode-active="swapModeRole !== null"
@@ -777,17 +780,17 @@ const shareLineup = (type: 'all' | 'current' | 'inventory') => {
     const l = currentLineup.value
     data.lineups = [{
       name: l.name,
-      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null),
-      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null),
-      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null),
+      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), m_bt: l.main.breakthrough,
+      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v1_bt: l.vice1.breakthrough,
+      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v2_bt: l.vice2.breakthrough,
     }]
   }
   if (type === 'all') {
     data.lineups = lineups.map(l => ({
       name: l.name,
-      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null),
-      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null),
-      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null),
+      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), m_bt: l.main.breakthrough,
+      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v1_bt: l.vice1.breakthrough,
+      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v2_bt: l.vice2.breakthrough,
     }))
   }
   
@@ -837,6 +840,8 @@ const initFromHash = () => {
             if (safeL[prefix + '_eq']) {
               role.equipTraits = safeL[prefix + '_eq'].map((t: any) => t ? { name: t.n, rank: t.r, description: t.d, active: true } : null)
             }
+            const bt = safeL[prefix + '_bt']
+            if (typeof bt === 'number') role.breakthrough = Math.max(0, Math.min(5, bt))
           }
           restore('m', target.main)
           restore('v1', target.vice1)

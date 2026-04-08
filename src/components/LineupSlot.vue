@@ -1,5 +1,20 @@
 <template>
   <div class="bg-white rounded-md shadow-sm border border-gray-200 p-0.5 md:p-2 flex flex-col gap-0.5 md:gap-2 h-full relative">
+    <!-- Shared SVG defs for breakthrough star gradient -->
+    <svg width="0" height="0" class="absolute pointer-events-none" aria-hidden="true">
+      <defs>
+        <linearGradient id="breakStarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#fff7c2" />
+          <stop offset="35%" stop-color="#fbbf24" />
+          <stop offset="70%" stop-color="#f97316" />
+          <stop offset="100%" stop-color="#b91c1c" />
+        </linearGradient>
+        <radialGradient id="breakStarGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fde68a" stop-opacity="0.9" />
+          <stop offset="100%" stop-color="#dc2626" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+    </svg>
     <!-- Role Header -->
     <div class="flex items-center justify-between border-b border-gray-100 pb-0.5 md:pb-2 px-1 md:px-0">
       <span class="font-bold text-gray-700 text-[10px] md:text-base">{{ title }}</span>
@@ -43,15 +58,90 @@
         <el-icon class="text-indigo-400 text-xl md:text-3xl"><Sort /></el-icon>
         <span class="text-indigo-500 text-[8px] md:text-xs mt-1 font-medium">放置交換</span>
       </div>
-      <HeroCard v-if="hero" :hero="hero" class="w-full h-full border-none shadow-none pointer-events-none" />
+      <HeroCard v-if="hero" :hero="hero" hide-name class="w-full h-full border-none shadow-none pointer-events-none" />
       <div v-else class="text-gray-400 flex flex-col items-center py-2 md:py-10">
         <el-icon :size="16" class="md:text-3xl"><Plus /></el-icon>
         <span class="text-[9px] md:text-xs mt-0.5">選擇</span>
       </div>
     </div>
 
+    <!-- Hero Name + Breakthrough Stars (名字靠左，星星靠右) -->
+    <div v-if="hero" class="flex items-center gap-1 px-1 md:px-2 mt-0.5 md:mt-1 md:order-1">
+      <div
+        class="flex-1 min-w-0 font-bold text-gray-800 truncate text-[10px] md:text-sm"
+        :title="hero.name"
+      >
+        {{ hero.name }}
+      </div>
+      <!-- Desktop: inline 5 stars with hover-fill preview -->
+      <div
+        class="hidden md:flex items-center gap-0.5 flex-shrink-0"
+        @mouseleave="hoverStar = 0"
+      >
+        <button
+          v-for="n in maxBreakthrough"
+          :key="n"
+          type="button"
+          class="breakthrough-star"
+          :class="{ 'is-filled': n <= displayStarCount }"
+          :title="breakthrough === n ? '再次點擊重置' : `設定為 ${n} 星突破`"
+          @mouseenter="hoverStar = n"
+          @click.stop="setBreakthrough(n)"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" class="break-star-svg">
+            <path d="M12 2.5 L14.85 9.1 L22 9.77 L16.5 14.64 L18.18 21.52 L12 17.77 L5.82 21.52 L7.5 14.64 L2 9.77 L9.15 9.1 Z" />
+          </svg>
+        </button>
+      </div>
+      <!-- Mobile: single star + ×N badge, tap to open popover picker -->
+      <el-popover
+        v-if="!isDesktop"
+        ref="popoverRef"
+        placement="bottom-end"
+        trigger="click"
+        :width="220"
+        popper-class="breakthrough-popover"
+        @hide="hoverStar = 0"
+      >
+        <template #reference>
+          <button
+            type="button"
+            class="breakthrough-star flex items-center gap-0.5 flex-shrink-0"
+            :class="{ 'is-filled': breakthrough > 0 }"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" class="break-star-svg">
+              <path d="M12 2.5 L14.85 9.1 L22 9.77 L16.5 14.64 L18.18 21.52 L12 17.77 L5.82 21.52 L7.5 14.64 L2 9.77 L9.15 9.1 Z" />
+            </svg>
+            <span v-if="breakthrough > 1" class="text-[9px] font-bold leading-none text-red-600">×{{ breakthrough }}</span>
+          </button>
+        </template>
+        <div class="text-center text-[11px] font-bold text-gray-600 mb-1">突破次數</div>
+        <div
+          class="flex items-center justify-center gap-1 py-1"
+          @mouseleave="hoverStar = 0"
+        >
+          <button
+            v-for="n in maxBreakthrough"
+            :key="n"
+            type="button"
+            class="breakthrough-star"
+            :class="{ 'is-filled': n <= displayStarCount }"
+            @mouseenter="hoverStar = n"
+            @click.stop="onMobilePickStar(n)"
+          >
+            <svg viewBox="0 0 24 24" width="26" height="26" class="break-star-svg">
+              <path d="M12 2.5 L14.85 9.1 L22 9.77 L16.5 14.64 L18.18 21.52 L12 17.77 L5.82 21.52 L7.5 14.64 L2 9.77 L9.15 9.1 Z" />
+            </svg>
+          </button>
+        </div>
+        <div class="text-center text-[10px] text-gray-400 mt-1">
+          點擊當前星數可重置
+        </div>
+      </el-popover>
+    </div>
+
     <!-- Stats & Traits Area (Only when hero exists) -->
-    <div v-if="hero" class="relative -mt-2 mb-1 md:mb-2 z-10 flex items-center gap-1 md:gap-3 px-1 md:px-2 justify-between md:justify-start md:order-3">
+    <div v-if="hero" class="relative md:-mt-2 mb-1 md:mb-2 z-10 flex items-center gap-1 md:gap-3 px-1 md:px-2 justify-between md:justify-start md:order-3">
       <!-- Radar Chart (Desktop Only) -->
       <el-popover
         placement="right"
@@ -102,7 +192,7 @@
                 <div class="font-bold mb-1">{{ trait.name }}</div>
                 <div class="text-xs mb-2">{{ resolveTraitDesc(trait) }}</div>
                 <div class="text-[10px] opacity-80 border-t pt-1 border-gray-500">
-                  {{ trait.name === '固有' ? '固有特性 (不可變更)' : trait.active ? '點擊停用' : '點擊啟用' }}
+                  {{ traitUnlockLabel(idx) }}{{ trait.active ? '' : ' · 尚未啟用' }}
                 </div>
               </div>
             </template>
@@ -112,7 +202,6 @@
                 getTraitColor(trait.rank),
                 { 'opacity-50 saturate-50 scale-95': !trait.active, 'ring-1 ring-offset-1 ring-gray-200': !trait.active }
               ]"
-              @click.stop="toggleTrait(idx)"
             >
               {{ trait.name }}
             </div>
@@ -419,7 +508,7 @@
 </template>
 
 <script setup lang="ts">
-import { PropType, ref, watch, computed } from 'vue'
+import { PropType, ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Plus, Close, Edit, InfoFilled, Sort } from '@element-plus/icons-vue'
 import HeroCard from './HeroCard.vue'
 import RadarChart from './RadarChart.vue'
@@ -438,6 +527,7 @@ const props = defineProps({
   skill2: Object as PropType<Skill | null>,
   stats: Object as PropType<any>,
   equipTraits: Array as PropType<Trait[]>,
+  breakthrough: { type: Number, default: 0 },
   focusedSkillSlot: Number as PropType<number | null>,
   isSwapSource: { type: Boolean, default: false },
   swapModeActive: { type: Boolean, default: false },
@@ -475,6 +565,7 @@ const emit = defineEmits([
   'update:skill2',
   'update:stats',
   'update:equipTraits',
+  'update:breakthrough',
   'open-hero-select',
   'open-skill-select',
   'skill-drop',
@@ -493,6 +584,7 @@ const removeHero = () => {
   emit('update:skill1', null)
   emit('update:skill2', null)
   emit('update:equipTraits', [])
+  emit('update:breakthrough', 0)
   // Reset stats to default not handled here explicitly but usually desired
 }
 
@@ -510,7 +602,8 @@ const handleHeroDropEvent = (event: DragEvent) => {
 }
 
 // Stats Editing
-const FREE_POINTS_TOTAL = 50
+// Base 50 free points, +10 per breakthrough star
+const freePointsTotal = computed(() => 50 + (props.breakthrough ?? 0) * 10)
 const statsDialogVisible = ref(false)
 const STAT_KEYS = ['lea', 'val', 'int', 'pol', 'cha', 'spd'] as const
 
@@ -532,7 +625,7 @@ const statBonus = computed(() => {
 const freePointsRemaining = computed(() => {
   let used = 0
   for (const k of STAT_KEYS) used += Math.max(0, statBonus.value[k])
-  return FREE_POINTS_TOTAL - used
+  return freePointsTotal.value - used
 })
 
 // Local editing state
@@ -541,7 +634,7 @@ const localBonus = ref<Record<string, number>>({})
 const localFreeRemaining = computed(() => {
   let used = 0
   for (const k of STAT_KEYS) used += Math.max(0, localBonus.value[k] ?? 0)
-  return FREE_POINTS_TOTAL - used
+  return freePointsTotal.value - used
 })
 
 const openStatsEditor = () => {
@@ -583,50 +676,89 @@ const statLabels: Record<string, string> = {
   spd: '速度'
 }
 
-// Local Traits State (to support toggling placeholders or real traits locally)
-const localTraits = ref<Trait[]>([])
+// Traits derived from hero + breakthrough level.
+// Trait slot i is active when breakthrough >= TRAIT_UNLOCK[i].
+const TRAIT_UNLOCK = [0, 1, 3, 5] as const
 
-const initializeTraits = () => {
-  if (!props.hero) {
-    localTraits.value = []
-    return
-  }
-  
+const localTraits = computed<Trait[]>(() => {
+  if (!props.hero) return []
   const existing = props.hero.traits || []
   const defaults: Trait[] = [
     { name: '固有', rank: 'S', active: true },
-    { name: '特性 2', rank: 'A', active: false }, // Default inactive per user request
+    { name: '特性 2', rank: 'A', active: false },
     { name: '特性 3', rank: 'B', active: false },
-    { name: '特性 4', rank: 'C', active: false }
+    { name: '特性 4', rank: 'C', active: false },
   ]
-  
-  // Merge existing with defaults/placeholders
-  localTraits.value = defaults.map((def, i) => {
-    if (existing[i]) {
-      // Use existing, ensure it has active property
-      return { ...existing[i], active: existing[i].active ?? true }
-    }
-    return def
+  return defaults.map((def, i) => {
+    const base = existing[i] ? { ...existing[i] } : def
+    return { ...base, active: props.breakthrough >= TRAIT_UNLOCK[i] }
   })
+})
+
+const traitUnlockLabel = (idx: number) => {
+  const req = TRAIT_UNLOCK[idx]
+  if (req === 0) return '固有特性 (永久生效)'
+  return `需要 ${req} 星突破解鎖`
 }
 
-watch(() => props.hero, (newHero) => {
-  initializeTraits()
+// Max breakthrough is capped by rarity: S(5★)→5, A(4★)→4, B(3★)→3.
+const maxBreakthrough = computed(() => {
+  const r = Number(props.hero?.rarity ?? 0)
+  if (r >= 5) return 5
+  if (r === 4) return 4
+  return 3
+})
+
+watch(() => props.hero, (newHero, oldHero) => {
   if (newHero?.stats) {
     emit('update:stats', { ...newHero.stats })
   }
+  // Reset breakthrough when swapping to a different hero (not on initial mount)
+  if (oldHero && newHero?.name !== oldHero?.name) {
+    emit('update:breakthrough', 0)
+  } else if (newHero && props.breakthrough > maxBreakthrough.value) {
+    // Clamp on initial load if persisted value exceeds the new cap
+    emit('update:breakthrough', maxBreakthrough.value)
+  }
 }, { immediate: true })
 
-const toggleTrait = (index: number) => {
-  // First trait usually locked, but user asked for "click to enable" logic for all? 
-  // "第一個一定只會 enable" -> First one always enabled.
-  if (index === 0) return 
-
-  const trait = localTraits.value[index]
-  if (trait) {
-    trait.active = !trait.active
-  }
+// Breakthrough stars: click star N → set to N; click the current value → reset to 0.
+const setBreakthrough = (n: number) => {
+  if (n > maxBreakthrough.value) return
+  const next = props.breakthrough === n ? 0 : n
+  emit('update:breakthrough', next)
 }
+
+// Track viewport so the mobile-only popover is fully removed from DOM on desktop
+// (el-popover's reference wrapper ignores md:hidden, leaving a ghost star visible).
+const isDesktop = ref(false)
+let mq: MediaQueryList | null = null
+const updateIsDesktop = (e: MediaQueryListEvent | MediaQueryList) => {
+  isDesktop.value = e.matches
+}
+onMounted(() => {
+  mq = window.matchMedia('(min-width: 768px)')
+  isDesktop.value = mq.matches
+  mq.addEventListener('change', updateIsDesktop)
+})
+onBeforeUnmount(() => {
+  mq?.removeEventListener('change', updateIsDesktop)
+})
+
+// Hover-fill preview: when hovering star n, show n stars lit regardless of breakthrough.
+const hoverStar = ref(0)
+
+// Mobile popover ref so we can dismiss after a pick.
+const popoverRef = ref<any>(null)
+const onMobilePickStar = (n: number) => {
+  const wasReset = props.breakthrough === n
+  setBreakthrough(n)
+  // Keep popover open if user clicked the current value (reset gesture); else close.
+  if (!wasReset) popoverRef.value?.hide?.()
+}
+const displayStarCount = computed(() =>
+  hoverStar.value > 0 ? hoverStar.value : props.breakthrough
+)
 
 // Equip Traits Logic
 const equipTraitDialogVisible = ref(false)
@@ -677,3 +809,46 @@ const handleDrop = (event: DragEvent, targetSlotIdx: number) => {
   }
 }
 </script>
+
+<style scoped>
+.breakthrough-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease;
+}
+.breakthrough-star .break-star-svg {
+  fill: #e5e7eb; /* gray-200 */
+  stroke: #9ca3af; /* gray-400 */
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  transition: fill 0.25s ease, stroke 0.2s ease, transform 0.2s ease;
+}
+.breakthrough-star:hover {
+  transform: scale(1.18) rotate(-4deg);
+}
+.breakthrough-star:hover .break-star-svg {
+  fill: #fde68a; /* preview amber-200 */
+  stroke: #f59e0b;
+}
+.breakthrough-star.is-filled .break-star-svg {
+  fill: url(#breakStarGrad);
+  stroke: #7f1d1d; /* red-900 outline for definition */
+  stroke-width: 1;
+}
+.breakthrough-star.is-filled {
+  animation: break-star-pop 0.35s ease;
+}
+.breakthrough-star.is-filled:hover {
+  transform: scale(1.22) rotate(-6deg);
+}
+@keyframes break-star-pop {
+  0%   { transform: scale(0.6) rotate(-20deg); }
+  60%  { transform: scale(1.25) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+</style>
