@@ -7,6 +7,8 @@ Stage 2: Crawl each hero detail page → stats, traits, skill info
 Outputs:
     data/heroes_crawled.yaml  — hero data (skills as name references only)
     data/skills_crawled.yaml  — skill details (type, rarity, target, rate, description)
+    data/skills.yaml          — canonical skills (raw section updated)
+    data/traits.yaml          — canonical traits (raw section updated)
 
 Usage:
     python script/crawl_heroes.py [options]
@@ -37,6 +39,7 @@ from tqdm import tqdm
 from paths import (
     CRAWL_CACHE_DIR, HERO_INDEX_CACHE,
     HEROES_CRAWLED, SKILLS_CRAWLED, ASSEMBLY_CRAWLED,
+    SKILLS_CANONICAL, TRAITS_CANONICAL,
 )
 
 DEFAULT_INDEX_URL = "https://game8.jp/nobunaga-shinsen/737773"
@@ -430,6 +433,68 @@ def save_outputs(heroes: list[dict], heroes_path: str, skills_path: str, assembl
     return hero_list, skills_db, assembly_db
 
 
+def sync_canonical(hero_list: list[dict], skills_db: dict[str, dict]):
+    """Update canonical files' raw sections with freshly crawled data.
+
+    Preserves existing text/vars/battle/passive sections — only overwrites raw.
+    New entries (not yet in canonical) get a raw-only stub so llm_translate
+    picks them up on the next run.
+    """
+    # --- Skills ---
+    if SKILLS_CANONICAL.exists():
+        canonical = yaml.safe_load(SKILLS_CANONICAL.read_text("utf-8")) or {}
+    else:
+        canonical = {}
+
+    new_skills = 0
+    for name, crawled in skills_db.items():
+        if name not in canonical:
+            canonical[name] = {}
+            new_skills += 1
+        canonical[name]["raw"] = crawled
+
+    SKILLS_CANONICAL.parent.mkdir(parents=True, exist_ok=True)
+    with open(SKILLS_CANONICAL, "w", encoding="utf-8") as f:
+        yaml.dump(canonical, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    tqdm.write(f"[sync] {len(skills_db)} skills → {SKILLS_CANONICAL} ({new_skills} new)")
+
+    # --- Traits (collected from hero detail pages) ---
+    traits_db: dict[str, dict] = {}
+    for h in hero_list:
+        for t in h.get("traits") or []:
+            name = t.get("name")
+            if not name or name in traits_db:
+                continue
+            traits_db[name] = {
+                "name": name,
+                "description": t.get("description", ""),
+                "source_heroes": [h["name"]],
+            }
+
+    # Append additional source heroes for duplicate traits
+    for h in hero_list:
+        for t in h.get("traits") or []:
+            name = t.get("name")
+            if name and name in traits_db and h["name"] not in traits_db[name]["source_heroes"]:
+                traits_db[name]["source_heroes"].append(h["name"])
+
+    if TRAITS_CANONICAL.exists():
+        canonical_t = yaml.safe_load(TRAITS_CANONICAL.read_text("utf-8")) or {}
+    else:
+        canonical_t = {}
+
+    new_traits = 0
+    for name, crawled in traits_db.items():
+        if name not in canonical_t:
+            canonical_t[name] = {}
+            new_traits += 1
+        canonical_t[name]["raw"] = crawled
+
+    with open(TRAITS_CANONICAL, "w", encoding="utf-8") as f:
+        yaml.dump(canonical_t, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    tqdm.write(f"[sync] {len(traits_db)} traits → {TRAITS_CANONICAL} ({new_traits} new)")
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
@@ -519,6 +584,9 @@ def crawl(
     tqdm.write(f"\n[done] {len(hero_list)} heroes → {heroes_path}")
     tqdm.write(f"[done] {len(skills_db)} skills → {skills_path}")
     tqdm.write(f"[done] {len(assembly_db)} assembly skills → {assembly_path}")
+
+    # Sync raw sections into canonical files
+    sync_canonical(hero_list, skills_db)
 
     return hero_list, skills_db, assembly_db
 
