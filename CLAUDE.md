@@ -15,12 +15,12 @@ game8.jp → crawl_heroes.py → llm_translate.py → build_frontend_data.py →
 
 | Script | Purpose | Run |
 |--------|---------|-----|
-| `crawl_heroes.py` | Crawl game8.jp for heroes/skills/traits | `python3 script/crawl_heroes.py --detail` |
-| `llm_translate.py` | Batch translate JP→CHT via Gemini CLI | `python3 script/llm_translate.py --batch-size 5` |
+| `crawl_heroes.py` | Crawl game8.jp for heroes/skills/traits | `uv run script/crawl_heroes.py --detail` |
+| `llm_translate.py` | Batch translate JP→CHT via Gemini CLI | `uv run script/llm_translate.py --batch-size 5` |
 | `llm_core.py` | Shared LLM infra (prompts, Gemini CLI, cache, parsing) | Imported by other scripts |
-| `build_frontend_data.py` | Merge crawled+translated+overrides → JSON | `python3 script/build_frontend_data.py` |
-| `check_data_integrity.py` | Validate references, scan for untranslated JP kana, cross-check crawled vs translated keys | `python3 script/check_data_integrity.py` |
-| `override.py` | Interactive CLI for manual skill/hero additions | `python3 script/override.py` |
+| `build_frontend_data.py` | Merge crawled+translated+overrides → JSON | `uv run script/build_frontend_data.py` |
+| `check_data_integrity.py` | Validate references, scan for untranslated JP kana, cross-check crawled vs translated keys | `uv run script/check_data_integrity.py` |
+| `override.py` | Interactive CLI for manual skill/hero additions | `uv run script/override.py` |
 
 ### Data Flow
 
@@ -46,12 +46,12 @@ npm run build        # Build data + production build
 npm run data         # Build data only (build_frontend_data + check_data_integrity)
 
 # Pipeline
-python3 script/crawl_heroes.py --detail                    # Full crawl
-python3 script/llm_translate.py --batch-size 5             # Translate all (skills+traits+heroes)
-python3 script/llm_translate.py --skills --force            # Re-translate ALL skills (ignores cache). With --name/--limit, --force only refreshes the matching subset and never truncates the YAML.
-python3 script/llm_translate.py --heroes                    # Translate hero names only
-python3 script/override.py                                  # Interactive override CLI
-python3 script/build_frontend_data.py                       # Build frontend JSON
+uv run script/crawl_heroes.py --detail                    # Full crawl
+uv run script/llm_translate.py --batch-size 5             # Translate all (skills+traits+heroes)
+uv run script/llm_translate.py --skills --force            # Re-translate ALL skills (ignores cache). With --name/--limit, --force only refreshes the matching subset and never truncates the YAML.
+uv run script/llm_translate.py --heroes                    # Translate hero names only
+uv run script/override.py                                  # Interactive override CLI
+uv run script/build_frontend_data.py                       # Build frontend JSON
 ```
 
 ## Post-processing (build_frontend_data.py)
@@ -88,7 +88,7 @@ All prompts share `COMMON_RULES` from `llm_core.py` which enforces:
 
 ## Environment
 
-- Python 3.10+ with `pyyaml`, `beautifulsoup4`, `requests`, `tqdm`, `python-dotenv`
+- Python 3.10+ managed via [uv](https://docs.astral.sh/uv/) (`uv sync` to install deps from `pyproject.toml`)
 - Node 20+ with Vue 3, Element Plus, TailwindCSS
 - Gemini CLI (`gemini`) for LLM calls — requires `GOOGLE_CLOUD_PROJECT` in `.env`
 
