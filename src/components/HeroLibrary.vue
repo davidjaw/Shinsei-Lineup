@@ -85,6 +85,20 @@
             >{{ c }}</button>
           </div>
         </div>
+        <div class="flex items-center gap-1">
+          <span class="text-xs text-gray-400 w-8 flex-shrink-0">兵種</span>
+          <div class="flex gap-1 flex-wrap">
+            <button
+              v-for="tt in TROOP_TYPES"
+              :key="'troop-' + tt"
+              class="px-2 py-0.5 text-xs rounded border transition-colors"
+              :class="selectedTroopTypes.has(tt)
+                ? 'bg-red-500 text-white border-red-500'
+                : 'bg-white text-gray-500 border-gray-300 hover:border-red-300'"
+              @click="toggleTroopType(tt)"
+            >{{ tt }}</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -132,6 +146,7 @@
 import { ref, computed, PropType, watch } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import { useData, Hero } from '../composables/useData'
+import { TROOP_TYPES } from '../constants/traits'
 import HeroCard from './HeroCard.vue'
 
 const { heroes, loading } = useData()
@@ -159,6 +174,7 @@ const showFilters = ref(false)
 const selectedCosts = ref<Set<number>>(new Set())
 const selectedFactions = ref<Set<string>>(new Set())
 const selectedClans = ref<Set<string>>(new Set())
+const selectedTroopTypes = ref<Set<string>>(new Set())
 
 const factions = computed(() => {
   return [...new Set(heroes.value.map(h => h.faction))].filter(Boolean).sort()
@@ -195,13 +211,26 @@ const toggleClan = (clan: string) => {
   selectedClans.value = next
 }
 
-const activeFilterCount = computed(() => selectedCosts.value.size + selectedFactions.value.size + selectedClans.value.size)
+const toggleTroopType = (tt: string) => {
+  const next = new Set(selectedTroopTypes.value)
+  next.has(tt) ? next.delete(tt) : next.add(tt)
+  selectedTroopTypes.value = next
+}
+
+const heroHasTroopType = (h: Hero, types: Set<string>): boolean => {
+  return (h.traits || []).some(t =>
+    t.affinity?.troop_types?.some(tt => types.has(tt))
+  )
+}
+
+const activeFilterCount = computed(() => selectedCosts.value.size + selectedFactions.value.size + selectedClans.value.size + selectedTroopTypes.value.size)
 const hasActiveFilters = computed(() => activeFilterCount.value > 0)
 
 const resetFilters = () => {
   selectedCosts.value = new Set()
   selectedFactions.value = new Set()
   selectedClans.value = new Set()
+  selectedTroopTypes.value = new Set()
 }
 
 const filteredHeroes = computed(() => {
@@ -210,6 +239,7 @@ const filteredHeroes = computed(() => {
     if (selectedFactions.value.size > 0 && !selectedFactions.value.has(h.faction)) return false
     if (selectedCosts.value.size > 0 && !selectedCosts.value.has(h.cost)) return false
     if (selectedClans.value.size > 0 && (!h.clan || !selectedClans.value.has(h.clan))) return false
+    if (selectedTroopTypes.value.size > 0 && !heroHasTroopType(h, selectedTroopTypes.value)) return false
     if (props.mode === 'select' && props.filterOwned && !props.ownedHeroes.includes(h.name)) return false
     return true
   })
