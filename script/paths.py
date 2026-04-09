@@ -18,10 +18,6 @@ TRAITS_CRAWLED = DATA_DIR / "traits_crawled.yaml"
 ASSEMBLY_CRAWLED = DATA_DIR / "assembly_skills_crawled.yaml"
 
 # LLM outputs
-SKILLS_TRANSLATED = DATA_DIR / "skills_translated.yaml"
-SKILLS_BATTLE = DATA_DIR / "skills_battle.yaml"
-TRAITS_TRANSLATED = DATA_DIR / "traits_translated.yaml"
-TRAITS_BATTLE = DATA_DIR / "traits_battle.yaml"
 HEROES_TRANSLATED = DATA_DIR / "heroes_translated.yaml"
 
 # Canonical (unified files — raw + vars + text + battle/passive per entry)

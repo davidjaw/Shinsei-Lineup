@@ -592,7 +592,7 @@ heroes:
     faction: 上杉
     clan: 上杉
     gender: 男
-    portrait: https://i.imgur.com/6sCMpSs.png
+    portrait: https://i.imgur.com/VYehA8W.png
     detail_url: ''
     unique_skill: 越後二天
     teachable_skill: 勇猛無前
@@ -625,7 +625,7 @@ heroes:
     faction: 群雄
     clan: 大友
     gender: 女
-    portrait: https://i.imgur.com/0BHuLVZ.png
+    portrait: https://i.imgur.com/uHjLFYR.png
     detail_url: ''
     unique_skill: 疾風迅雷
     teachable_skill: 惠風和雨
@@ -660,7 +660,7 @@ heroes:
     faction: 群雄
     clan: 鈴木
     gender: 男
-    portrait: https://i.imgur.com/k5BMzou.png
+    portrait: https://i.imgur.com/R8jV3D5.png
     detail_url: ''
     unique_skill: 彈嵐雨霰
     teachable_skill: 電光石火
@@ -696,7 +696,7 @@ heroes:
     faction: 豐臣
     clan: 豐臣
     gender: 男
-    portrait: https://i.imgur.com/Uusk4ZH.png
+    portrait: https://i.imgur.com/HJ1HKTU.png
     detail_url: ''
     unique_skill: 剛毅木訥
     teachable_skill: 電光石火
@@ -729,7 +729,7 @@ heroes:
     faction: 武田
     clan: 真田
     gender: 男
-    portrait: https://i.imgur.com/QnwbXSe.png
+    portrait: https://i.imgur.com/Bc0WPgD.png
     detail_url: ''
     unique_skill: 表裏比興
     teachable_skill: 瞬息萬變
@@ -764,7 +764,7 @@ heroes:
     faction: 織田
     clan: 織田
     gender: 女
-    portrait: https://i.imgur.com/DfhYuCR.png
+    portrait: https://i.imgur.com/D1WjMi8.png
     detail_url: ''
     unique_skill: 松柏之操
     teachable_skill: 奇策縱橫
@@ -797,7 +797,7 @@ heroes:
     faction: 群雄
     clan: 三好
     gender: 男
-    portrait: https://i.imgur.com/lSChHNF.png
+    portrait: https://i.imgur.com/rBxWcTp.png
     detail_url: ''
     unique_skill: 一舟軒
     teachable_skill: 金城湯池
@@ -830,7 +830,7 @@ heroes:
     faction: 群雄
     clan: 伊達
     gender: 男
-    portrait: https://i.imgur.com/xY0E6uF.png
+    portrait: https://i.imgur.com/k5t29MK.png
     detail_url: ''
     unique_skill: 樽俎折衝
     teachable_skill: 金城湯池

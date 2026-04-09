@@ -22,8 +22,8 @@ import yaml
 from paths import (
     HEROES_JSON, SKILLS_JSON,
     HEROES_CRAWLED, HEROES_TRANSLATED,
-    SKILLS_CRAWLED, SKILLS_TRANSLATED,
-    TRAITS_CRAWLED, TRAITS_TRANSLATED,
+    SKILLS_CRAWLED, TRAITS_CRAWLED,
+    SKILLS_CANONICAL, TRAITS_CANONICAL,
 )
 
 # Hiragana + Katakana. JP-only — Han characters are shared with CHT and would
@@ -113,14 +113,14 @@ def check():
     for name, field, sample in untranslated_heroes:
         errors.append(f"Hero '{name}' {field} contains JP kana: {sample}")
 
-    # ---- Crawled vs translated key cross-check -----------------------------
+    # ---- Crawled vs canonical key cross-check --------------------------------
     crawled_skills = _load_yaml(SKILLS_CRAWLED)
-    translated_skills = _load_yaml(SKILLS_TRANSLATED)
-    missing_skills = sorted(set(crawled_skills) - set(translated_skills))
+    canonical_skills = _load_yaml(SKILLS_CANONICAL)
+    missing_skills = sorted(set(crawled_skills) - set(canonical_skills))
 
     crawled_traits = _load_yaml(TRAITS_CRAWLED)
-    translated_traits = _load_yaml(TRAITS_TRANSLATED)
-    missing_traits = sorted(set(crawled_traits) - set(translated_traits))
+    canonical_traits = _load_yaml(TRAITS_CANONICAL)
+    missing_traits = sorted(set(crawled_traits) - set(canonical_traits))
 
     crawled_heroes_raw = yaml.safe_load(HEROES_CRAWLED.read_text("utf-8")) or []
     translated_heroes = _load_yaml(HEROES_TRANSLATED)
@@ -128,9 +128,9 @@ def check():
     missing_heroes = sorted(crawled_hero_names - set(translated_heroes))
 
     for k in missing_skills:
-        errors.append(f"Skill '{k}' is in skills_crawled.yaml but missing from skills_translated.yaml")
+        errors.append(f"Skill '{k}' is in skills_crawled.yaml but missing from skills.yaml")
     for k in missing_traits:
-        errors.append(f"Trait '{k}' is in traits_crawled.yaml but missing from traits_translated.yaml")
+        errors.append(f"Trait '{k}' is in traits_crawled.yaml but missing from traits.yaml")
     for k in missing_heroes:
         errors.append(f"Hero '{k}' is in heroes_crawled.yaml but missing from heroes_translated.yaml")
 

@@ -1,15 +1,14 @@
 """
-Build frontend JSON from crawled + translated YAML data.
+Build frontend JSON from crawled + canonical YAML data.
 
 Reads:
   data/heroes_crawled.yaml
-  data/skills_crawled.yaml
-  data/skills_translated.yaml
-  data/traits_translated.yaml
+  data/skills.yaml        (canonical)
+  data/traits.yaml        (canonical)
 
 Outputs:
-  data/heroes.json  (array of heroes)
-  data/skills.json  (array of skills)
+  .build/heroes.json  (array of heroes)
+  .build/skills.json  (array of skills)
 
 Usage:
     python script/build_frontend_data.py
@@ -22,8 +21,7 @@ from pathlib import Path
 
 from llm_core import clean_strings, load_overrides
 from paths import (
-    HEROES_CRAWLED, HEROES_TRANSLATED, SKILLS_CRAWLED,
-    SKILLS_TRANSLATED, SKILLS_BATTLE, TRAITS_TRANSLATED,
+    HEROES_CRAWLED, HEROES_TRANSLATED,
     SKILLS_CANONICAL, TRAITS_CANONICAL,
     STATUSES_YAML,
     HEROES_JSON, SKILLS_JSON, STATUSES_JSON,
@@ -68,12 +66,6 @@ def deep_merge(base: dict, override: dict) -> dict:
             result[k] = v
     return result
 
-
-def _load_yaml_optional(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text("utf-8"))
-    return data if isinstance(data, dict) else {}
 
 
 
@@ -379,23 +371,16 @@ def _extract_commander_desc(tr: dict, battle: dict) -> str:
     return ""
 
 
-def build_skills(skills_data: dict, *, use_canonical: bool = False) -> list[dict]:
-    """Build frontend skill list from data dict.
-    If use_canonical, each entry has raw/vars/text/battle sub-keys.
-    Otherwise, requires crawled/translated/battle dicts merged externally."""
+def build_skills(skills_data: dict) -> list[dict]:
+    """Build frontend skill list from canonical data dict.
+    Each entry has raw/vars/text/battle sub-keys."""
     out = []
 
     for key, entry in skills_data.items():
-        if use_canonical:
-            cr = entry.get("raw", {})
-            tr = entry.get("text", {})
-            bt = entry.get("battle", {})
-            vars_dict = entry.get("vars", {})
-        else:
-            cr = entry.get("_crawled", {})
-            tr = entry.get("_translated", {})
-            bt = entry.get("_battle", {})
-            vars_dict = tr.get("vars", {})
+        cr = entry.get("raw", {})
+        tr = entry.get("text", {})
+        bt = entry.get("battle", {})
+        vars_dict = entry.get("vars", {})
 
         tr_desc = (tr.get("description") or "").strip()
         if tr_desc:
@@ -446,36 +431,15 @@ def main():
     if ht_path.exists():
         heroes_translated = yaml.safe_load(ht_path.read_text("utf-8")) or {}
 
-    # Prefer canonical files if available, fall back to legacy 3-file layout
-    use_canonical = SKILLS_CANONICAL.exists() and TRAITS_CANONICAL.exists()
-
-    if use_canonical:
-        skills_data = yaml.safe_load(SKILLS_CANONICAL.read_text("utf-8")) or {}
-        traits_data = yaml.safe_load(TRAITS_CANONICAL.read_text("utf-8")) or {}
-        # Build skill name map from canonical text.name
-        skill_name_map = {
-            jp_key: entry.get("text", {}).get("name", jp_key)
-            for jp_key, entry in skills_data.items()
-        }
-        print(f"[info] Using canonical files: {SKILLS_CANONICAL}, {TRAITS_CANONICAL}")
-    else:
-        crawled = yaml.safe_load(SKILLS_CRAWLED.read_text("utf-8"))
-        translated = yaml.safe_load(SKILLS_TRANSLATED.read_text("utf-8"))
-        traits_data = yaml.safe_load(TRAITS_TRANSLATED.read_text("utf-8"))
-        battle = _load_yaml_optional(SKILLS_BATTLE)
-        # Package legacy into a unified dict shape for build_skills
-        skills_data = {}
-        for key in crawled:
-            skills_data[key] = {
-                "_crawled": crawled.get(key, {}),
-                "_translated": translated.get(key, {}),
-                "_battle": battle.get(key, {}),
-            }
-        skill_name_map = {jp_key: tr.get("name", jp_key) for jp_key, tr in translated.items()}
-        print(f"[info] Using legacy files (canonical not found)")
+    skills_data = yaml.safe_load(SKILLS_CANONICAL.read_text("utf-8")) or {}
+    traits_data = yaml.safe_load(TRAITS_CANONICAL.read_text("utf-8")) or {}
+    skill_name_map = {
+        jp_key: entry.get("text", {}).get("name", jp_key)
+        for jp_key, entry in skills_data.items()
+    }
 
     heroes = build_heroes(heroes_raw, traits_data, skill_name_map, heroes_translated)
-    skills = build_skills(skills_data, use_canonical=use_canonical)
+    skills = build_skills(skills_data)
 
     # Apply overrides (highest priority)
     overrides = load_overrides()
@@ -490,17 +454,15 @@ def main():
     # Enrich override-added hero traits with affinity from canonical traits.yaml.
     # Override heroes have inline trait dicts that lack affinity; the canonical
     # traits.yaml (populated by migration) has the structured data.
-    if use_canonical:
-        for h in heroes:
-            for t in h.get("traits") or []:
-                if t.get("affinity"):
-                    continue  # already has it
-                # Look up by CHT name or JP name
-                canon = traits_data.get(t.get("name_jp", "")) or traits_data.get(t.get("name", ""))
-                if canon and isinstance(canon, dict):
-                    passive = canon.get("passive")
-                    if isinstance(passive, dict) and passive.get("affinity"):
-                        t["affinity"] = passive["affinity"]
+    for h in heroes:
+        for t in h.get("traits") or []:
+            if t.get("affinity"):
+                continue
+            canon = traits_data.get(t.get("name_jp", "")) or traits_data.get(t.get("name", ""))
+            if canon and isinstance(canon, dict):
+                passive = canon.get("passive")
+                if isinstance(passive, dict) and passive.get("affinity"):
+                    t["affinity"] = passive["affinity"]
 
     # Post-process: normalize text, fix types, sort
     heroes, skills = postprocess(heroes, skills)

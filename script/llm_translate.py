@@ -25,7 +25,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from tqdm import tqdm
 
-from claude_test import call_claude
 from llm_core import (
     CANONICAL_STATUSES, COMMON_RULES, SKILL_TAGS, DEFAULT_MODEL,
     call_gemini, parse_llm_output, autofix_frontend,
@@ -33,8 +32,6 @@ from llm_core import (
 )
 from paths import (
     HEROES_CRAWLED, SKILLS_CRAWLED, TRAITS_CRAWLED,
-    SKILLS_TRANSLATED, SKILLS_BATTLE,
-    TRAITS_TRANSLATED, TRAITS_BATTLE,
     SKILLS_CANONICAL, TRAITS_CANONICAL,
     HEROES_TRANSLATED,
     TRANSLATION_FAILURES_JSON,
@@ -771,20 +768,6 @@ def process_skills(
 
     _save_yaml(canonical_path, canonical)
 
-    # Also write legacy files for backward compat until build_frontend_data is switched
-    frontend_skills = _load_existing_yaml(SKILLS_TRANSLATED)
-    battle_skills = _load_existing_yaml(SKILLS_BATTLE)
-    for name, data in all_results.items():
-        if data.get("text"):
-            fe = dict(data["text"])
-            if data.get("vars"):
-                fe["vars"] = data["vars"]
-            frontend_skills[name] = fe
-        if data.get("battle"):
-            battle_skills[name] = data["battle"]
-    _save_yaml(SKILLS_TRANSLATED, frontend_skills)
-    _save_yaml(SKILLS_BATTLE, battle_skills)
-
     tqdm.write(f"\n[done] {len(canonical)} skills ({updated} updated) → {canonical_path}")
     if all_failed:
         tqdm.write(f"[warn] {len(all_failed)} failed:")
@@ -892,32 +875,6 @@ def process_traits(
         updated += 1
 
     _save_yaml(canonical_path, canonical)
-
-    # Also write legacy files for backward compat until build_frontend_data is switched
-    frontend_traits = _load_existing_yaml(TRAITS_TRANSLATED)
-    battle_traits = _load_existing_yaml(TRAITS_BATTLE)
-    for name, data in all_results.items():
-        text = data.get("text") or data.get("frontend") or {}
-        if text:
-            fe = dict(text)
-            if data.get("vars"):
-                fe["vars"] = data["vars"]
-            frontend_traits[name] = fe
-        # Legacy battle format: flat troop fields, not nested PassiveBlock
-        if data.get("battle"):
-            battle_traits[name] = data["battle"]
-        elif data.get("passive") and data["passive"].get("affinity"):
-            aff = data["passive"]["affinity"]
-            battle_traits[name] = {
-                "type": "特性",
-                "category": "troop_affinity",
-                "troop_type": aff.get("troop_types", []),
-                "level": aff.get("level", 0),
-                "level_cap_bonus": aff.get("level_cap_bonus", 0),
-            }
-
-    _save_yaml(TRAITS_TRANSLATED, frontend_traits)
-    _save_yaml(TRAITS_BATTLE, battle_traits)
 
     tqdm.write(f"\n[done] {len(canonical)} traits ({updated} updated) → {canonical_path}")
     if all_failed:
@@ -1056,102 +1013,6 @@ def process_heroes(
     return all_results
 
 
-def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model: str = "haiku"):
-    """Run prompts through Claude CLI for testing. No files saved."""
-    import random
-
-    if kind == "skills":
-        data = yaml.safe_load(Path(SKILLS_CRAWLED).read_text("utf-8"))
-        items = list(data.items())
-        samples = random.sample(items, min(num, len(items)))
-        batches = [samples[i:i + batch_size] for i in range(0, len(samples), batch_size)]
-        for i, batch in enumerate(batches):
-            prompt = build_batch_prompt(batch) if len(batch) > 1 else build_single_prompt(batch[0][1])
-            names = ', '.join(n for n, _ in batch)
-            print(f"\n{'='*60}")
-            print(f"BATCH {i+1}/{len(batches)}: {names}")
-            print(f"{'='*60}")
-            try:
-                raw = call_claude(prompt, model=model)
-                parsed = parse_llm_output(raw)
-                if parsed is None:
-                    print(f"[PARSE FAIL] Raw:\n{raw[:500]}")
-                    continue
-                # Validate each skill
-                for name, _ in batch:
-                    entry = parsed.get(name)
-                    if not entry:
-                        # Try positional
-                        vals = list(parsed.values())
-                        idx = [n for n, _ in batch].index(name)
-                        entry = vals[idx] if idx < len(vals) else None
-                    if not entry:
-                        print(f"  {name}: MISSING from output")
-                        continue
-                    errors = validate_skill_entry(entry)
-                    quality = validate_entry_quality(entry) if not errors else []
-                    if errors or quality:
-                        print(f"  {name}: {'|'.join(errors + quality)}")
-                    else:
-                        fe = entry.get("frontend", {})
-                        print(f"  {name} → {fe.get('name', '?')} | {fe.get('type', '?')} | brief: {fe.get('brief_description', '?')}")
-                        print(f"    tags: {fe.get('tags', [])}")
-                        desc = fe.get('description', '')
-                        print(f"    desc: {desc[:80]}{'...' if len(desc) > 80 else ''}")
-            except Exception as e:
-                print(f"  [ERROR] {e}")
-    elif kind == "traits":
-        data = yaml.safe_load(Path(TRAITS_CRAWLED).read_text("utf-8"))
-        items = list(data.items())
-        samples = random.sample(items, min(num, len(items)))
-        batches = [samples[i:i + batch_size] for i in range(0, len(samples), batch_size)]
-        for i, batch in enumerate(batches):
-            prompt = build_trait_batch_prompt(batch) if len(batch) > 1 else build_trait_single_prompt(batch[0][1])
-            names = ', '.join(n for n, _ in batch)
-            print(f"\n{'='*60}")
-            print(f"BATCH {i+1}/{len(batches)}: {names}")
-            print(f"{'='*60}")
-            try:
-                raw = call_claude(prompt, model=model)
-                parsed = parse_llm_output(raw)
-                if parsed is None:
-                    print(f"[PARSE FAIL] Raw:\n{raw[:500]}")
-                else:
-                    for name, _ in batch:
-                        entry = parsed.get(name)
-                        if entry:
-                            fe = entry.get("frontend", {})
-                            print(f"  {name} → {fe.get('name', '?')}: {fe.get('description', '?')[:60]}")
-                        else:
-                            print(f"  {name}: MISSING")
-            except Exception as e:
-                print(f"  [ERROR] {e}")
-    elif kind == "heroes":
-        data = yaml.safe_load(Path(HEROES_CRAWLED).read_text("utf-8"))
-        items = [(h["name"], h.get("faction", ""), h.get("clan", "")) for h in data if h.get("name")]
-        samples = random.sample(items, min(num, len(items)))
-        prompt = build_hero_batch_prompt(samples)
-        print(f"\n{'='*60}")
-        print(f"HEROES ({len(samples)} samples)")
-        print(f"{'='*60}")
-        try:
-            raw = call_claude(prompt, model=model)
-            parsed = parse_llm_output(raw)
-            if parsed is None:
-                print(f"[PARSE FAIL] Raw:\n{raw[:500]}")
-            else:
-                for name, _, _ in samples:
-                    entry = parsed.get(name)
-                    if entry:
-                        print(f"  {name} → {entry.get('name', '?')} | {entry.get('faction', '?')}")
-                    else:
-                        print(f"  {name}: MISSING")
-        except Exception as e:
-            print(f"  [ERROR] {e}")
-
-    print(f"\n[claude-test] Done. No files were modified.")
-
-
 def main():
     p = argparse.ArgumentParser(description="LLM translate + extract skills, traits, and heroes")
     p.add_argument("--skills", action="store_true", help="Process skills only")
@@ -1165,14 +1026,7 @@ def main():
     p.add_argument("--parallel", type=int, default=1, help="Number of batches to dispatch concurrently (default: 1, recommended max: 5)")
     p.add_argument("--preserve-vars", action="store_true", help="Keep existing vars; abort if LLM output has different keys")
     p.add_argument("--force-vars", action="store_true", help="Accept LLM vars even under --preserve-vars (override conflict)")
-    p.add_argument("--claude-test", action="store_true", help="Print prompts for Claude Code testing (no LLM call, no file writes)")
-    p.add_argument("--test-num", type=int, default=10, help="Number of random samples for --claude-test")
     args = p.parse_args()
-
-    if args.claude_test:
-        kind = "skills" if args.skills else "traits" if args.traits else "heroes" if args.heroes else "skills"
-        claude_test(kind=kind, num=args.test_num, batch_size=args.batch_size, model=args.model)
-        return
 
     # Default: all if none specified
     none_specified = not args.skills and not args.traits and not args.heroes

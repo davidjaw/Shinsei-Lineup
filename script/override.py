@@ -28,7 +28,7 @@ from llm_core import (
 )
 from paths import (
     OVERRIDES_YAML, SKILLS_CRAWLED,
-    SKILLS_TRANSLATED, TRAITS_TRANSLATED,
+    SKILLS_CANONICAL, TRAITS_CANONICAL,
     HEROES_JSON, SKILLS_JSON,
 )
 
@@ -46,17 +46,17 @@ class GoBack(Exception):
 
 
 def load_existing_skills() -> dict:
-    """Load translated skills for reference during modifications."""
-    if SKILLS_TRANSLATED.exists():
-        data = yaml.safe_load(SKILLS_TRANSLATED.read_text("utf-8"))
+    """Load canonical skills for reference during modifications."""
+    if SKILLS_CANONICAL.exists():
+        data = yaml.safe_load(SKILLS_CANONICAL.read_text("utf-8"))
         return data if isinstance(data, dict) else {}
     return {}
 
 
 def load_existing_traits() -> dict:
-    """Load translated traits for lookup during hero creation."""
-    if TRAITS_TRANSLATED.exists():
-        data = yaml.safe_load(TRAITS_TRANSLATED.read_text("utf-8"))
+    """Load canonical traits for lookup during hero creation."""
+    if TRAITS_CANONICAL.exists():
+        data = yaml.safe_load(TRAITS_CANONICAL.read_text("utf-8"))
         return data if isinstance(data, dict) else {}
     return {}
 
