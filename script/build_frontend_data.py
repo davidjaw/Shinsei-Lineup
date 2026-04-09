@@ -252,6 +252,10 @@ def postprocess_hero(hero: dict) -> dict:
             t["description"] = normalize_status_refs(t["description"])
         if t.get("vars"):
             t["vars"] = normalize_vars(t["vars"])
+        # Re-derive rank from name so overrides without an explicit rank get tiered too.
+        # Overrides that explicitly set "rank" still win (deep_merge already applied).
+        if not t.get("rank"):
+            t["rank"] = infer_trait_rank(t.get("name") or t.get("name_jp", ""))
     return hero
 
 
@@ -263,7 +267,20 @@ def postprocess(heroes: list[dict], skills: list[dict]) -> tuple[list[dict], lis
     return heroes, skills
 
 
-TRAIT_RANKS = ["S", "A", "B", "C"]
+def infer_trait_rank(name: str) -> str:
+    """Rule-based tier from trait name suffix:
+    III → A, II → B, I → C, anything else → S.
+    Match the longest suffix first to avoid 'III' matching as 'I'.
+    """
+    if not name:
+        return "S"
+    n = name.rstrip()
+    for suffix, rank in (("III", "A"), ("Ⅲ", "A"),
+                         ("II", "B"),  ("Ⅱ", "B"),
+                         ("I", "C"),   ("Ⅰ", "C")):
+        if n.endswith(suffix):
+            return rank
+    return "S"
 
 
 def build_heroes(heroes_raw: list[dict], traits_translated: dict, skill_name_map: dict, heroes_translated: dict) -> list[dict]:
@@ -272,15 +289,18 @@ def build_heroes(heroes_raw: list[dict], traits_translated: dict, skill_name_map
     out = []
     for h in heroes_raw:
         traits = []
-        for i, t in enumerate(h.get("traits") or []):
+        for t in h.get("traits") or []:
             jp_name = t["name"]
             tr = traits_translated.get(jp_name, {})
+            cht_name = tr.get("name", jp_name)
+            # Rank by name suffix on the CHT name (falls back to JP if untranslated).
+            rank = infer_trait_rank(cht_name) if cht_name != jp_name else infer_trait_rank(jp_name)
             traits.append({
-                "name": tr.get("name", jp_name),
+                "name": cht_name,
                 "name_jp": jp_name,
                 "description": tr.get("description", t.get("description", "")),
                 "vars": tr.get("vars", {}),
-                "rank": TRAIT_RANKS[i] if i < len(TRAIT_RANKS) else "C",
+                "rank": rank,
                 "active": True,
             })
 

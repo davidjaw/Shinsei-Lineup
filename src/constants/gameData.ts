@@ -11,11 +11,13 @@ export const formatRate = (rateStr: string | undefined, maxLevel: boolean): stri
 }
 
 export const getTraitColor = (rank: string): string => {
+  // Balanced palette: same shade weight (50/300/700) across all tiers.
   switch (rank) {
     case 'S': return 'bg-yellow-50 border-yellow-300 text-yellow-700 font-bold'
     case 'A': return 'bg-purple-50 border-purple-300 text-purple-700 font-bold'
-    case 'B': return 'bg-blue-50 border-blue-300 text-blue-700'
-    default: return 'bg-gray-50 border-gray-200 text-gray-500'
+    case 'B': return 'bg-blue-50 border-blue-300 text-blue-700 font-bold'
+    case 'C': return 'bg-green-50 border-green-300 text-green-700 font-bold'
+    default:  return 'bg-gray-50 border-gray-200 text-gray-500'
   }
 }
 

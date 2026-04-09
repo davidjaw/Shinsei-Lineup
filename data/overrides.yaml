@@ -607,19 +607,15 @@ heroes:
     traits:
     - name: 騎兵大將
       description: 部隊的騎兵等級上升3級,等級上限增加1級
-      rank: S
       active: true
     - name: 先驅
       description: 戰鬥前3回合,自身受到控制狀態時,有40%機率使其無效,最多生效2次
-      rank: A
       active: true
     - name: 血氣II
       description: 造成兵刃傷害增加2.2%
-      rank: B
       active: true
     - name: 猛攻II
       description: 我軍全體造成兵刃傷害增加1.8%
-      rank: C
       active: true
   立花闇千代:
     _action: add
@@ -644,21 +640,17 @@ heroes:
     traits:
     - name: 近衛齊射
       description: 普通攻擊之後，有 20% 機率使目標進入麻痹狀態，每回合有 30% 機率無法行動，持續 2 回合。
-      rank: S
       active: true
     - name: 姬城督
       description: 每造成 6 次兵刃傷害，恢復我軍兵力最低單體（恢復率 98%，受武勇影響），最多觸發 2 次。
-      rank: A
       active: true
     - name: 槍炮術II
       description: 部隊的足輕、鐵炮等級上升 2 級。
-      rank: B
       active: true
     - name: 武威I
       description: 武勇提升{var:rate}
       vars:
         rate: 0.02
-      rank: C
       active: true
   鈴木佐大夫:
     _action: add
@@ -686,19 +678,15 @@ heroes:
       vars:
         lv_up: 3
         cap_up: 1
-      rank: S
       active: true
     - name: 牢固III
       description: 受到傷害減少2%
-      rank: A
       active: true
     - name: 破敵II
       description: 造成傷害增加1.6%
-      rank: B
       active: true
     - name: 靈巧II
       description: 速度提高2.5%
-      rank: C
       active: true
   加藤嘉明:
     _action: add
@@ -723,19 +711,15 @@ heroes:
     traits:
     - name: 弓槍術II
       description: 部隊的足輕、弓兵等級上升2級
-      rank: S
       active: true
     - name: 武威II
       description: 武勇提高2.5%
-      rank: A
       active: true
     - name: 智慧II
       description: 智略提高2.5%
-      rank: B
       active: true
     - name: 牢固II
       description: 受到傷害減少1.6%
-      rank: C
       active: true
   真田昌幸:
     _action: add
@@ -760,21 +744,17 @@ heroes:
     traits:
     - name: 老獪
       description: 自身勢力將與大將保持一致，若勢力未發生改變時自身獲得8%攻心
-      rank: S
       active: true
     - name: 虛實
       description: 行動後，若有敵軍武將處於混亂狀態，自身受到的傷害減少3%，持續1回合，友方真田家武將獲得50%的效果
-      rank: A
       active: true
     - name: 弓炮術II
       description: 部隊的弓兵、鐵炮等級上升2級
-      rank: B
       active: true
     - name: 智慧I
       description: 智力提升{var:int_up}
       vars:
         int_up: 0.02
-      rank: C
       active: true
   阿松:
     _action: add
@@ -799,19 +779,15 @@ heroes:
     traits:
     - name: 淑德
       description: 戰鬥中，前2回合，我軍大將每回合首次被施加無策、封擊或者混亂狀態時，自身有80%幾率為其承擔。
-      rank: S
       active: true
     - name: 馬槍術I
       description: 部隊的騎兵、足輕等級上升1級
-      rank: A
       active: true
     - name: 隱忍II
       description: 使自身受到普通攻擊的機率降低
-      rank: B
       active: true
     - name: 守勢III
       description: 我軍全體受到傷害減少1.6%
-      rank: C
       active: true
   安宅冬康:
     _action: add
@@ -836,19 +812,15 @@ heroes:
     traits:
     - name: 弓術III
       description: 部隊的弓兵等級上升3級
-      rank: S
       active: true
     - name: 固守III
       description: 我軍全體受到兵刃傷害減少2.2%
-      rank: A
       active: true
     - name: 堅固II
       description: 我軍全體受到謀略傷害減少3%
-      rank: B
       active: true
     - name: 隱忍I
       description: 使自身受到普通攻擊的機率略微降低
-      rank: C
       active: true
   伊達輝宗:
     _action: add
@@ -873,18 +845,14 @@ heroes:
     traits:
     - name: 領兵III
       description: 統率提高3%
-      rank: S
       active: true
     - name: 馬炮術I
       description: 部隊的騎兵、鐵炮等級上升1級
-      rank: A
       active: true
     - name: 防護III
       description: 受到兵刃傷害減少2.8%
-      rank: B
       active: true
     - name: 剛猛I
       description: 自身受到普通攻擊的機率小幅提高
       vars: {}
-      rank: C
       active: true

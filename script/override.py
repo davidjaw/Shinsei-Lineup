@@ -457,12 +457,12 @@ def _collect_hero_field(step: str, collected: dict):
 def _collect_traits(collected: dict):
     """Collect traits with auto-lookup from existing translated data."""
     print("\n  Traits (特性, enter empty name to finish, '<' to go back):")
+    print("  (rank is auto-derived from name suffix: III→A, II→B, I→C, else S)")
     traits = []
-    rank_labels = ["S", "A", "B", "C"]
     trait_idx = 0
     while trait_idx < 4:
         try:
-            trait_name = prompt_input(f"  Trait {trait_idx+1} ({rank_labels[trait_idx]}) name", required=False)
+            trait_name = prompt_input(f"  Trait {trait_idx+1} name", required=False)
         except GoBack:
             if trait_idx > 0:
                 traits.pop()
@@ -482,7 +482,6 @@ def _collect_traits(collected: dict):
                 "name": existing.get("name", trait_name),
                 "description": desc,
                 "vars": existing.get("vars", {}),
-                "rank": rank_labels[trait_idx],
                 "active": True,
             })
         else:
@@ -494,7 +493,6 @@ def _collect_traits(collected: dict):
             traits.append({
                 "name": trait_name,
                 "description": trait_desc,
-                "rank": rank_labels[trait_idx],
                 "active": True,
             })
         trait_idx += 1
