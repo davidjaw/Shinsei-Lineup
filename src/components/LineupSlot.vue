@@ -518,6 +518,7 @@ import { Hero, Skill, Trait, useData } from '../composables/useData'
 import { useTemplateParser } from '../composables/useTemplateParser'
 
 import { MOCK_EQUIP_TRAITS, TRANSPARENT_GIF, formatRate as _formatRate, getTraitColor } from '../constants/gameData'
+import { TRAIT_UNLOCK } from '../constants/traits'
 
 const props = defineProps({
   title: String,
@@ -675,10 +676,6 @@ const statLabels: Record<string, string> = {
   cha: '魅力',
   spd: '速度'
 }
-
-// Traits derived from hero + breakthrough level.
-// Trait slot i is active when breakthrough >= TRAIT_UNLOCK[i].
-const TRAIT_UNLOCK = [0, 1, 3, 5] as const
 
 const localTraits = computed<Trait[]>(() => {
   if (!props.hero) return []

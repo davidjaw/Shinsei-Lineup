@@ -111,11 +111,19 @@ export interface Skill {
   };
 }
 
+export interface TroopAffinity {
+  troop_types: string[]
+  level: number
+  level_cap_bonus: number
+}
+
 export interface Trait {
   name: string
   rank: 'S' | 'A' | 'B' | 'C'
   active: boolean
   description?: string
+  vars?: Record<string, any>
+  affinity?: TroopAffinity | null
 }
 
 export interface Hero {

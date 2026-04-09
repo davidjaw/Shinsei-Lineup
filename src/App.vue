@@ -32,6 +32,16 @@
            <span class="text-gray-500 mr-1">Cost:</span>
            <span :class="{'text-red-500': totalCost > 20, 'text-gray-800': totalCost <= 20}" class="text-sm">{{ totalCost }}/20</span>
         </div>
+        <!-- Troop Level Chips -->
+        <div v-if="!isEditingInventory" class="text-xs font-bold bg-gray-100 px-2 py-1 rounded-full border border-gray-200 items-center gap-1 hidden sm:flex">
+           <span class="text-gray-500 mr-0.5">兵:</span>
+           <span
+             v-for="tt in TROOP_TYPES"
+             :key="tt"
+             class="px-1 rounded text-[10px]"
+             :class="troopLevels[tt] > 0 ? 'text-amber-700 bg-amber-50' : 'text-gray-400'"
+           >{{ TROOP_LABELS[tt] }}{{ troopLevels[tt] }}</span>
+        </div>
       </div>
 
       <div>
@@ -485,6 +495,8 @@ import MobileSlotDetail from './components/MobileSlotDetail.vue'
 import { useData, Hero, Skill, Trait } from './composables/useData'
 import { MOCK_EQUIP_TRAITS, ShareableData, ShareableLineup } from './constants/gameData'
 import { useLineups, type RoleData } from './composables/useLineups'
+import { useTroopLevels } from './composables/useTroopLevels'
+import { TROOP_TYPES, TROOP_LABELS } from './constants/traits'
 import { useInventory } from './composables/useInventory'
 
 const { 
@@ -498,6 +510,8 @@ const {
   clearLineup: clearLineupData,
   swapRoles
 } = useLineups()
+
+const troopLevels = useTroopLevels(currentLineup)
 
 const {
   ownedHeroes,

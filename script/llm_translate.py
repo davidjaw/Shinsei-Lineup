@@ -21,6 +21,7 @@ import argparse
 import json
 import sys
 import yaml
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from tqdm import tqdm
 
@@ -34,6 +35,7 @@ from paths import (
     HEROES_CRAWLED, SKILLS_CRAWLED, TRAITS_CRAWLED,
     SKILLS_TRANSLATED, SKILLS_BATTLE,
     TRAITS_TRANSLATED, TRAITS_BATTLE,
+    SKILLS_CANONICAL, TRAITS_CANONICAL,
     HEROES_TRANSLATED,
     TRANSLATION_FAILURES_JSON,
 )
@@ -98,45 +100,6 @@ def _write_failure_manifest():
     else:
         tqdm.write(f"\n[ok] No translation failures. Manifest: {TRANSLATION_FAILURES_JSON}")
 
-BATTLE_EXAMPLE = """\
-name: 軍神
-type: 被動
-vars:
-  trigger_rate: 1.00
-  charge_trigger_base: 0.30
-  charge_trigger_max: 0.60
-  damage_per_stack_base: 0.05
-  damage_per_stack_max: 0.10
-  max_charge: 12
-trigger: always
-rate: [$trigger_rate]
-do:
-  - trigger: afterAllyAction
-    when:
-      - type: allyActionType
-        value: [attack, active, assault]
-    to: self
-    do:
-      type: roll
-      chance: $charge_trigger_base
-      on_success:
-        - to: self
-          do:
-            type: addStack
-            key: god_of_war_charge
-            value: 1
-            max: $max_charge
-bonus:
-  commander:
-    description: ...
-    effects:
-      - trigger: beforeHeroAction
-        to: self
-        do:
-          type: addStack
-          key: god_of_war_charge
-          value: 1"""
-
 
 # ---------------------------------------------------------------------------
 # Prompt
@@ -147,18 +110,27 @@ You are a game data translator and structured extractor for 信長之野望：�
 
 {COMMON_RULES}
 
-For EACH skill, output a YAML document under that skill's name as the top-level key, containing TWO sections:
+For EACH skill, output a YAML document under that skill's name as the top-level key, containing THREE sections:
 
-## `frontend` — Translation for frontend rendering (JP → Traditional Chinese)
+## `vars` — Shared variables (SINGLE source of numeric truth)
+- Extract ALL numeric values referenced in both text and battle into ONE shared `vars` dict.
+- Scaling values: use nested {{base, max, scale}} (e.g. {{base: 0.30, max: 0.60, scale: 武勇}}).
+- Fixed values: use plain int/float (e.g. duration: 2).
+- CRITICAL: `text.description` uses {{var:key}} to reference these vars.
+  `battle.do` uses $key to reference these vars. Both reference the SAME vars dict.
+  Do NOT duplicate vars between text and battle.
+
+## `text` — Translation for frontend rendering (JP → Traditional Chinese)
 - Translate to Traditional Chinese (繁體中文)
 - `rarity` must be just: S, A, or B
-- `brief_description`: 15-25 chars, summarize the core mechanic without numbers. E.g., "會心增益，條件觸發對單體兵刃傷害並降低統率"
+- `brief_description`: 15-25 chars, summarize the core mechanic without numbers
 - `tags`: list from ONLY these allowed tags: """ + SKILL_TAGS + """
-  Pick all that apply. E.g., [兵刃傷害, 單體傷害, 增益, 條件觸發, 降低屬性, 武勇系, 大將技]
+- Use {{var:key}} in description to reference the shared vars dict
+- Do NOT include a `vars` field here — vars live at the top level
 
 ## `battle` — Structured extraction for battle engine
 - ALL text (including `bonus.commander.description`) must be in Traditional Chinese (繁體中文)
-- Extract variables into `vars` following COMMON_RULES exactly (do not add base/max to fixed values, do not omit max from scaling values)
+- Use $key to reference the shared vars dict — do NOT include a `vars` field here
 - Map effects to `do` blocks: trigger/when/to/do
 - Effect types: damage, heal, buff, debuff, applyStatus, removeStatus, addStack, roll, sequence, conditional
 - Trigger types: always, battleStart, turnStart, beforeAction, afterAction, beforeAttack, afterAttack, onDamaged, onHeal
@@ -167,34 +139,25 @@ For EACH skill, output a YAML document under that skill's name as the top-level 
 
 
 def build_single_prompt(skill: dict) -> str:
+    raw = skill.get("raw", skill)  # support both canonical (has .raw) and legacy shape
     return f"""\
 {SYSTEM_PROMPT}
 
 ---
 Input skill:
-name: {skill['name']}
-type: {skill.get('type', 'unknown')}
-rarity: {skill.get('rarity', '')}
-target: {skill.get('target', '')}
-activation_rate: {skill.get('activation_rate', '')}
-source_hero: {skill.get('source_hero', '')}
+name: {raw.get('name', skill.get('name', ''))}
+type: {raw.get('type', 'unknown')}
+rarity: {raw.get('rarity', '')}
+target: {raw.get('target', '')}
+activation_rate: {raw.get('activation_rate', '')}
+source_hero: {raw.get('source_hero', '')}
 description: |
-  {skill.get('description', '')}
-commander_bonus: {skill.get('commander_bonus', '') or 'none'}
+  {raw.get('description', '')}
+commander_bonus: {raw.get('commander_bonus', '') or 'none'}
 
 ---
-Example frontend:
-  name: 軍神
-  type: 被動
-  rarity: S
-  target: 自己
-  activation_rate: 100%
-  description: >
-    戰鬥中，以無法獲得{{status:亂舞}}狀態為代價，
-    使友軍群體（{{var:ally_count}}人）有{{var:charge_trigger_rate}}機率（{{scale:武勇}}）使自身蓄力，
-    普通攻擊傷害提高{{var:damage_per_stack}}（{{scale:武勇}}），最多疊{{var:max_charge}}次。
-  brief_description: 犧牲亂舞，友軍蓄力提升普攻傷害
-  tags: [增益, 被動觸發, 武勇系]
+Example output:
+軍神:
   vars:
     charge_trigger_rate:
       base: 0.30
@@ -204,34 +167,54 @@ Example frontend:
       base: 0.05
       max: 0.10
       scale: 武勇
-    stat_debuff:
-      base: 18
-      max: 36
-      type: flat
     max_charge: 12
     ally_count: 2
-
-Example battle:
-{BATTLE_EXAMPLE}
+  text:
+    name: 軍神
+    type: 被動
+    rarity: S
+    target: 自己
+    activation_rate: 100%
+    description: >
+      戰鬥中，以無法獲得{{status:亂舞}}狀態為代價，
+      使友軍群體（{{var:ally_count}}人）有{{var:charge_trigger_rate}}機率（{{scale:武勇}}）使自身蓄力，
+      普通攻擊傷害提高{{var:damage_per_stack}}（{{scale:武勇}}），最多疊{{var:max_charge}}次。
+    brief_description: 犧牲亂舞，友軍蓄力提升普攻傷害
+    tags: [增益, 被動觸發, 武勇系]
+  battle:
+    type: 被動
+    trigger: always
+    do:
+      - trigger: afterAllyAction
+        to: self
+        do:
+          type: roll
+          chance: $charge_trigger_rate
+          on_success:
+            - type: addStack
+              key: god_of_war_charge
+              value: 1
+              max: $max_charge
 
 ---
-Output the YAML with skill name as top-level key, containing `frontend` and `battle`."""
+Output the YAML with skill name as top-level key, containing `vars`, `text`, and `battle`."""
 
 
 def build_batch_prompt(skills: list[tuple[str, dict]]) -> str:
     skill_blocks = []
     for i, (name, skill) in enumerate(skills, 1):
+        raw = skill.get("raw", skill)
         skill_blocks.append(f"""\
 Skill {i}:
-  name: {skill['name']}
-  type: {skill.get('type', 'unknown')}
-  rarity: {skill.get('rarity', '')}
-  target: {skill.get('target', '')}
-  activation_rate: {skill.get('activation_rate', '')}
-  source_hero: {skill.get('source_hero', '')}
+  name: {raw.get('name', name)}
+  type: {raw.get('type', 'unknown')}
+  rarity: {raw.get('rarity', '')}
+  target: {raw.get('target', '')}
+  activation_rate: {raw.get('activation_rate', '')}
+  source_hero: {raw.get('source_hero', '')}
   description: |
-    {skill.get('description', '')}
-  commander_bonus: {skill.get('commander_bonus', '') or 'none'}""")
+    {raw.get('description', '')}
+  commander_bonus: {raw.get('commander_bonus', '') or 'none'}""")
 
     joined = "\n\n".join(skill_blocks)
 
@@ -244,30 +227,8 @@ Input ({len(skills)} skills):
 {joined}
 
 ---
-Example frontend (for reference):
-  name: 軍神
-  type: 被動
-  rarity: S
-  target: 自己
-  activation_rate: 100%
-  description: >
-    戰鬥中，以無法獲得{{status:亂舞}}狀態為代價，
-    使友軍群體（{{var:ally_count}}人）有{{var:charge_trigger_rate}}機率（{{scale:武勇}}）使自身蓄力，
-    普通攻擊傷害提高{{var:damage_per_stack}}（{{scale:武勇}}），最多疊{{var:max_charge}}次。
-  brief_description: 犧牲亂舞，友軍蓄力提升普攻傷害
-  tags: [增益, 被動觸發, 武勇系]
-  vars:
-    charge_trigger_rate:
-      base: 0.30
-      max: 0.60
-      scale: 武勇
-    max_charge: 12
-
-Example battle (for reference):
-{BATTLE_EXAMPLE}
-
----
-Output YAML: each skill name as a top-level key, each containing `frontend` and `battle` sections.
+Output YAML: each skill name as a top-level key, each containing `vars`, `text`, and `battle` sections.
+`vars` is the SINGLE shared variable dict — do NOT put vars inside text or battle.
 Process ALL {len(skills)} skills above."""
 
 
@@ -275,58 +236,118 @@ Process ALL {len(skills)} skills above."""
 # Trait Prompts
 # ---------------------------------------------------------------------------
 
+ALLOWED_TROOP_TYPES_STR = "足輕, 弓兵, 騎兵, 鐵炮, 器械"
+
 TRAIT_SYSTEM_PROMPT = f"""\
 You are a game data translator and structured extractor for 信長之野望：真戰 (Nobunaga's Ambition: Shinsei).
 
 {COMMON_RULES}
 
-For EACH trait (特性), output YAML with the trait name as top-level key, containing TWO sections:
+For EACH trait (特性), first determine its `kind`:
 
-## `frontend` — Translation (JP → Traditional Chinese 繁體中文)
+- `kind: passive` — always-on effect with NO engine trigger. Includes:
+  - Troop affinity (兵種レベル): buffs a troop type level (output `passive.affinity`)
+  - Flat stat/damage buffs: e.g. "造成兵刃傷害增加2.2%" (output `passive.buffs`)
+- `kind: triggered` — activates on an engine event (battleStart, turnStart, afterAttack, etc.).
+  Has a `battle` section with `trigger` + `do` blocks, same shape as a triggered skill.
+
+Output YAML with the trait name as top-level key, containing these sections:
+
+## `vars` — Shared variables (SINGLE source, same rules as skills)
+- Only if the trait has numeric values. Both text and battle/passive reference this.
+
+## `text` — Translation (JP → Traditional Chinese 繁體中文)
 - `name`: translated trait name
-- `description`: translated description.
-- `vars`: dict of variables. Only if the trait has numeric values.
+- `description`: translated description, use {{var:key}} for numeric values
 
-## `battle` — Structured extraction for battle engine (type: 特性)
-- ALL text must be in Traditional Chinese
-- `type`: always "特性"
-- `vars`: same as frontend
-- `trigger`: when it activates (battleStart, turnStart, beforeAction, etc.)
-- `do`: structured effects using trigger/when/to/do pattern
+## For `kind: passive` → output `passive` section (NO `battle`):
+- `passive.affinity` — for troop_affinity traits:
+  - `troop_types`: MUST be a YAML list. Allowed values ONLY: {ALLOWED_TROOP_TYPES_STR}
+    IMPORTANT: 兵器→器械, 槍兵→足輕, 鐵砲→鐵炮 (use the correct CHT names)
+  - `level`: integer
+  - `level_cap_bonus`: integer (0 if not mentioned; detect 等級上限増加N)
+- `passive.buffs` — for flat %buff traits:
+  - list of {{target, stat, type: pct|flat, value: $var_ref}}
+
+## For `kind: triggered` → output `battle` section (NO `passive`):
+- `trigger`: when it activates (battleStart, turnStart, beforeAction, afterAttack, etc.)
+- `do`: structured effects
 - Effect types: damage, heal, buff, debuff, applyStatus, removeStatus, addStack, roll, sequence, conditional
 - Target types: self, allySingle, allyMultiple, allyAll, enemySingle, enemyMultiple, enemyAll
 
-For troop_affinity traits (兵種レベル増加), the battle section should simply be:
-  type: 特性
-  category: troop_affinity
-  troop_type: <type>
-  level: <number>"""
+Example passive (troop affinity):
+馬術Ⅲ:
+  text:
+    name: 馬術Ⅲ
+    description: 部隊的騎兵等級增加3
+  kind: passive
+  passive:
+    affinity:
+      troop_types: [騎兵]
+      level: 3
+      level_cap_bonus: 0
+
+Example passive (%buff):
+攻勢Ⅱ:
+  vars:
+    dmg_bonus: 0.013
+  text:
+    name: 攻勢Ⅱ
+    description: 自軍全體造成傷害提高{{var:dmg_bonus}}
+  kind: passive
+  passive:
+    buffs:
+      - target: armyAll
+        stat: damage_dealt
+        type: pct
+        value: $dmg_bonus
+
+Example triggered:
+赤備え:
+  vars:
+    reduction: 18
+  text:
+    name: 赤備
+    description: 首次普通攻擊後，使攻擊目標的統率降低{{var:reduction}}（可疊加）
+  kind: triggered
+  battle:
+    trigger: afterNormalAttack
+    do:
+      - when: firstTime
+        to: enemySingle
+        do: debuff
+        stat: 統率
+        value: $reduction
+        stackable: true"""
 
 
 def build_trait_single_prompt(trait: dict) -> str:
+    raw = trait.get("raw", trait)  # support both canonical (has .raw) and legacy shape
     return f"""\
 {TRAIT_SYSTEM_PROMPT}
 
 ---
 Input trait:
-name: {trait['name']}
-category: {trait.get('category', 'skill_like')}
+name: {raw.get('name', trait.get('name', ''))}
+category: {raw.get('category', 'skill_like')}
 description: |
-  {trait.get('description', '')}
+  {raw.get('description', '')}
 
 ---
-Output YAML with trait name as top-level key, containing `frontend` and `battle`."""
+Output YAML with trait name as top-level key.
+Include `kind`, `vars` (if any), `text`, and either `passive` or `battle` (not both)."""
 
 
 def build_trait_batch_prompt(traits: list[tuple[str, dict]]) -> str:
     blocks = []
     for i, (name, trait) in enumerate(traits, 1):
+        raw = trait.get("raw", trait)
         blocks.append(f"""\
 Trait {i}:
-  name: {trait['name']}
-  category: {trait.get('category', 'skill_like')}
+  name: {raw.get('name', name)}
+  category: {raw.get('category', 'skill_like')}
   description: |
-    {trait.get('description', '')}""")
+    {raw.get('description', '')}""")
 
     joined = "\n\n".join(blocks)
     return f"""\
@@ -338,7 +359,8 @@ Input ({len(traits)} traits):
 {joined}
 
 ---
-Output YAML: each trait name as top-level key, each containing `frontend` and `battle` sections.
+Output YAML: each trait name as top-level key.
+Each must include `kind`, `vars` (if any), `text`, and either `passive` or `battle`.
 Process ALL {len(traits)} traits above."""
 
 
@@ -349,23 +371,28 @@ Process ALL {len(traits)} traits above."""
 HERO_SYSTEM_PROMPT = """\
 You are a translator for historical Japanese figure names from the game 信長之野望：真戰 (Nobunaga's Ambition: Shinsei).
 
-Translate hero names, faction names, and clan names from Japanese to Traditional Chinese (繁體中文).
+Translate hero names, faction (勢力) names, and clan (家門) names from Japanese to Traditional Chinese (繁體中文).
 
 Key rules:
 - Many names share the same kanji between JP and CHT, but some JP-specific kanji need conversion:
   黒→黑, 関→關, 豊→豐, 浅→淺, 広→廣, 竜→龍, 辺→邊, 桜→櫻, 沢→澤, 県→縣, 斎→齋, 滝→瀧, 弐→貳, 鉄→鐵, 従→從, 帯→帶, 徳→德, 条→條, 団→團, 覚→覺, 伝→傳, 予→預, 亜→亞, 斉→齊
 - Preserve names that are already identical in both languages
 - These are real historical figures from Japan's Sengoku period
+- CRITICAL: `faction` and `clan` are STRUCTURED VALUES, not free text.
+  Translate ONLY the value the user gave you, character by character,
+  using the kanji conversion table above. Do NOT infer the clan from
+  the hero's surname. Do NOT substitute a different clan even if you
+  think it would be more accurate. If the input clan is `豊臣`, the
+  output MUST be `豐臣`, regardless of who the hero is. If the input
+  clan is `北条`, the output MUST be `北條`. Treat clan/faction as
+  opaque strings to transliterate, never to second-guess.
 
 Output ONLY valid YAML. No markdown fences. No explanation.
-Each JP name as a top-level key, with `name`, `faction`, `clan` values."""
+Each JP name as a top-level key, with `name`, `faction`, and `clan` values."""
 
 
 def build_hero_batch_prompt(heroes: list[tuple[str, str, str]]) -> str:
-    blocks = []
-    for i, (name, faction, clan) in enumerate(heroes, 1):
-        blocks.append(f"  {name}: {{faction: {faction}, clan: {clan}}}")
-
+    blocks = [f"  {name}: {{faction: {faction}, clan: {clan}}}" for name, faction, clan in heroes]
     joined = "\n".join(blocks)
     return f"""\
 {HERO_SYSTEM_PROMPT}
@@ -375,12 +402,23 @@ Input ({len(heroes)} heroes):
 {joined}
 
 ---
-Output YAML: each JP name as top-level key with `name`, `faction`, `clan` in Traditional Chinese.
-Example:
+Output YAML: each JP name as top-level key with `name`, `faction`, and `clan` in Traditional Chinese.
+Remember: `faction` and `clan` are transliterated from the input value
+character-by-character. Never replace them with the hero's surname.
+
+Example (note that 黒田官兵衛's clan is 豊臣, NOT 黒田):
+豊臣秀吉:
+  name: 豐臣秀吉
+  faction: 豐臣
+  clan: 豐臣
 黒田官兵衛:
   name: 黑田官兵衛
   faction: 豐臣
-  clan: 黑田
+  clan: 豐臣
+瑞渓院:
+  name: 瑞溪院
+  faction: 北條
+  clan: 北條
 Process ALL {len(heroes)} heroes above."""
 
 
@@ -390,21 +428,21 @@ Process ALL {len(heroes)} heroes above."""
 
 
 def validate_skill_entry(data: dict) -> list[str]:
-    """Validate a single skill's LLM output structure."""
+    """Validate a single skill's LLM output structure (new canonical format)."""
     errors = []
     if not isinstance(data, dict):
         return ["not a dict"]
 
-    fe = data.get("frontend")
-    if not fe:
-        errors.append("missing frontend")
-    elif not isinstance(fe, dict):
-        errors.append("frontend not a dict")
+    text = data.get("text")
+    if not text:
+        errors.append("missing text")
+    elif not isinstance(text, dict):
+        errors.append("text not a dict")
     else:
-        if not fe.get("name"):
-            errors.append("frontend.name missing")
-        if not fe.get("description"):
-            errors.append("frontend.description missing")
+        if not text.get("name"):
+            errors.append("text.name missing")
+        if not text.get("description"):
+            errors.append("text.description missing")
 
     bt = data.get("battle")
     if not bt:
@@ -415,23 +453,23 @@ def validate_skill_entry(data: dict) -> list[str]:
     return errors
 
 
-def validate_frontend_quality(data: dict) -> list[str]:
-    """Post-LLM quality checks on frontend section. Auto-fixes what it can, returns hard errors only."""
-    fe = data.get("frontend", {})
-    if not isinstance(fe, dict):
+def validate_entry_quality(data: dict) -> list[str]:
+    """Post-LLM quality checks on text section. Auto-fixes what it can, returns hard errors only."""
+    text = data.get("text", {})
+    if not isinstance(text, dict):
         return []
 
     # Auto-fix known issues first
-    fixes = autofix_frontend(fe)
+    fixes = autofix_frontend(text)
     if fixes:
         tqdm.write(f"    [autofix] {'; '.join(fixes)}")
 
-    # Now check for remaining hard errors
     errors = []
-    desc = fe.get("description", "")
-    cmd_desc = fe.get("commander_description", "")
+    desc = text.get("description", "")
+    cmd_desc = text.get("commander_description", "")
     full_text = f"{desc} {cmd_desc}"
-    vars_dict = fe.get("vars", {})
+    # Vars are at entry level now, not inside text
+    vars_dict = data.get("vars", {})
 
     import re as _re
 
@@ -445,7 +483,9 @@ def validate_frontend_quality(data: dict) -> list[str]:
     # 2. {var:X} references not in vars
     var_refs = _re.findall(r'\{var:(\w+)\}', full_text)
     for ref in var_refs:
-        if ref not in vars_dict:
+        # Strip format spec (e.g. {var:key:%} → key)
+        ref_key = ref.split(":")[0] if ":" in ref else ref
+        if ref_key not in vars_dict:
             errors.append(f"{{var:{ref}}} not in vars")
 
     # 3. base without max
@@ -471,6 +511,45 @@ def _save_yaml(path: Path, data: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+
+def _run_batches_parallel(
+    batches: list,
+    *,
+    desc: str,
+    parallel: int,
+    process_fn,
+) -> tuple[dict, list]:
+    """Dispatch batches to a thread pool and collect results.
+
+    parallel=1 still goes through ThreadPoolExecutor — single code path so
+    behavior is identical between sequential and parallel modes (easier to
+    debug). The progress bar advances as batches *finish* (as_completed),
+    which matches user expectations of "X of N done". Order of completion
+    is non-deterministic but the callers key results by name in a dict, so
+    the final output is order-independent.
+
+    process_fn: callable taking one batch and returning (results, failed).
+    """
+    all_results: dict = {}
+    all_failed: list = []
+    if not batches:
+        return all_results, all_failed
+    with ThreadPoolExecutor(max_workers=max(1, parallel)) as ex:
+        futures = [ex.submit(process_fn, batch) for batch in batches]
+        for fut in tqdm(as_completed(futures), total=len(futures),
+                        desc=desc, unit="batch"):
+            try:
+                results, failed = fut.result()
+            except Exception as e:
+                # process_batch swallows its own exceptions, but if something
+                # truly unexpected escapes we don't want one bad batch to kill
+                # the whole run. Log loudly and continue.
+                tqdm.write(f"  EXC in {desc} batch: {e}")
+                continue
+            all_results.update(results)
+            all_failed.extend(failed)
+    return all_results, all_failed
 
 
 def process_batch(
@@ -507,8 +586,7 @@ def process_batch(
         prompt = batch_prompt_fn(uncached)
 
     try:
-        # Longer timeout for batches
-        timeout = 60 + 40 * len(uncached)
+        timeout = 180  # 3 minutes per batch — covers Gemini latency spikes when running parallel
         raw = call_gemini(prompt, model=model, timeout=timeout)
         batch_label = "batch_" + "_".join(n for n, _ in uncached)
         save_raw_cache(batch_label, raw)
@@ -531,21 +609,27 @@ def process_batch(
                 tqdm.write(f"  PARSE FAIL: {uncached[0][0]}")
                 return results, failed
 
-        # For single skill, output might be nested under skill name or directly have frontend/battle
+        # For single skill, output might be nested under skill name or directly have text/battle
         if len(uncached) == 1:
             name = uncached[0][0]
-            if "frontend" in parsed:
-                # Direct output
+            if "text" in parsed or "frontend" in parsed:
+                # Direct output — normalize legacy "frontend" key
                 entry = parsed
+                if "frontend" in entry and "text" not in entry:
+                    entry["text"] = entry.pop("frontend")
             elif name in parsed:
                 entry = parsed[name]
+                if "frontend" in entry and "text" not in entry:
+                    entry["text"] = entry.pop("frontend")
             else:
                 # Try first key
                 first_key = next(iter(parsed), None)
                 entry = parsed[first_key] if first_key else parsed
+                if isinstance(entry, dict) and "frontend" in entry and "text" not in entry:
+                    entry["text"] = entry.pop("frontend")
 
             errors = validate_skill_entry(entry)
-            quality = validate_frontend_quality(entry) if not errors else []
+            quality = validate_entry_quality(entry) if not errors else []
             all_issues = errors + quality
             if all_issues:
                 failed.append((name, "; ".join(all_issues)))
@@ -575,14 +659,18 @@ def process_batch(
                     tqdm.write(f"  INVALID: {name} — {'; '.join(errors)}")
                     continue
 
-                quality = validate_frontend_quality(entry)
+                quality = validate_entry_quality(entry)
                 if quality:
                     failed.append((name, "; ".join(quality)))
                     tqdm.write(f"  QUALITY: {name} — {'; '.join(quality)}")
                     continue
 
+                # Normalize legacy "frontend" → "text"
+                if "frontend" in entry and "text" not in entry:
+                    entry["text"] = entry.pop("frontend")
+
                 # Check for duplicate translated names within this batch
-                fe_name = entry.get("frontend", {}).get("name", "")
+                fe_name = entry.get("text", {}).get("name", "")
                 if fe_name and fe_name in seen_names:
                     failed.append((name, f"duplicate name '{fe_name}' in batch"))
                     tqdm.write(f"  DUPE: {name} → '{fe_name}' conflicts with another skill in batch")
@@ -608,70 +696,96 @@ def process_skills(
     force: bool = False,
     model: str = DEFAULT_MODEL,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    parallel: int = 1,
+    preserve_vars: bool = False,
 ):
-    skills = yaml.safe_load(Path(SKILLS_CRAWLED).read_text("utf-8"))
-    if not skills:
-        print("[error] No skills found in", SKILLS_CRAWLED)
-        sys.exit(1)
+    # Read from canonical file; fall back to crawled for bootstrap
+    canonical_path = Path(SKILLS_CANONICAL)
+    if canonical_path.exists():
+        canonical = yaml.safe_load(canonical_path.read_text("utf-8")) or {}
+        targets = [(name, entry) for name, entry in canonical.items()]
+    else:
+        skills = yaml.safe_load(Path(SKILLS_CRAWLED).read_text("utf-8"))
+        if not skills:
+            print("[error] No skills found")
+            sys.exit(1)
+        targets = list(skills.items())
 
-    targets = list(skills.items())
     if name_filter:
         targets = [(n, s) for n, s in targets if name_filter in n]
         tqdm.write(f"[filter] Matched {len(targets)} skills for '{name_filter}'")
     if limit:
         targets = targets[:limit]
 
-    tqdm.write(f"[llm] Processing {len(targets)} skills with {model} (batch={batch_size})")
+    tqdm.write(f"[llm] Processing {len(targets)} skills with {model} (batch={batch_size}, parallel={parallel})")
 
-    all_results = {}
-    all_failed = []
-
-    # Split into batches
     batches = [targets[i:i + batch_size] for i in range(0, len(targets), batch_size)]
+    all_results, all_failed = _run_batches_parallel(
+        batches,
+        desc="translate",
+        parallel=parallel,
+        process_fn=lambda b: process_batch(b, model, force),
+    )
 
-    for batch in tqdm(batches, desc="translate", unit="batch"):
-        results, failed = process_batch(batch, model, force)
-        all_results.update(results)
-        all_failed.extend(failed)
-
-    # Auto-retry failed items one-by-one
+    # Auto-retry failed items one-by-one (also parallelized)
     if all_failed:
         retry_names = {name for name, _ in all_failed}
         retry_targets = [(n, s) for n, s in targets if n in retry_names]
         tqdm.write(f"\n[retry] {len(retry_targets)} failed skills, retrying one-by-one...")
-        all_failed = []
-        for item in tqdm(retry_targets, desc="retry", unit="skill"):
-            results, failed = process_batch([item], model, force=True)
-            all_results.update(results)
-            all_failed.extend(failed)
+        retry_batches = [[item] for item in retry_targets]
+        retry_results, all_failed = _run_batches_parallel(
+            retry_batches,
+            desc="retry",
+            parallel=parallel,
+            process_fn=lambda b: process_batch(b, model, force=True),
+        )
+        all_results.update(retry_results)
 
-    # Merge into output files. --force normally truncates, but ONLY when we're
-    # processing the full set; with --name/--limit truncating would wipe every
-    # untouched entry from the YAML (data loss). In filtered mode we always
-    # merge into the existing file.
-    full_run = name_filter is None and limit is None
-    frontend_skills = {} if (force and full_run) else _load_existing_yaml(SKILLS_TRANSLATED)
-    battle_skills = {} if (force and full_run) else _load_existing_yaml(SKILLS_BATTLE)
+    # Merge results into canonical file
+    if canonical_path.exists():
+        canonical = yaml.safe_load(canonical_path.read_text("utf-8")) or {}
+    else:
+        canonical = {}
 
-    new_fe, new_bt = 0, 0
+    updated = 0
     for name, data in all_results.items():
-        if data.get("frontend"):
-            is_new = name not in frontend_skills
-            frontend_skills[name] = data["frontend"]
-            if is_new:
-                new_fe += 1
+        entry = canonical.setdefault(name, {})
+        if data.get("text"):
+            entry["text"] = data["text"]
         if data.get("battle"):
-            is_new = name not in battle_skills
-            battle_skills[name] = data["battle"]
-            if is_new:
-                new_bt += 1
+            entry["battle"] = data["battle"]
+        if data.get("vars") is not None:
+            if preserve_vars and entry.get("vars"):
+                # Keep existing vars, check for conflicts
+                new_keys = set(data["vars"].keys())
+                old_keys = set(entry["vars"].keys())
+                if new_keys != old_keys:
+                    tqdm.write(f"  [preserve-vars] {name}: LLM vars keys differ from existing "
+                               f"(added: {new_keys - old_keys}, removed: {old_keys - new_keys}). "
+                               f"Use --force-vars to accept LLM vars.")
+                    all_failed.append((name, "vars key mismatch under --preserve-vars"))
+                    continue
+            else:
+                entry["vars"] = data["vars"]
+        updated += 1
 
+    _save_yaml(canonical_path, canonical)
+
+    # Also write legacy files for backward compat until build_frontend_data is switched
+    frontend_skills = _load_existing_yaml(SKILLS_TRANSLATED)
+    battle_skills = _load_existing_yaml(SKILLS_BATTLE)
+    for name, data in all_results.items():
+        if data.get("text"):
+            fe = dict(data["text"])
+            if data.get("vars"):
+                fe["vars"] = data["vars"]
+            frontend_skills[name] = fe
+        if data.get("battle"):
+            battle_skills[name] = data["battle"]
     _save_yaml(SKILLS_TRANSLATED, frontend_skills)
     _save_yaml(SKILLS_BATTLE, battle_skills)
 
-    updated = len(all_results) - new_fe
-    tqdm.write(f"\n[done] {len(frontend_skills)} frontend skills ({new_fe} new, {updated} updated) → {SKILLS_TRANSLATED}")
-    tqdm.write(f"[done] {len(battle_skills)} battle skills → {SKILLS_BATTLE}")
+    tqdm.write(f"\n[done] {len(canonical)} skills ({updated} updated) → {canonical_path}")
     if all_failed:
         tqdm.write(f"[warn] {len(all_failed)} failed:")
         for name, err in all_failed:
@@ -688,74 +802,124 @@ def process_traits(
     force: bool = False,
     model: str = DEFAULT_MODEL,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    parallel: int = 1,
+    preserve_vars: bool = False,
 ):
-    traits = yaml.safe_load(Path(TRAITS_CRAWLED).read_text("utf-8"))
-    if not traits:
-        print("[error] No traits found in", TRAITS_CRAWLED)
-        sys.exit(1)
+    # Read from canonical file; fall back to crawled for bootstrap
+    canonical_path = Path(TRAITS_CANONICAL)
+    if canonical_path.exists():
+        canonical = yaml.safe_load(canonical_path.read_text("utf-8")) or {}
+        targets = [(name, entry) for name, entry in canonical.items()]
+    else:
+        traits = yaml.safe_load(Path(TRAITS_CRAWLED).read_text("utf-8"))
+        if not traits:
+            print("[error] No traits found")
+            sys.exit(1)
+        targets = list(traits.items())
 
-    targets = list(traits.items())
     if name_filter:
         targets = [(n, t) for n, t in targets if name_filter in n]
         tqdm.write(f"[filter] Matched {len(targets)} traits for '{name_filter}'")
     if limit:
         targets = targets[:limit]
 
-    tqdm.write(f"[llm] Processing {len(targets)} traits with {model} (batch={batch_size})")
-
-    all_results = {}
-    all_failed = []
+    tqdm.write(f"[llm] Processing {len(targets)} traits with {model} (batch={batch_size}, parallel={parallel})")
 
     batches = [targets[i:i + batch_size] for i in range(0, len(targets), batch_size)]
-
-    for batch in tqdm(batches, desc="traits", unit="batch"):
-        results, failed = process_batch(
-            batch, model, force,
+    all_results, all_failed = _run_batches_parallel(
+        batches,
+        desc="traits",
+        parallel=parallel,
+        process_fn=lambda b: process_batch(
+            b, model, force,
             single_prompt_fn=build_trait_single_prompt,
             batch_prompt_fn=build_trait_batch_prompt,
             cache_prefix="trait",
-        )
-        all_results.update(results)
-        all_failed.extend(failed)
+        ),
+    )
 
-    # Auto-retry failed items one-by-one
+    # Auto-retry failed items one-by-one (also parallelized)
     if all_failed:
         retry_names = {name for name, _ in all_failed}
         retry_targets = [(n, t) for n, t in targets if n in retry_names]
         tqdm.write(f"\n[retry] {len(retry_targets)} failed traits, retrying one-by-one...")
-        all_failed = []
-        for item in tqdm(retry_targets, desc="retry", unit="trait"):
-            results, failed = process_batch(
-                [item], model, force=True,
+        retry_batches = [[item] for item in retry_targets]
+        retry_results, all_failed = _run_batches_parallel(
+            retry_batches,
+            desc="retry",
+            parallel=parallel,
+            process_fn=lambda b: process_batch(
+                b, model, force=True,
                 single_prompt_fn=build_trait_single_prompt,
                 batch_prompt_fn=build_trait_batch_prompt,
                 cache_prefix="trait",
-            )
-            all_results.update(results)
-            all_failed.extend(failed)
+            ),
+        )
+        all_results.update(retry_results)
 
-    full_run = name_filter is None and limit is None
-    frontend_traits = {} if (force and full_run) else _load_existing_yaml(TRAITS_TRANSLATED)
-    battle_traits = {} if (force and full_run) else _load_existing_yaml(TRAITS_BATTLE)
+    # Merge results into canonical file
+    if canonical_path.exists():
+        canonical = yaml.safe_load(canonical_path.read_text("utf-8")) or {}
+    else:
+        canonical = {}
 
-    new_fe, new_bt = 0, 0
+    updated = 0
     for name, data in all_results.items():
-        if data.get("frontend"):
-            is_new = name not in frontend_traits
-            frontend_traits[name] = data["frontend"]
-            if is_new:
-                new_fe += 1
+        entry = canonical.setdefault(name, {})
+        # Normalize legacy "frontend" → "text"
+        if "frontend" in data and "text" not in data:
+            data["text"] = data.pop("frontend")
+        if data.get("text"):
+            entry["text"] = data["text"]
+        if data.get("kind"):
+            entry["kind"] = data["kind"]
         if data.get("battle"):
-            is_new = name not in battle_traits
+            entry["battle"] = data["battle"]
+        if data.get("passive"):
+            entry["passive"] = data["passive"]
+        if data.get("vars") is not None:
+            if preserve_vars and entry.get("vars"):
+                new_keys = set(data["vars"].keys())
+                old_keys = set(entry["vars"].keys())
+                if new_keys != old_keys:
+                    tqdm.write(f"  [preserve-vars] {name}: vars keys differ "
+                               f"(added: {new_keys - old_keys}, removed: {old_keys - new_keys}). "
+                               f"Use --force-vars to accept.")
+                    all_failed.append((name, "vars key mismatch under --preserve-vars"))
+                    continue
+            else:
+                entry["vars"] = data["vars"]
+        updated += 1
+
+    _save_yaml(canonical_path, canonical)
+
+    # Also write legacy files for backward compat until build_frontend_data is switched
+    frontend_traits = _load_existing_yaml(TRAITS_TRANSLATED)
+    battle_traits = _load_existing_yaml(TRAITS_BATTLE)
+    for name, data in all_results.items():
+        text = data.get("text") or data.get("frontend") or {}
+        if text:
+            fe = dict(text)
+            if data.get("vars"):
+                fe["vars"] = data["vars"]
+            frontend_traits[name] = fe
+        # Legacy battle format: flat troop fields, not nested PassiveBlock
+        if data.get("battle"):
             battle_traits[name] = data["battle"]
-            if is_new:
-                new_bt += 1
+        elif data.get("passive") and data["passive"].get("affinity"):
+            aff = data["passive"]["affinity"]
+            battle_traits[name] = {
+                "type": "特性",
+                "category": "troop_affinity",
+                "troop_type": aff.get("troop_types", []),
+                "level": aff.get("level", 0),
+                "level_cap_bonus": aff.get("level_cap_bonus", 0),
+            }
 
     _save_yaml(TRAITS_TRANSLATED, frontend_traits)
     _save_yaml(TRAITS_BATTLE, battle_traits)
 
-    tqdm.write(f"\n[done] {len(frontend_traits)} frontend traits ({new_fe} new) → {TRAITS_TRANSLATED}")
-    tqdm.write(f"[done] {len(battle_traits)} battle traits → {TRAITS_BATTLE}")
+    tqdm.write(f"\n[done] {len(canonical)} traits ({updated} updated) → {canonical_path}")
     if all_failed:
         tqdm.write(f"[warn] {len(all_failed)} failed:")
         for name, err in all_failed:
@@ -789,7 +953,7 @@ def process_hero_batch(
     prompt = build_hero_batch_prompt(uncached)
 
     try:
-        timeout = 60 + 20 * len(uncached)
+        timeout = 180  # 3 minutes per batch — covers Gemini latency spikes when running parallel
         raw = call_gemini(prompt, model=model, timeout=timeout)
         batch_label = "batch_hero_" + "_".join(n for n, _, _ in uncached[:5])
         save_raw_cache(batch_label, raw)
@@ -835,6 +999,7 @@ def process_heroes(
     force: bool = False,
     model: str = DEFAULT_MODEL,
     batch_size: int = 25,
+    parallel: int = 1,
 ):
     raw_data = yaml.safe_load(Path(HEROES_CRAWLED).read_text("utf-8"))
     if not raw_data:
@@ -857,17 +1022,15 @@ def process_heroes(
     if limit:
         targets = targets[:limit]
 
-    tqdm.write(f"[llm] Processing {len(targets)} heroes with {model} (batch={batch_size})")
-
-    all_results = {}
-    all_failed = []
+    tqdm.write(f"[llm] Processing {len(targets)} heroes with {model} (batch={batch_size}, parallel={parallel})")
 
     batches = [targets[i:i + batch_size] for i in range(0, len(targets), batch_size)]
-
-    for batch in tqdm(batches, desc="heroes", unit="batch"):
-        results, failed = process_hero_batch(batch, model, force)
-        all_results.update(results)
-        all_failed.extend(failed)
+    all_results, all_failed = _run_batches_parallel(
+        batches,
+        desc="heroes",
+        parallel=parallel,
+        process_fn=lambda b: process_hero_batch(b, model, force),
+    )
 
     # Merge into output
     full_run = name_filter is None and limit is None
@@ -926,7 +1089,7 @@ def claude_test(kind: str = "skills", num: int = 10, batch_size: int = 5, model:
                         print(f"  {name}: MISSING from output")
                         continue
                     errors = validate_skill_entry(entry)
-                    quality = validate_frontend_quality(entry) if not errors else []
+                    quality = validate_entry_quality(entry) if not errors else []
                     if errors or quality:
                         print(f"  {name}: {'|'.join(errors + quality)}")
                     else:
@@ -999,6 +1162,9 @@ def main():
     p.add_argument("--force", action="store_true", help="Ignore cache, overwrite output")
     p.add_argument("--model", default=DEFAULT_MODEL, help="Gemini model to use")
     p.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Items per LLM call")
+    p.add_argument("--parallel", type=int, default=1, help="Number of batches to dispatch concurrently (default: 1, recommended max: 5)")
+    p.add_argument("--preserve-vars", action="store_true", help="Keep existing vars; abort if LLM output has different keys")
+    p.add_argument("--force-vars", action="store_true", help="Accept LLM vars even under --preserve-vars (override conflict)")
     p.add_argument("--claude-test", action="store_true", help="Print prompts for Claude Code testing (no LLM call, no file writes)")
     p.add_argument("--test-num", type=int, default=10, help="Number of random samples for --claude-test")
     args = p.parse_args()
@@ -1014,6 +1180,8 @@ def main():
     do_traits = args.traits or none_specified
     do_heroes = args.heroes or none_specified
 
+    pv = args.preserve_vars and not args.force_vars
+
     if do_skills:
         process_skills(
             limit=args.limit,
@@ -1021,6 +1189,8 @@ def main():
             force=args.force,
             model=args.model,
             batch_size=args.batch_size,
+            parallel=args.parallel,
+            preserve_vars=pv,
         )
     if do_traits:
         process_traits(
@@ -1029,6 +1199,8 @@ def main():
             force=args.force,
             model=args.model,
             batch_size=args.batch_size,
+            parallel=args.parallel,
+            preserve_vars=pv,
         )
     if do_heroes:
         process_heroes(
@@ -1037,6 +1209,7 @@ def main():
             force=args.force,
             model=args.model,
             batch_size=args.batch_size,
+            parallel=args.parallel,
         )
 
     _write_failure_manifest()

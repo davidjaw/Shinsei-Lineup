@@ -24,6 +24,7 @@ from llm_core import clean_strings, load_overrides
 from paths import (
     HEROES_CRAWLED, HEROES_TRANSLATED, SKILLS_CRAWLED,
     SKILLS_TRANSLATED, SKILLS_BATTLE, TRAITS_TRANSLATED,
+    SKILLS_CANONICAL, TRAITS_CANONICAL,
     STATUSES_YAML,
     HEROES_JSON, SKILLS_JSON, STATUSES_JSON,
 )
@@ -283,26 +284,50 @@ def infer_trait_rank(name: str) -> str:
     return "S"
 
 
-def build_heroes(heroes_raw: list[dict], traits_translated: dict, skill_name_map: dict, heroes_translated: dict) -> list[dict]:
-    """skill_name_map: JP name → CHT name for skill reference translation.
+def _flatten_trait(jp_name: str, tr: dict) -> dict:
+    """Flatten a canonical or legacy trait entry into the frontend JSON shape."""
+    # Canonical shape has text/vars/kind/passive sub-keys
+    if "text" in tr:
+        text = tr["text"]
+        cht_name = text.get("name", jp_name)
+        desc = text.get("description", "")
+        vars_dict = tr.get("vars", {})
+    else:
+        # Legacy shape (traits_translated): flat name/description/vars
+        cht_name = tr.get("name", jp_name)
+        desc = tr.get("description", "")
+        vars_dict = tr.get("vars", {})
+
+    rank = infer_trait_rank(cht_name) if cht_name != jp_name else infer_trait_rank(jp_name)
+
+    result = {
+        "name": cht_name,
+        "name_jp": jp_name,
+        "description": desc,
+        "vars": vars_dict,
+        "rank": rank,
+        "active": True,
+    }
+
+    # Carry affinity info through to frontend for useTroopLevels
+    passive = tr.get("passive")
+    if isinstance(passive, dict) and passive.get("affinity"):
+        result["affinity"] = passive["affinity"]
+
+    return result
+
+
+def build_heroes(heroes_raw: list[dict], traits_data: dict, skill_name_map: dict, heroes_translated: dict) -> list[dict]:
+    """traits_data: JP name → trait entry (canonical or legacy shape).
+    skill_name_map: JP name → CHT name for skill reference translation.
     heroes_translated: JP name → {name, faction, clan} CHT mapping."""
     out = []
     for h in heroes_raw:
         traits = []
         for t in h.get("traits") or []:
             jp_name = t["name"]
-            tr = traits_translated.get(jp_name, {})
-            cht_name = tr.get("name", jp_name)
-            # Rank by name suffix on the CHT name (falls back to JP if untranslated).
-            rank = infer_trait_rank(cht_name) if cht_name != jp_name else infer_trait_rank(jp_name)
-            traits.append({
-                "name": cht_name,
-                "name_jp": jp_name,
-                "description": tr.get("description", t.get("description", "")),
-                "vars": tr.get("vars", {}),
-                "rank": rank,
-                "active": True,
-            })
+            tr = traits_data.get(jp_name, {})
+            traits.append(_flatten_trait(jp_name, tr))
 
         ht = heroes_translated.get(h["name"], {})
         out.append({
@@ -354,16 +379,24 @@ def _extract_commander_desc(tr: dict, battle: dict) -> str:
     return ""
 
 
-def build_skills(crawled: dict, translated: dict, battle: dict) -> list[dict]:
+def build_skills(skills_data: dict, *, use_canonical: bool = False) -> list[dict]:
+    """Build frontend skill list from data dict.
+    If use_canonical, each entry has raw/vars/text/battle sub-keys.
+    Otherwise, requires crawled/translated/battle dicts merged externally."""
     out = []
 
-    for key in crawled:
-        cr = crawled.get(key, {})
-        tr = translated.get(key, {})
-        bt = battle.get(key, {})
+    for key, entry in skills_data.items():
+        if use_canonical:
+            cr = entry.get("raw", {})
+            tr = entry.get("text", {})
+            bt = entry.get("battle", {})
+            vars_dict = entry.get("vars", {})
+        else:
+            cr = entry.get("_crawled", {})
+            tr = entry.get("_translated", {})
+            bt = entry.get("_battle", {})
+            vars_dict = tr.get("vars", {})
 
-        # Treat empty / whitespace-only translated description as missing,
-        # so we don't silently mask a translation gap with the JP source.
         tr_desc = (tr.get("description") or "").strip()
         if tr_desc:
             raw_desc = tr_desc
@@ -390,7 +423,7 @@ def build_skills(crawled: dict, translated: dict, battle: dict) -> list[dict]:
             "activation_rate": cr.get("activation_rate", tr.get("activation_rate", "")),
             "description": description,
             "commander_description": commander_description,
-            "vars": tr.get("vars", {}),
+            "vars": vars_dict,
             "source_hero": source_hero,
             "unique_hero": source_hero if is_unique else "",
             "is_unique": is_unique,
@@ -401,18 +434,11 @@ def build_skills(crawled: dict, translated: dict, battle: dict) -> list[dict]:
             "brief_description": tr.get("brief_description", ""),
         })
 
-    missing = set(translated.keys()) - set(crawled.keys())
-    if missing:
-        print(f"[warn] {len(missing)} skills in translated but not crawled: {missing}")
-
     return out
 
 
 def main():
     heroes_raw = yaml.safe_load(HEROES_CRAWLED.read_text("utf-8"))
-    crawled = yaml.safe_load(SKILLS_CRAWLED.read_text("utf-8"))
-    translated = yaml.safe_load(SKILLS_TRANSLATED.read_text("utf-8"))
-    traits_translated = yaml.safe_load(TRAITS_TRANSLATED.read_text("utf-8"))
 
     # Load hero name translations (optional)
     heroes_translated = {}
@@ -420,13 +446,36 @@ def main():
     if ht_path.exists():
         heroes_translated = yaml.safe_load(ht_path.read_text("utf-8")) or {}
 
-    # Build JP→CHT skill name map from translated data
-    skill_name_map = {jp_key: tr.get("name", jp_key) for jp_key, tr in translated.items()}
+    # Prefer canonical files if available, fall back to legacy 3-file layout
+    use_canonical = SKILLS_CANONICAL.exists() and TRAITS_CANONICAL.exists()
 
-    battle = _load_yaml_optional(SKILLS_BATTLE)
+    if use_canonical:
+        skills_data = yaml.safe_load(SKILLS_CANONICAL.read_text("utf-8")) or {}
+        traits_data = yaml.safe_load(TRAITS_CANONICAL.read_text("utf-8")) or {}
+        # Build skill name map from canonical text.name
+        skill_name_map = {
+            jp_key: entry.get("text", {}).get("name", jp_key)
+            for jp_key, entry in skills_data.items()
+        }
+        print(f"[info] Using canonical files: {SKILLS_CANONICAL}, {TRAITS_CANONICAL}")
+    else:
+        crawled = yaml.safe_load(SKILLS_CRAWLED.read_text("utf-8"))
+        translated = yaml.safe_load(SKILLS_TRANSLATED.read_text("utf-8"))
+        traits_data = yaml.safe_load(TRAITS_TRANSLATED.read_text("utf-8"))
+        battle = _load_yaml_optional(SKILLS_BATTLE)
+        # Package legacy into a unified dict shape for build_skills
+        skills_data = {}
+        for key in crawled:
+            skills_data[key] = {
+                "_crawled": crawled.get(key, {}),
+                "_translated": translated.get(key, {}),
+                "_battle": battle.get(key, {}),
+            }
+        skill_name_map = {jp_key: tr.get("name", jp_key) for jp_key, tr in translated.items()}
+        print(f"[info] Using legacy files (canonical not found)")
 
-    heroes = build_heroes(heroes_raw, traits_translated, skill_name_map, heroes_translated)
-    skills = build_skills(crawled, translated, battle)
+    heroes = build_heroes(heroes_raw, traits_data, skill_name_map, heroes_translated)
+    skills = build_skills(skills_data, use_canonical=use_canonical)
 
     # Apply overrides (highest priority)
     overrides = load_overrides()
@@ -437,6 +486,21 @@ def main():
     if overrides.get("heroes"):
         heroes = apply_hero_overrides(heroes, overrides["heroes"])
         override_count += len(overrides["heroes"])
+
+    # Enrich override-added hero traits with affinity from canonical traits.yaml.
+    # Override heroes have inline trait dicts that lack affinity; the canonical
+    # traits.yaml (populated by migration) has the structured data.
+    if use_canonical:
+        for h in heroes:
+            for t in h.get("traits") or []:
+                if t.get("affinity"):
+                    continue  # already has it
+                # Look up by CHT name or JP name
+                canon = traits_data.get(t.get("name_jp", "")) or traits_data.get(t.get("name", ""))
+                if canon and isinstance(canon, dict):
+                    passive = canon.get("passive")
+                    if isinstance(passive, dict) and passive.get("affinity"):
+                        t["affinity"] = passive["affinity"]
 
     # Post-process: normalize text, fix types, sort
     heroes, skills = postprocess(heroes, skills)

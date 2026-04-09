@@ -24,6 +24,10 @@ TRAITS_TRANSLATED = DATA_DIR / "traits_translated.yaml"
 TRAITS_BATTLE = DATA_DIR / "traits_battle.yaml"
 HEROES_TRANSLATED = DATA_DIR / "heroes_translated.yaml"
 
+# Canonical (unified files — raw + vars + text + battle/passive per entry)
+SKILLS_CANONICAL = DATA_DIR / "skills.yaml"
+TRAITS_CANONICAL = DATA_DIR / "traits.yaml"
+
 # Static / manual
 STATUSES_YAML = DATA_DIR / "statuses.yaml"
 OVERRIDES_YAML = DATA_DIR / "overrides.yaml"
