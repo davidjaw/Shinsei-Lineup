@@ -341,6 +341,329 @@ def autofix_frontend(fe: dict) -> list[str]:
     return fixes
 
 
+# ---------------------------------------------------------------------------
+# Skill output format (shared between translate and override prompts)
+# ---------------------------------------------------------------------------
+
+SKILL_OUTPUT_FORMAT = """\
+For EACH skill, output a YAML document under that skill's name as the top-level key, containing THREE sections:
+
+## `vars` — Shared variables (SINGLE source of numeric truth)
+- Extract ALL numeric values referenced in both text and battle into ONE shared `vars` dict.
+- Scaling values: use nested {base, max, scale} (e.g. {base: 0.30, max: 0.60, scale: 武勇}).
+- Fixed values: use plain int/float (e.g. duration: 2).
+- CRITICAL: `text.description` uses {var:key} to reference these vars.
+  `battle.do` uses $key to reference these vars. Both reference the SAME vars dict.
+  Do NOT duplicate vars between text and battle.
+
+## `text` — Formatted description for frontend rendering
+- REQUIRED fields: `name` (CHT skill name), `type`, `rarity`, `target`, `activation_rate`, `description`, `brief_description`, `tags`
+- `rarity` must be just: S, A, or B
+- `brief_description`: 15-25 chars, summarize the core mechanic without numbers
+- `tags`: list from ONLY these allowed tags: """ + SKILL_TAGS + """
+- Use {var:key} in description to reference the shared vars dict
+- Do NOT include a `vars` field here — vars live at the top level
+
+## `battle` — Structured extraction for battle engine
+- ALL text (including `bonus.commander.description`) must be in Traditional Chinese (繁體中文)
+- Use $key to reference the shared vars dict — do NOT include a `vars` field here
+- NEVER use {var:}, {status:}, or {scale:} in battle — those are text-only. Battle uses $key for vars and plain Chinese for statuses (e.g. 會心, not {status:會心})
+- `bonus.commander.description` follows the SAME $key rule: write $atk_debuff, NOT {var:atk_debuff}. Write （受統率影響）, NOT （{scale:統率}）.
+- Map effects to `do` blocks: trigger/when/to/do
+- Effect types: damage, heal, buff, debuff, applyStatus, removeStatus, addStack, roll, sequence, conditional
+- Trigger types: always, battleStart, turnStart, beforeAction, afterAction, beforeAttack, afterAttack, onDamaged, onHeal
+- Target types: self, allySingle, allyMultiple, allyAll, enemySingle, enemyMultiple, enemyAll
+- 大将技 → `bonus.commander`
+
+### Reference examples (correct format):
+
+Example 1 (主動, damage + status + commander):
+傲岸不遜:
+  vars:
+    dmg_rate:
+      base: 0.59
+      max: 1.18
+    assault_debuff:
+      base: 0.15
+      max: 0.3
+    atk_debuff:
+      base: 0.15
+      max: 0.3
+    duration: 2
+  text:
+    name: 傲岸不遜
+    type: 主動
+    rarity: S
+    target: 敵軍複數（2人）
+    activation_rate: "35%"
+    description: >
+      對敵軍複數（2人）造成{var:dmg_rate}兵刃傷害，
+      並施加{status:挑釁}狀態，使其突擊戰法傷害降低{var:assault_debuff}（{scale:統率}），持續{var:duration}回合。
+    brief_description: 複數兵刃傷害並施加挑釁
+    tags: [兵刃傷害, 群體傷害, 施加狀態, 減益, 主動發動, 大將技]
+  battle:
+    type: 主動
+    trigger: beforeAction
+    rate: 0.35
+    do:
+      - to: enemyMultiple
+        count: 2
+        do:
+          - type: damage
+            damage_type: 兵刃傷害
+            value: $dmg_rate
+          - type: applyStatus
+            status: 挑釁
+            duration: $duration
+          - type: debuff
+            stat: assault_damage
+            value: $assault_debuff
+            scale: 統率
+            duration: $duration
+    bonus:
+      commander:
+        description: 額外使敵軍普通攻擊傷害降低$atk_debuff（受統率影響）
+        do:
+          - type: debuff
+            stat: normal_attack_damage
+            value: $atk_debuff
+            scale: 統率
+            duration: $duration
+
+Example 2 (被動, multi-status + HP conditional):
+以戰養戰:
+  vars:
+    rebel_rate:
+      base: 0.125
+      max: 0.25
+    extra_rebel_rate:
+      base: 0.125
+      max: 0.25
+    crit_rate:
+      base: 0.125
+      max: 0.25
+  text:
+    name: 以戰養戰
+    type: 被動
+    rarity: S
+    target: 自身
+    activation_rate: "100%"
+    description: >
+      戰鬥中，使自身獲得{var:rebel_rate}{status:離反}。
+      第5回合時，額外獲得{var:extra_rebel_rate}{status:離反}。
+      自身兵力低於50%時，額外獲得{var:crit_rate}{status:會心}。
+    brief_description: 獲得離反，低兵力時獲得會心
+    tags: [增益, 施加狀態, 被動觸發, 武勇系, 條件觸發]
+  battle:
+    type: 被動
+    trigger: always
+    do:
+      - trigger: battleStart
+        to: self
+        do:
+          - type: applyStatus
+            status: 離反
+            value: $rebel_rate
+      - trigger: turnStart
+        when: turn == 5
+        to: self
+        do:
+          - type: applyStatus
+            status: 離反
+            value: $extra_rebel_rate
+      - trigger: always
+        when: hp_rate <= 0.5
+        to: self
+        do:
+          - type: applyStatus
+            status: 會心
+            value: $crit_rate
+
+Example 3 (突擊, scaling activation_rate + 謀略傷害 + debuff):
+五里霧中:
+  vars:
+    activation_rate:
+      base: 0.2
+      max: 0.35
+    dmg_rate:
+      base: 0.82
+      max: 1.64
+    confusion_chance:
+      base: 0.3
+      max: 0.6
+    stat_debuff:
+      base: 36
+      max: 72
+      type: flat
+    debuff_duration: 2
+  text:
+    name: 五里霧中
+    type: 突擊
+    rarity: S
+    target: 敵軍單體
+    activation_rate: "20%→35%"
+    description: >
+      對敵軍單體造成{var:dmg_rate}謀略傷害（{scale:智略}），
+      並有{var:confusion_chance}機率施加{status:混亂}狀態。
+      同時降低目標智略{var:stat_debuff}點，持續{var:debuff_duration}回合。
+    brief_description: 謀略傷害並機率施加混亂
+    tags: [謀略傷害, 單體傷害, 施加狀態, 控制, 降低屬性, 突擊觸發, 智略系]
+  battle:
+    type: 突擊
+    trigger: afterAttack
+    rate: $activation_rate
+    do:
+      - to: enemySingle
+        do:
+          - type: damage
+            damage_type: 謀略傷害
+            value: $dmg_rate
+            scale: 智略
+          - type: roll
+            chance: $confusion_chance
+            on_success:
+              - type: applyStatus
+                status: 混亂
+          - type: debuff
+            stat: 智略
+            value: $stat_debuff
+            duration: $debuff_duration"""
+
+
+# ---------------------------------------------------------------------------
+# Validation (shared between translate and override)
+# ---------------------------------------------------------------------------
+
+def validate_skill_entry(data: dict) -> list[str]:
+    """Validate a single skill's LLM output structure."""
+    errors = []
+    if not isinstance(data, dict):
+        return ["not a dict"]
+
+    text = data.get("text")
+    if not text:
+        errors.append("missing text")
+    elif not isinstance(text, dict):
+        errors.append("text not a dict")
+    else:
+        if not text.get("name"):
+            errors.append("text.name missing")
+        if not text.get("description"):
+            errors.append("text.description missing")
+
+    bt = data.get("battle")
+    if not bt:
+        errors.append("missing battle")
+    elif not isinstance(bt, dict):
+        errors.append("battle not a dict")
+
+    return errors
+
+
+def validate_trait_entry(data: dict) -> list[str]:
+    """Validate a single trait's LLM output structure."""
+    errors = []
+    if not isinstance(data, dict):
+        return ["not a dict"]
+
+    text = data.get("text")
+    if not text:
+        errors.append("missing text")
+    elif not isinstance(text, dict):
+        errors.append("text not a dict")
+    else:
+        if not text.get("name"):
+            errors.append("text.name missing")
+        if not text.get("description"):
+            errors.append("text.description missing")
+
+    kind = data.get("kind")
+    if not kind:
+        errors.append("missing kind")
+    elif kind == "passive":
+        if not data.get("passive"):
+            errors.append("kind=passive but missing passive section")
+        if data.get("battle"):
+            errors.append("kind=passive but has battle section (should not)")
+    elif kind == "triggered":
+        bt = data.get("battle")
+        if not bt:
+            errors.append("kind=triggered but missing battle section")
+        elif not isinstance(bt, dict):
+            errors.append("battle not a dict")
+    else:
+        errors.append(f"unknown kind '{kind}' (must be passive or triggered)")
+
+    return errors
+
+
+def validate_entry_quality(data: dict) -> list[str]:
+    """Post-LLM quality checks on text section. Auto-fixes what it can, returns hard errors only."""
+    text = data.get("text", {})
+    if not isinstance(text, dict):
+        return []
+
+    # Auto-fix known issues first
+    fixes = autofix_frontend(text)
+    if fixes:
+        from tqdm import tqdm
+        tqdm.write(f"    [autofix] {'; '.join(fixes)}")
+
+    errors = []
+    desc = text.get("description", "")
+    cmd_desc = text.get("commander_description", "")
+    full_text = f"{desc} {cmd_desc}"
+    vars_dict = data.get("vars", {})
+
+    # 1. English words in CHT description (var names leaking through)
+    english_words = re.findall(r'(?<!\{var:)(?<!\{status:)(?<!\{scale:)(?<!\{dmg:)(?<!\{stat:)\b[a-zA-Z_]{3,}\b', full_text)
+    ok_words = {'var', 'status', 'scale', 'dmg', 'stat', 'base', 'max', 'flat'}
+    bad_words = [w for w in english_words if w.lower() not in ok_words]
+    if bad_words:
+        errors.append(f"English in description: {bad_words[:3]}")
+
+    # 2. {var:X} references not in vars
+    var_refs = re.findall(r'\{var:(\w+)\}', full_text)
+    for ref in var_refs:
+        ref_key = ref.split(":")[0] if ":" in ref else ref
+        if ref_key not in vars_dict:
+            errors.append(f"{{var:{ref}}} not in vars")
+
+    # 3. base without max
+    for vk, vv in vars_dict.items():
+        if isinstance(vv, dict) and 'base' in vv and 'max' not in vv:
+            errors.append(f"vars.{vk} has base but no max")
+
+    # 4. Double braces
+    if re.search(r'\{\{(var|status|scale|dmg|stat):', full_text):
+        errors.append("double braces in description (use single {)")
+
+    # 5. Any text field contains Japanese kana
+    for field in ("name", "description", "commander_description", "brief_description", "target"):
+        val = text.get(field, "")
+        if has_kana(val):
+            errors.append(f"text.{field} contains Japanese kana — not translated")
+
+    # 6. activation_rate with → but no scaling vars
+    act_rate = str(text.get("activation_rate", ""))
+    if "→" in act_rate or "~" in act_rate:
+        has_scaling_var = any(
+            isinstance(v, dict) and "base" in v and "max" in v
+            for v in vars_dict.values()
+        )
+        if not has_scaling_var:
+            errors.append("activation_rate has scaling (→) but no vars use base/max")
+
+    # 7. {var:} or {status:} leaked into battle section (should use $key)
+    battle = data.get("battle", {})
+    if isinstance(battle, dict):
+        battle_str = str(battle)
+        if re.search(r'\{(var|status|scale):', battle_str):
+            errors.append("{var:}/{status:}/{scale:} found in battle (use $key)")
+
+    return errors
+
+
 # Hiragana + Katakana detection. Excludes ・(U+30FB) which is shared CJK punctuation.
 _KANA_RE = re.compile(r"[\u3040-\u309F\u30A0-\u30FA\u30FC-\u30FF]")
 
