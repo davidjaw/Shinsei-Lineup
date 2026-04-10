@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 from paths import LLM_CACHE_DIR, OVERRIDES_YAML
 
@@ -216,7 +217,6 @@ def call_llm(
         cached = details.get("cached_tokens", 0)
         if cached:
             _token_totals["cached"] += cached
-            from tqdm import tqdm
             tqdm.write(f"    [cache] {cached} tokens read from cache")
 
     return data["choices"][0]["message"]["content"].strip()
@@ -606,7 +606,6 @@ def validate_entry_quality(data: dict) -> list[str]:
     # Auto-fix known issues first
     fixes = autofix_frontend(text)
     if fixes:
-        from tqdm import tqdm
         tqdm.write(f"    [autofix] {'; '.join(fixes)}")
 
     errors = []
@@ -660,6 +659,13 @@ def validate_entry_quality(data: dict) -> list[str]:
         battle_str = str(battle)
         if re.search(r'\{(var|status|scale):', battle_str):
             errors.append("{var:}/{status:}/{scale:} found in battle (use $key)")
+
+    # 8. {status:X} references non-canonical status names
+    _canonical = set(CANONICAL_STATUSES.split())
+    status_refs = re.findall(r'\{status:([^}]+)\}', full_text)
+    for sr in status_refs:
+        if sr not in _canonical:
+            errors.append(f"{{status:{sr}}} is not a canonical status")
 
     return errors
 

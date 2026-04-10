@@ -569,17 +569,14 @@ def do_add_hero(model: str):
 
 
 # ---------------------------------------------------------------------------
-# Quick Add Skill (natural language)
+# Quick Add (unified: skills, heroes, or mixed)
 # ---------------------------------------------------------------------------
 
 
-def _collect_quick_skills() -> tuple[list[str], dict]:
-    """Collect multiple skills' raw text at once. Returns (raw_texts, metadata).
-
-    Each skill is separated by a blank line. Metadata (event/hero) is asked once for the batch.
-    """
-    print("  Paste skill descriptions (one per paragraph, blank line between skills).")
-    print("  Two blank lines or '.' to finish, '<' to cancel:\n")
+def _collect_raw_input() -> str:
+    """Collect raw text from user as a single block.
+    Returns the full pasted text. LLM handles splitting into individual items."""
+    print("  Paste all items (two blank lines or '.' to finish, '<' to cancel):\n")
     all_lines = []
     blank_count = 0
     while True:
@@ -588,151 +585,302 @@ def _collect_quick_skills() -> tuple[list[str], dict]:
         except EOFError:
             break
         if line.strip() == BACK_CMD:
-            return [], {}
+            return ""
         if line.strip() == ".":
             break
         if not line.strip():
             blank_count += 1
             if blank_count >= 2:
                 break
-            all_lines.append("")  # preserve single blank as separator
+            all_lines.append("")
             continue
         blank_count = 0
         all_lines.append(line)
 
-    # Split into skills by blank lines
-    skills = []
-    current = []
-    for line in all_lines:
-        if not line.strip():
-            if current:
-                skills.append("\n".join(current))
-                current = []
-        else:
-            current.append(line)
-    if current:
-        skills.append("\n".join(current))
+    return "\n".join(all_lines).strip()
 
-    if not skills:
-        return [], {}
 
-    print(f"\n  Found {len(skills)} skill(s):")
-    for i, s in enumerate(skills, 1):
-        print(f"    {i}. {s.split(chr(10))[0][:50]}")
+def _flatten_skill_entry(entry: dict) -> dict:
+    """Flatten LLM output (vars/text/battle) into override format."""
+    text = entry.get("text", {})
+    result = {}
+    if isinstance(text, dict):
+        for k, v in text.items():
+            result[k] = v
+    if entry.get("vars"):
+        result["vars"] = entry["vars"]
+    if entry.get("battle"):
+        result["battle"] = entry["battle"]
+    return result
 
+
+def _ask_skill_metadata(name: str, result: dict) -> bool:
+    """Ask user for metadata LLM couldn't determine. Modifies result in place.
+    Returns False if user wants to go back (skip this item)."""
     try:
-        is_event = prompt_confirm("Are these event skills (事件戰法)?", default=False)
+        if not result.get("is_event_skill"):
+            if prompt_confirm(f"  Is '{name}' an event skill (事件戰法)?", default=False):
+                result["is_event_skill"] = True
+
+        if not result.get("is_event_skill"):
+            if not result.get("unique_hero"):
+                uh = prompt_input(f"  Unique hero for '{name}' (固有武將, empty if teachable)", required=False)
+                if uh:
+                    result["unique_hero"] = uh
+                    result["is_unique"] = True
+            if not result.get("unique_hero") and not result.get("source_hero"):
+                sh = prompt_input(f"  Source hero for '{name}' (傳承者, empty if none)", required=False)
+                if sh:
+                    result["source_hero"] = sh
+        return True
     except GoBack:
-        return [], {}
-
-    return skills, {"is_event": is_event}
+        return False
 
 
-def do_quick_add_skill(model: str):
-    print("\n=== Quick Add Skill (natural language, batch) ===")
+def do_quick_add(model: str):
+    print("\n=== Quick Add ===")
+    print("  1. Skills (default)")
+    print("  2. Heroes")
+    print("  3. Mixed (skills + heroes)")
+    mode = prompt_input("Mode", default="1")
 
-    raw_texts, meta = _collect_quick_skills()
-    if not raw_texts:
+    if mode not in ("1", "2", "3"):
+        print("[error] Invalid mode")
+        return
+
+    raw_paste = _collect_raw_input()
+    if not raw_paste:
         print("[cancelled]")
         return
 
-    # Build fake skill dicts to feed into the same prompt as llm_translate
-    skill_dicts = []
-    for raw in raw_texts:
-        # Extract first line as potential name
-        first_line = raw.split("\n")[0].strip()
-        skill_dicts.append((first_line, {
-            "raw": {
-                "name": first_line,
-                "type": "unknown",
-                "rarity": "",
-                "target": "",
-                "activation_rate": "",
-                "source_hero": "",
-                "description": raw,
-                "commander_bonus": "",
-            }
-        }))
+    # --- Build prompt: send entire paste as one block, let LLM split ---
+    if mode in ("1", "3"):
+        user = f"""\
+The following is raw skill data (already in Traditional Chinese).
+Parse ALL skills and output each as a separate top-level YAML key with `vars`, `text`, and `battle` sections.
 
-    # Reuse batch/single prompt builders for user message, but use override system prompt
-    if len(skill_dicts) == 1:
-        _, user = build_skill_single_prompt(skill_dicts[0][1])
+IMPORTANT: In the `text` section, include a `raw_text` field containing the EXACT original text
+from the input that describes this skill (copy verbatim, do not paraphrase or reformat).
+
+---
+{raw_paste}
+---
+Output YAML: each skill name as a top-level key, containing `vars`, `text` (with `raw_text`), and `battle` sections.
+Parse ALL skills in the input above."""
+        system = OVERRIDE_SYSTEM_PROMPT
     else:
-        _, user = build_skill_batch_prompt(skill_dicts)
-    system = OVERRIDE_SYSTEM_PROMPT
+        user = f"""\
+Parse all heroes below. Extract: name, rarity (1-5), cost, faction, clan, gender,
+stats (lea/val/int/pol/cha/spd), unique_skill, teachable_skill, assembly_skill, and traits.
 
-    print(f"\n[llm] Processing {len(skill_dicts)} skill(s)...")
+---
+{raw_paste}
+---
+Output YAML: each hero name as top-level key with all fields."""
+        system = OVERRIDE_SYSTEM_PROMPT
+
+    print(f"\n[llm] Processing...")
     try:
-        raw = call_llm(user, system_prompt=system, model=model, timeout=300)
-        parsed = parse_llm_output(raw)
+        raw_resp = call_llm(user, system_prompt=system, model=model, timeout=300)
+        parsed = parse_llm_output(raw_resp)
     except Exception as e:
         print(f"[error] LLM call failed: {e}")
         return
 
     if parsed is None:
         print("[error] Failed to parse LLM response.")
-        print(f"  Raw output:\n{raw[:500]}")
+        print(f"  Raw output:\n{raw_resp[:500]}")
         return
 
     parsed_keys = list(parsed.keys())
     parsed_values = list(parsed.values())
 
+    # Confirm count — warn but continue if user says no
+    count_warning = False
+    print(f"\n  LLM parsed {len(parsed_keys)} item(s):")
+    for i, k in enumerate(parsed_keys, 1):
+        print(f"    {i}. {k}")
+    if not prompt_confirm(f"  {len(parsed_keys)} items, correct?", default=True):
+        count_warning = True
+        print("  [warn] Count mismatch noted — will warn at the end. Continuing...")
+
+    # --- Validate and collect good/bad ---
+    good: list[tuple[str, dict, dict]] = []  # (name, entry, result)
+    bad: list[tuple[str, dict, str]] = []  # (name, entry, errors)
+
+    for i, (name, entry) in enumerate(zip(parsed_keys, parsed_values)):
+        if mode in ("1", "3"):
+            errors = validate_skill_entry(entry)
+            if errors:
+                print(f"  [INVALID] {name}: {'; '.join(errors)}")
+                bad.append((name, entry, "; ".join(errors)))
+                continue
+            quality = validate_entry_quality(entry)
+            if quality:
+                print(f"  [QUALITY] {name}: {'; '.join(quality)}")
+            else:
+                print(f"  [VALID] {name}")
+            result = _flatten_skill_entry(entry)
+        else:
+            if not isinstance(entry, dict) or not entry.get("name"):
+                print(f"  [INVALID] {name}: missing name")
+                bad.append((name, entry, "missing name"))
+                continue
+            print(f"  [VALID] {name}")
+            result = entry
+
+        good.append((name, entry, result))
+
+    # --- Retry bad ones with error feedback ---
+    if bad and mode in ("1", "3"):
+        print(f"\n[retry] {len(bad)} failed item(s)...")
+        error_summary = "\n".join(f"  {name}: {errs}" for name, _, errs in bad)
+        bad_descriptions = "\n".join(
+            f"Skill: {name}" for name, _, _ in bad
+        )
+        retry_user = f"""\
+Previous attempt had errors:
+{error_summary}
+
+Fix these errors. Re-parse these skills from the original input:
+
+---
+{raw_paste}
+---
+Only output the failed skills: {', '.join(name for name, _, _ in bad)}"""
+
+        try:
+            raw_resp = call_llm(retry_user, system_prompt=system, model=model, timeout=300)
+            retry_parsed = parse_llm_output(raw_resp)
+        except Exception as e:
+            print(f"  [retry failed] {e}")
+            retry_parsed = None
+
+        if retry_parsed:
+            for rname, rentry in retry_parsed.items():
+                errors = validate_skill_entry(rentry)
+                if errors:
+                    print(f"  [STILL BAD] {rname}: {'; '.join(errors)}")
+                    continue
+                quality = validate_entry_quality(rentry)
+                if quality:
+                    print(f"  [QUALITY] {rname}: {'; '.join(quality)}")
+                else:
+                    print(f"  [FIXED] {rname}")
+                result = _flatten_skill_entry(rentry)
+                good.append((rname, rentry, result))
+
+    if not good:
+        print("\n[done] No valid items to add.")
+        return
+
+    # --- Check hero skill references (issue 2) ---
+    if mode in ("2", "3"):
+        existing_skills = load_existing_skills()
+        ov = load_overrides()
+        override_skills = ov.get("skills", {})
+        # Collect all known skill names: keys + translated names + names from this batch
+        all_skill_names = set(existing_skills.keys()) | set(override_skills.keys())
+        for sk in existing_skills.values():
+            if isinstance(sk, dict) and sk.get("text", {}).get("name"):
+                all_skill_names.add(sk["text"]["name"])
+        for sk in override_skills.values():
+            if isinstance(sk, dict) and sk.get("name"):
+                all_skill_names.add(sk["name"])
+        # Also include skills from this batch
+        for gname, _, gresult in good:
+            all_skill_names.add(gname)
+            if isinstance(gresult, dict) and gresult.get("name"):
+                all_skill_names.add(gresult["name"])
+
+        for name, entry, result in good:
+            is_hero = "stats" in result or mode == "2"
+            if not is_hero:
+                continue
+            for field in ("unique_skill", "teachable_skill"):
+                sk = result.get(field, "")
+                if sk and sk not in all_skill_names:
+                    print(f"  [warn] Hero '{name}' references skill '{sk}' ({field}) — not found")
+
+    # --- Confirm each item ---
     overrides = load_overrides()
     overrides.setdefault("skills", {})
+    overrides.setdefault("heroes", {})
     added = 0
+    accept_all = False
+    overwrite_all = False
 
-    for i, raw_text in enumerate(raw_texts):
-        if i >= len(parsed_values):
-            print(f"\n  [missing] Skill #{i+1} not in LLM output, skipped.")
-            continue
+    print(f"\n  {len(good)} item(s) ready. Confirm each: y=accept, n=skip, yy=accept all remaining")
 
-        entry = parsed_values[i]
-        skill_name = parsed_keys[i]
+    for seq, (name, entry, result) in enumerate(good):
+        print(f"\n--- [{seq+1}/{len(good)}] {name} ---")
 
-        # Validate using same checks as llm_translate
-        errors = validate_skill_entry(entry)
-        if errors:
-            print(f"  [INVALID] {skill_name}: {'; '.join(errors)}")
-            continue
+        # Always ask for metadata (even under yy)
+        if mode in ("1", "3") and isinstance(entry, dict) and "battle" in entry:
+            if not _ask_skill_metadata(name, result):
+                print(f"  [skipped]")
+                continue
 
-        text = entry.get("text", {})
-        quality = validate_entry_quality(entry)
-        if quality:
-            print(f"  [QUALITY] {skill_name}: {'; '.join(quality)}")
+        if not accept_all:
+            # Show preview before asking
+            print(yaml.dump({name: result}, allow_unicode=True, default_flow_style=False, sort_keys=False))
+
+            # Check overwrite
+            if not overwrite_all:
+                existing = overrides.get("skills", {}).get(name) or overrides.get("heroes", {}).get(name)
+                if existing:
+                    desc = existing.get("description", "")
+                    print(f"  [warn] '{name}' already exists (type: {existing.get('type', '?')}, rarity: {existing.get('rarity', '?')})")
+                    if desc:
+                        print(f"    description: {desc[:80]}{'...' if len(desc) > 80 else ''}")
+                    ow = prompt_input("  Overwrite? (y/n/yy=overwrite all)", default="n").strip().lower()
+                    if ow == "yy":
+                        overwrite_all = True
+                    elif ow != "y":
+                        print(f"  [skipped]")
+                        continue
+
+            answer = prompt_input("  Accept? (y/n/yy)", default="y").strip().lower()
+            if answer == "yy":
+                accept_all = True
+            elif answer != "y":
+                print(f"  [skipped]")
+                continue
         else:
-            print(f"  [VALID] {skill_name}")
+            # accept_all: still check overwrite
+            if not overwrite_all:
+                existing = overrides.get("skills", {}).get(name) or overrides.get("heroes", {}).get(name)
+                if existing:
+                    print(f"  [warn] '{name}' already exists — skipped (use overwrite-all to force)")
+                    continue
 
-        # Flatten text section into override format
-        result = {"raw_text": raw_text}
-        if meta.get("is_event"):
-            result["is_event_skill"] = True
-        if isinstance(text, dict):
-            for k, v in text.items():
-                result[k] = v
-        if entry.get("vars"):
-            result["vars"] = entry["vars"]
-        if entry.get("battle"):
-            result["battle"] = entry["battle"]
-
-        print(f"\n--- [{i+1}/{len(raw_texts)}] {skill_name} ---")
-        print(yaml.dump({skill_name: result}, allow_unicode=True, default_flow_style=False, sort_keys=False))
-
-        if not _confirm_overwrite(skill_name, overrides):
-            print(f"  [skipped]")
-            continue
-        if prompt_confirm(f"Add '{skill_name}'?"):
+        # Save
+        is_hero = mode == "2" or (mode == "3" and "stats" in result)
+        if is_hero:
             result["_action"] = "add"
-            overrides["skills"][skill_name] = result
-            added += 1
-            print(f"  [added]")
+            overrides["heroes"][name] = result
         else:
-            print(f"  [skipped]")
+            result["_action"] = "add"
+            overrides["skills"][name] = result
+        added += 1
+        print(f"  [added]")
 
     if added:
         save_overrides(overrides)
-        print(f"\n[done] {added}/{len(raw_texts)} skill(s) added to {OVERRIDES_YAML}")
-    else:
-        print("\n[done] No skills added.")
+
+    # Final summary
+    warnings = []
+    if count_warning:
+        warnings.append("LLM item count was flagged as incorrect")
+    if bad:
+        still_bad = [name for name, _, _ in bad if not any(n == name for n, _, _ in good)]
+        if still_bad:
+            warnings.append(f"{len(still_bad)} item(s) failed validation: {', '.join(still_bad)}")
+
+    print(f"\n[done] {added}/{len(good)} item(s) added to {OVERRIDES_YAML}")
+    if warnings:
+        for w in warnings:
+            print(f"  [warn] {w}")
 
 
 def _add_skill_for_hero(skill_name: str, label: str, hero_name: str, model: str):
@@ -846,7 +994,7 @@ Output YAML: each skill name as a top-level key, containing `vars`, `text`, and 
 
     print(f"[llm] Sending {len(targets)} skills...")
     try:
-        raw = call_llm(user, system_prompt=RECOMPILE_SYSTEM_PROMPT, model=model, timeout=300)
+        raw = call_llm(user, system_prompt=OVERRIDE_SYSTEM_PROMPT, model=model, timeout=300)
         parsed = parse_llm_output(raw)
     except Exception as e:
         print(f"[error] LLM call failed: {e}")
@@ -920,9 +1068,6 @@ Output YAML: each skill name as a top-level key, containing `vars`, `text`, and 
 def main():
     p = argparse.ArgumentParser(description="Interactive override manager for game data")
     p.add_argument("--modify-skill", action="store_true", help="Modify an existing skill")
-    p.add_argument("--add-skill", action="store_true", help="Add a new skill (guided)")
-    p.add_argument("--quick-add", action="store_true", help="Add a skill from natural language")
-    p.add_argument("--add-hero", action="store_true", help="Add a new hero")
     p.add_argument("--recompile", action="store_true", help="Recompile override skills from raw_text")
     p.add_argument("--dry-run", action="store_true", help="Preview recompile without saving")
     p.add_argument("--name", help="Filter by name (for --recompile)")
@@ -933,33 +1078,10 @@ def main():
         do_recompile(args.model, name_filter=args.name, dry_run=args.dry_run)
         return
 
-    if not any([args.modify_skill, args.add_skill, args.quick_add, args.add_hero]):
-        print("Choose an action:")
-        print("  1. Modify existing skill")
-        print("  2. Add new skill (guided, batch)")
-        print("  3. Add new skill (natural language)")
-        print("  4. Add new hero")
-        choice = prompt_input("Action", default="3")
-        if choice == "1":
-            args.modify_skill = True
-        elif choice == "2":
-            args.add_skill = True
-        elif choice == "3":
-            args.quick_add = True
-        elif choice == "4":
-            args.add_hero = True
-        else:
-            print("[error] Invalid choice")
-            return
-
     if args.modify_skill:
         do_modify_skill(args.model)
-    elif args.add_skill:
-        do_add_skill(args.model)
-    elif args.quick_add:
-        do_quick_add_skill(args.model)
-    elif args.add_hero:
-        do_add_hero(args.model)
+    else:
+        do_quick_add(args.model)
 
 
 if __name__ == "__main__":
