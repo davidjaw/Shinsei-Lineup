@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "data": "python3 script/build_frontend_data.py && python3 script/check_data_integrity.py",
+    "data": "uv run script/build_frontend_data.py && uv run script/check_data_integrity.py",
     "dev": "npm run data && vite",
     "build": "npm run data && vite build",
     "deploy:alt": "npm run build && cp -r dist/* ../nobunaga-deploy/ && cd ../nobunaga-deploy && git add . && git commit -m \"Update site\" && git push",

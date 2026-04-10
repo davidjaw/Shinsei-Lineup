@@ -19,20 +19,13 @@ import sys
 
 import yaml
 
+from llm_core import has_kana as _has_kana
 from paths import (
     HEROES_JSON, SKILLS_JSON,
     HEROES_CRAWLED, HEROES_TRANSLATED,
     SKILLS_CRAWLED, TRAITS_CRAWLED,
     SKILLS_CANONICAL, TRAITS_CANONICAL,
 )
-
-# Hiragana + Katakana. JP-only — Han characters are shared with CHT and would
-# produce false positives, so we deliberately do NOT match them.
-KANA_RE = re.compile(r"[\u3040-\u309F\u30A0-\u30FF]")
-
-
-def _has_kana(value) -> bool:
-    return isinstance(value, str) and bool(KANA_RE.search(value))
 
 
 def _load_yaml(path):
@@ -154,18 +147,18 @@ def check():
         if missing_skills or untranslated_skills:
             names = sorted({n for n, *_ in untranslated_skills} | set(missing_skills))
             if len(names) == 1:
-                suggestions.append(f'python3 script/llm_translate.py --skills --name "{names[0]}"')
+                suggestions.append(f'uv run script/llm_translate.py --skills --name "{names[0]}"')
             elif names:
-                suggestions.append("python3 script/llm_translate.py --skills    # then re-check")
+                suggestions.append("uv run script/llm_translate.py --skills    # then re-check")
         if missing_traits or any("trait" in field for _, field, _ in untranslated_heroes):
-            suggestions.append("python3 script/llm_translate.py --traits")
+            suggestions.append("uv run script/llm_translate.py --traits")
         if missing_heroes or any(field == "name" for _, field, _ in untranslated_heroes):
-            suggestions.append("python3 script/llm_translate.py --heroes")
+            suggestions.append("uv run script/llm_translate.py --heroes")
         if suggestions:
             print("\n[suggested actions — copy/paste to fix]")
             for s in suggestions:
                 print(f"  {s}")
-            print("  python3 script/build_frontend_data.py && python3 script/check_data_integrity.py")
+            print("  uv run script/build_frontend_data.py && uv run script/check_data_integrity.py")
 
         sys.exit(1)
     else:

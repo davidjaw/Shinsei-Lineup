@@ -24,7 +24,7 @@ from pathlib import Path
 from claude_test import call_claude
 from llm_core import (
     CANONICAL_STATUSES, COMMON_RULES, SKILL_TAGS, DEFAULT_MODEL,
-    call_gemini, parse_llm_output, autofix_frontend, load_overrides,
+    call_llm, parse_llm_output, autofix_frontend, load_overrides,
 )
 from paths import (
     OVERRIDES_YAML, SKILLS_CRAWLED,
@@ -209,7 +209,7 @@ def do_modify_skill(model: str):
 
     print("\n[llm] Processing modification...")
     try:
-        raw = call_gemini(prompt, model=model)
+        raw = call_llm(prompt, model=model)
         result = parse_llm_output(raw)
     except Exception as e:
         print(f"[error] LLM call failed: {e}")
@@ -319,7 +319,7 @@ def _process_skill_with_llm(info: dict, model: str) -> tuple[str, dict] | None:
     prompt = _build_add_skill_prompt(info)
 
     try:
-        raw = call_gemini(prompt, model=model)
+        raw = call_llm(prompt, model=model)
         result = parse_llm_output(raw)
     except Exception as e:
         print(f"  [error] LLM failed for '{name}': {e}")
@@ -690,7 +690,7 @@ def do_quick_add_skill(model: str):
     print(f"\n[llm] Processing {len(queue)} skill(s) in one call...")
     try:
         timeout = 60 + 40 * len(queue)
-        raw = call_gemini(prompt, model=model, timeout=timeout)
+        raw = call_llm(prompt, model=model, timeout=timeout)
         parsed = parse_llm_output(raw)
     except Exception as e:
         print(f"[error] LLM call failed: {e}")

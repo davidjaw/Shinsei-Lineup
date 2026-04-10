@@ -1,15 +1,15 @@
 """
-Shared LLM infrastructure for Gemini CLI calls.
+Shared LLM infrastructure for OpenRouter API calls.
 
-Provides: constants, prompt rules, call_gemini(), parse_llm_output(), cache functions.
+Provides: constants, prompt rules, call_llm(), parse_llm_output(), cache functions.
 """
 
 import os
 import re
-import subprocess
 import yaml
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 
 from paths import LLM_CACHE_DIR, OVERRIDES_YAML
@@ -20,8 +20,11 @@ load_dotenv()
 # Constants
 # ---------------------------------------------------------------------------
 
-GCP_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "")
-DEFAULT_MODEL = "gemini-3-flash-preview"
+MODEL_FREE = "google/gemma-4-31b-it:free"
+MODEL_GEMMA = "google/gemma-4-26b-a4b-it"
+MODEL_HAIKU = "anthropic/claude-haiku-4.5"
+MODEL_SONNET = "anthropic/claude-sonnet-4.6"
+DEFAULT_MODEL = MODEL_HAIKU
 
 CANONICAL_STATUSES = (
     "威壓 麻痺 封擊 無策 混亂 疲弊 "
@@ -112,25 +115,124 @@ Damage type terminology: 兵刃傷害, 謀略傷害, 真實傷害 (NEVER use 計
 | 知略 | 智略 | JP kanji → CHT |
 | 計略傷害 | 謀略傷害 | Correct damage type term |
 
+### Target Field JP→CHT Conventions
+- 敵軍単体 → 敵軍單體
+- 敵軍複数（N体）→ 敵軍複數（N人）
+- 敵軍全体 → 敵軍全體
+- 自軍単体 → 自軍單體
+- 自軍複数（N体）→ 自軍群體（N人）
+- 自軍全体 → 自軍全體
+- 自身 → 自身
+
+### Duration Conventions
+- 「Nターンの間」→ N回合
+- 「戦闘中」→ 戰鬥中（entire battle, no duration var needed）
+- 「毎ターン」→ 每回合
+
 Output ONLY valid YAML. No markdown fences. No explanation."""
 
 
 # ---------------------------------------------------------------------------
-# Gemini CLI
+# OpenRouter client (raw httpx + per-block cache_control)
 # ---------------------------------------------------------------------------
 
-def call_gemini(prompt: str, model: str = DEFAULT_MODEL, timeout: int = 180) -> str:
-    env = {**os.environ, "GOOGLE_CLOUD_PROJECT": GCP_PROJECT} if GCP_PROJECT else None
-    result = subprocess.run(
-        ["gemini", "-m", model, "-p", prompt, "-o", "text"],
-        capture_output=True,
-        text=True,
+_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+_http_client: httpx.Client | None = None
+
+
+def _get_client() -> httpx.Client:
+    global _http_client
+    if _http_client is None:
+        api_key = os.getenv("OPENROUTER_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("OPENROUTER_API_KEY not set in .env")
+        _http_client = httpx.Client(
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=httpx.Timeout(180.0, connect=10.0),
+        )
+    return _http_client
+
+
+def call_llm(
+    prompt: str,
+    *,
+    system_prompt: str | None = None,
+    model: str = DEFAULT_MODEL,
+    timeout: int = 180,
+    max_tokens: int = 16000,
+    provider: str | None = None,
+) -> str:
+    """Call LLM via OpenRouter with per-block prompt caching for Anthropic models."""
+    client = _get_client()
+    is_anthropic = "anthropic/" in model
+
+    messages: list[dict] = []
+    if system_prompt:
+        if is_anthropic:
+            # Per-block cache_control in content array — the only method that works
+            messages.append({
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+            })
+            if not provider:
+                provider = "Anthropic"
+        else:
+            messages.append({"role": "system", "content": system_prompt})
+
+    messages.append({"role": "user", "content": prompt})
+
+    payload: dict = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": messages,
+    }
+    if provider:
+        payload["provider"] = {"order": [provider], "allow_fallbacks": True}
+
+    resp = client.post(
+        _OPENROUTER_URL,
+        json=payload,
         timeout=timeout,
-        env=env,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"gemini-cli failed: {result.stderr[:300]}")
-    return result.stdout.strip()
+    resp.raise_for_status()
+    data = resp.json()
+
+    # Track token usage
+    usage = data.get("usage", {})
+    if usage:
+        _token_totals["prompt"] += usage.get("prompt_tokens", 0)
+        _token_totals["completion"] += usage.get("completion_tokens", 0)
+        _token_totals["calls"] += 1
+        details = usage.get("prompt_tokens_details", {})
+        cached = details.get("cached_tokens", 0)
+        if cached:
+            _token_totals["cached"] += cached
+            from tqdm import tqdm
+            tqdm.write(f"    [cache] {cached} tokens read from cache")
+
+    return data["choices"][0]["message"]["content"].strip()
+
+
+# Token usage accumulator
+_token_totals: dict[str, int] = {"prompt": 0, "completion": 0, "cached": 0, "calls": 0}
+
+
+def reset_token_totals():
+    for k in _token_totals:
+        _token_totals[k] = 0
+
+
+def get_token_totals() -> dict[str, int]:
+    return dict(_token_totals)
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +329,25 @@ def autofix_frontend(fe: dict) -> list[str]:
             fe[field] = re.sub(r"受\{scale:([^}]+)\}影響", r"{scale:\1}", text)
             fixes.append("fixed 受{scale:X}影響 → {scale:X}")
 
+    # Fix 5: {{var:X}} → {var:X}, {{status:X}} → {status:X}, etc.
+    for field in ("description", "commander_description"):
+        text = fe.get(field, "")
+        if text and "{{" in text:
+            new_text = re.sub(r"\{\{(var|status|scale|dmg|stat):([^}]+)\}\}", r"{\1:\2}", text)
+            if new_text != text:
+                fe[field] = new_text
+                fixes.append("fixed double braces {{X}} → {X}")
+
     return fixes
+
+
+# Hiragana + Katakana detection. Excludes ・(U+30FB) which is shared CJK punctuation.
+_KANA_RE = re.compile(r"[\u3040-\u309F\u30A0-\u30FA\u30FC-\u30FF]")
+
+
+def has_kana(value) -> bool:
+    """Return True if string contains Japanese kana (hiragana/katakana)."""
+    return isinstance(value, str) and bool(_KANA_RE.search(value))
 
 
 # ---------------------------------------------------------------------------

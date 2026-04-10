@@ -20,7 +20,7 @@ function rebuildDataShortcut(): PluginOption {
         server.config.logger.info('\n[data] rebuilding (build_frontend_data + check_data_integrity)...')
         const proc = spawn(
           'sh',
-          ['-c', 'python3 script/build_frontend_data.py && python3 script/check_data_integrity.py'],
+          ['-c', 'uv run script/build_frontend_data.py && uv run script/check_data_integrity.py'],
           { stdio: 'inherit' }
         )
         proc.on('exit', (code) => {
