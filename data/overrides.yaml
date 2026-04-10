@@ -321,268 +321,690 @@ skills:
     name: 同盟姻親
     type: 主動
     rarity: S
-    target: 自身與異性友軍單體
+    target: 自軍與異性友軍單體
     activation_rate: 40%
-    description: 使自身與異性友軍單體受到傷害降低{var:dmg_reduction}（{scale:智略}），並分擔{var:share_dmg}其受到的傷害，持續{var:duration}回合
+    description: 使自身與異性友軍單體受到傷害降低{var:damage_reduction}（{scale:智略}）， 並分擔{var:damage_share}其受到的傷害，持續{var:duration}回合。
+    brief_description: 降低傷害並分擔傷害
+    tags:
+    - 增益
+    - 提升屬性
+    - 主動發動
+    raw_text: 同盟姻親 (S) 種類： 主動 | 增益 發動機率： 40% 效果： 使自身與異性友軍單體受到傷害降低10%->20%（受智略影響），並分擔10%->20%其受到的傷害，持續2回合
     vars:
-      dmg_reduction:
+      damage_reduction:
         base: 0.1
         max: 0.2
-      share_dmg:
+      damage_share:
         base: 0.1
         max: 0.2
       duration: 2
-    _action: add
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.4
+      do:
+      - to: allyMultiple
+        count: 2
+        do:
+        - type: buff
+          stat: damage_reduction
+          value: $damage_reduction
+          scale: 智略
+          duration: $duration
+        - type: buff
+          stat: damage_share
+          value: $damage_share
+          scale: 智略
+          duration: $duration
     is_event_skill: true
+    _action: add
   離心背道:
     name: 離心背道
     type: 主動
     rarity: S
-    target: 敵軍單體
+    target: 敵軍大將
     activation_rate: 35%
-    description: 準備1回合，對敵方大將造成兵刃傷害（傷害率{var:damage_rate}），並使其造成的傷害降低{var:damage_reduce}，持續2回合
+    description: 準備{var:prep_turns}回合，對敵方大將造成{var:damage_rate}兵刃傷害， 並使其造成的傷害降低{var:damage_debuff}，持續{var:debuff_duration}回合。
+    brief_description: 準備兵刃傷害並降低敵傷害
+    tags:
+    - 兵刃傷害
+    - 單體傷害
+    - 減益
+    - 主動發動
+    raw_text: 離心背道 (S) 種類： 主動 | 兵刃單體 發動機率： 35% 效果： 準備1回合，對敵方大將造成兵刃傷害（傷害率176%->252%），並使其造成的傷害降低25%->50%，持續2回合
     vars:
+      prep_turns: 1
       damage_rate:
         base: 1.76
         max: 2.52
-      damage_reduce:
+      damage_debuff:
         base: 0.25
         max: 0.5
-    _action: add
+      debuff_duration: 2
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.35
+      prepTurns: 1
+      do:
+      - to: enemySingle
+        targetRole: commander
+        do:
+        - type: damage
+          damage_type: 兵刃傷害
+          value: $damage_rate
+        - type: debuff
+          stat: damage_output
+          value: $damage_debuff
+          duration: $debuff_duration
     is_event_skill: true
+    _action: add
   疑兵盜城:
     name: 疑兵盜城
     type: 主動
     rarity: S
-    target: 敵軍群體
+    target: 敵軍群體（2-3人）
     activation_rate: 35%
-    description: 使自身智略增加{var:int_boost}點（{scale:智略}），持續2回合，並使敵軍群體（2-3人）下次受到謀略傷害時，額外受到謀略傷害（傷害率{var:add_damage_rate}，{scale:智略}），持續2回合
+    description: 使自身智略增加{var:intelligence_buff}點（{scale:智略}），持續{var:buff_duration}回合，
+      並使敵軍群體（2-3人）下次受到謀略傷害時，額外受到謀略傷害{var:extra_damage_rate}（{scale:智略}），持續{var:debuff_duration}回合。
+    brief_description: 增加智略並增加敵謀略傷害
+    tags:
+    - 謀略傷害
+    - 群體傷害
+    - 增益
+    - 減益
+    - 主動發動
+    - 智略系
+    raw_text: 疑兵盜城 (S) 種類： 主動 | 謀略群體 發動機率： 35% 效果： 使自身智略增加16.5->33點（受智略影響），持續2回合，並使敵軍群體（2-3人）下次受到謀略傷害時，額外受到謀略傷害（傷害率53%->106%，受智略影響），持續2回合
     vars:
-      int_boost:
+      intelligence_buff:
         base: 16.5
         max: 33
-      add_damage_rate:
+        type: flat
+      buff_duration: 2
+      extra_damage_rate:
         base: 0.53
         max: 1.06
-    _action: add
+      debuff_duration: 2
+      target_count: 3
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.35
+      do:
+      - to: self
+        do:
+        - type: buff
+          stat: 智略
+          value: $intelligence_buff
+          scale: 智略
+          duration: $buff_duration
+      - to: enemyMultiple
+        countMin: 2
+        countMax: 3
+        do:
+        - type: debuff
+          stat: next_mou_damage_taken
+          value: $extra_damage_rate
+          scale: 智略
+          duration: $debuff_duration
     is_event_skill: true
+    _action: add
   乘虛而入:
     name: 乘虛而入
     type: 突擊
     rarity: S
-    target: 敵軍單體
+    target: 攻擊目標
     activation_rate: 35%
-    description: 普通攻擊之後，降低攻擊目標武勇與智略{var:stat_reduce}點，持續1回合。此外，若目標已處於{status:挑釁}或{status:牽制}狀態，則使自身獲得{var:dodge_rate}規避狀態，否則使攻擊目標進入{status:挑釁}及{status:牽制}狀態，持續1回合。
+    description: 普通攻擊之後，降低攻擊目標武勇與智略{var:stat_debuff}點，持續{var:debuff_duration}回合。 此外，若目標已處於{status:挑釁}或{status:牽制}狀態，則使自身獲得{var:dodge_rate}{status:閃避}狀態，
+      否則使攻擊目標進入{status:挑釁}及{status:牽制}狀態，持續{var:debuff_duration}回合。
+    brief_description: 降低屬性或施加控制狀態
+    tags:
+    - 控制
+    - 降低屬性
+    - 施加狀態
+    - 突擊觸發
+    - 武勇系
+    - 智略系
+    raw_text: 乘虛而入 (S) 種類： 突擊 | 控制 發動機率： 35% 效果： 普通攻擊之後，降低攻擊目標武勇與智略70->140點，持續1回合。此外，若目標已處於挑釁或牽制狀態，則使自身獲得17.5%->35%規避狀態，否則使攻擊目標進入挑釁及牽制狀態，持續1回合。
     vars:
-      stat_reduce:
+      stat_debuff:
         base: 70
         max: 140
+        type: flat
+      debuff_duration: 1
       dodge_rate:
         base: 0.175
         max: 0.35
-    _action: add
+      dodge_duration: 1
+    battle:
+      type: 突擊
+      trigger: afterAttack
+      rate: 0.35
+      do:
+      - to: enemySingle
+        do:
+        - type: debuff
+          stat: 武勇
+          value: $stat_debuff
+          duration: $debuff_duration
+        - type: debuff
+          stat: 智略
+          value: $stat_debuff
+          duration: $debuff_duration
+        - type: conditional
+          condition: target_has_status(挑釁) || target_has_status(牽制)
+          on_true:
+          - type: applyStatus
+            status: 閃避
+            value: $dodge_rate
+            duration: $dodge_duration
+          on_false:
+          - type: applyStatus
+            status: 挑釁
+            duration: $debuff_duration
+          - type: applyStatus
+            status: 牽制
+            duration: $debuff_duration
     is_event_skill: true
+    _action: add
   大器之蘊:
     name: 大器之蘊
     type: 指揮
     rarity: A
-    target: 我軍群體
+    target: 自軍群體（2人）
     activation_rate: 100%
-    description: 第5回合起，每回合恢復我軍群體（2人）兵力（恢復率{var:heal_rate}，{scale:智略}）。
+    description: 第{var:start_turn}回合起，每回合恢復我軍群體（{var:target_count}人）兵力{var:heal_rate}（{scale:智略}）。
+    brief_description: 定期恢復友軍兵力
+    tags:
+    - 治療
+    - 增益
+    - 指揮效果
+    - 智略系
+    - 回合觸發
+    raw_text: 大器之蘊 (A) 種類： 指揮 | 治療 發動機率： 100% 效果： 第5回合起，每回合恢復我軍群體（2人）兵力（恢復率54%->108%，受智略影響）。
     vars:
       heal_rate:
         base: 0.54
         max: 1.08
-    _action: add
+      start_turn: 5
+      target_count: 2
+    battle:
+      type: 指揮
+      trigger: turnStart
+      when: turn >= 5
+      rate: 1.0
+      do:
+      - to: allyMultiple
+        count: 2
+        do:
+        - type: heal
+          value: $heal_rate
+          scale: 智略
     is_event_skill: true
+    _action: add
   立身之志:
     name: 立身之志
     type: 主動
     rarity: S
     target: 敵軍全體
     activation_rate: 40%
-    description: 使敵軍全體進入{status:挑釁}狀態，並使自身統率提高{var:stat_boost_rate}，持續2回合
+    description: 使敵軍全體進入{status:挑釁}狀態，並使自身統率提高{var:leadership_buff}，持續{var:buff_duration}回合。
+    brief_description: 施加挑釁並提升自身統率
+    tags:
+    - 控制
+    - 施加狀態
+    - 增益
+    - 主動發動
+    - 統率系
+    raw_text: 立身之志 (S) 種類： 主動 | 控制 發動機率： 40% 效果： 使敵軍全體進入挑釁狀態，並使自身統率提高22.5%->55%，持續2回合
     vars:
-      stat_boost_rate:
+      leadership_buff:
         base: 0.225
         max: 0.55
-    _action: add
+      buff_duration: 2
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.4
+      do:
+      - to: enemyAll
+        do:
+        - type: applyStatus
+          status: 挑釁
+          duration: $buff_duration
+      - to: self
+        do:
+        - type: buff
+          stat: 統率
+          value: $leadership_buff
+          duration: $buff_duration
     is_event_skill: true
+    _action: add
   專橫專斷:
     name: 專橫專斷
     type: 主動
     rarity: S
-    target: 自身
+    target: 自身與敵軍單體
     activation_rate: 40%
-    description: 使自身下次主動戰法造成兵刃傷害提高{var:damage_boost_base}，該戰法每次發動，使傷害提高效果增加{var:damage_boost_stack}，每第3次發動時，使敵軍單體進入{status:無策}狀態，持續1回合
+    description: 使自身下次主動戰法造成兵刃傷害提高{var:damage_buff_base}，該戰法每次發動，使傷害提高效果增加{var:damage_buff_increment}，
+      每第{var:debuff_trigger_count}次發動時，使敵軍單體進入{status:無策}狀態，持續1回合。
+    brief_description: 累積傷害加成並定期施加無策
+    tags:
+    - 兵刃傷害
+    - 增益
+    - 施加狀態
+    - 主動發動
+    - 武勇系
+    - 條件觸發
+    raw_text: 專橫專斷 (S) 種類： 主動 | 增益 發動機率： 40% 效果： 使自身下次主動戰法造成兵刃傷害提高24%->48%，該戰法每次發動，使傷害提高效果增加6%->12%，每第3次發動時，使敵軍單體進入無策狀態，持續1回合
     vars:
-      damage_boost_base:
+      damage_buff_base:
         base: 0.24
         max: 0.48
-      damage_boost_stack:
+      damage_buff_increment:
         base: 0.06
         max: 0.12
-    _action: add
+      debuff_trigger_count: 3
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.4
+      do:
+      - to: self
+        do:
+        - type: addStack
+          stack_name: damage_buff
+          value: $damage_buff_base
+      - type: sequence
+        triggerAfterAttack: true
+        do:
+        - type: conditional
+          condition: stack(damage_buff) > 0
+          on_true:
+          - type: buff
+            stat: 兵刃傷害
+            value: $damage_buff_base
+            duration: 1
+          - type: addStack
+            stack_name: damage_buff
+            value: $damage_buff_increment
+        - type: conditional
+          condition: stack_count % $debuff_trigger_count == 0
+          on_true:
+          - type: applyStatus
+            status: 無策
+            to: enemySingle
+            duration: 1
     is_event_skill: true
+    _action: add
   家中整飭:
     name: 家中整飭
     type: 主動
     rarity: A
     target: 敵軍單體
     activation_rate: 35%
-    description: 對敵軍單體造成謀略傷害（傷害率{var:dmg}），並對其施加{status:封擊}效果，持續{var:duration}回合。
+    description: 對敵軍單體造成{var:damage_rate}謀略傷害， 並對其施加{status:封擊}效果，持續{var:debuff_duration}回合。
+    brief_description: 謀略傷害並施加封擊
+    tags:
+    - 謀略傷害
+    - 單體傷害
+    - 施加狀態
+    - 主動發動
+    - 智略系
+    raw_text: 家中整飭 (A) 種類： 主動 | 謀略單體 發動機率： 35% 效果： 對敵軍單體造成謀略傷害（傷害率68%->136%），並對其施加封擊效果，持續2回合。
     vars:
-      dmg:
+      damage_rate:
         base: 0.68
         max: 1.36
-      duration: 2
-    _action: add
+      debuff_duration: 2
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.35
+      do:
+      - to: enemySingle
+        do:
+        - type: damage
+          damage_type: 謀略傷害
+          value: $damage_rate
+        - type: applyStatus
+          status: 封擊
+          duration: $debuff_duration
     is_event_skill: true
+    _action: add
   破天轟鳴:
     name: 破天轟鳴
     type: 主動
     rarity: A
-    target: 敵軍群體
+    target: 敵軍群體（2人）
     activation_rate: 35%
-    description: 準備1回合，對敵軍群體（{var:target_count}人）施加{status:火傷}效果（傷害率{var:dmg}{scale:智略}）並降低統率{var:stat_reduce}點，持續{var:duration}回合。
+    description: 準備{var:prep_turns}回合，對敵軍群體（{var:target_count}人）施加{status:火傷}效果{var:fire_damage_rate}（{scale:智略}），
+      並降低統率{var:leadership_debuff}點，持續{var:debuff_duration}回合。
+    brief_description: 準備火傷並降低統率
+    tags:
+    - 謀略傷害
+    - 群體傷害
+    - 施加狀態
+    - 降低屬性
+    - 主動發動
+    - 智略系
+    raw_text: 破天轟鳴 (A) 種類： 主動 | 謀略群體 發動機率： 35% 效果： 準備1回合，對敵軍群體（2人）施加火傷效果（傷害率52%->105%，受智略影響）並降低統率10->20點，持續2回合
     vars:
-      target_count: 2
-      dmg:
+      prep_turns: 1
+      fire_damage_rate:
         base: 0.52
         max: 1.05
-      stat_reduce:
+      leadership_debuff:
         base: 10
         max: 20
-      duration: 2
-    _action: add
+        type: flat
+      debuff_duration: 2
+      target_count: 2
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.35
+      prepTurns: 1
+      do:
+      - to: enemyMultiple
+        count: 2
+        do:
+        - type: applyStatus
+          status: 火傷
+          value: $fire_damage_rate
+          scale: 智略
+          duration: $debuff_duration
+        - type: debuff
+          stat: 統率
+          value: $leadership_debuff
+          duration: $debuff_duration
     is_event_skill: true
+    _action: add
   斬雷神:
     name: 斬雷神
     type: 被動
     rarity: S
-    target: 自己
+    target: 自身
     activation_rate: 100%
-    description: 戰鬥中，每回合獲得1層蓄勢，若蓄勢層數大於等於2且自身未處於{status:威壓}狀態時，消耗全部蓄勢層數，獲得{var:crit_rate1}的{status:會心}狀態及{var:valor_buff1}武勇，持續1回合，若蓄勢層數大於2時，則額外獲得{var:crit_rate2}的{status:會心}狀態及{var:valor_buff2}武勇。
+    description: 戰鬥中，每回合獲得1層蓄勢，若蓄勢層數大於等於{var:stack_threshold}且自身未處於{status:威壓}狀態時，
+      消耗全部蓄勢層數，獲得{var:crit_rate_at_threshold}{status:會心}狀態及{var:valor_buff_at_threshold}點武勇，持續{var:buff_duration}回合，
+      若蓄勢層數大於{var:extra_stack_threshold}時，則額外獲得{var:extra_crit_rate}{status:會心}狀態及{var:extra_valor_buff}點武勇。
+    brief_description: 蓄勢觸發會心與武勇加成
+    tags:
+    - 增益
+    - 施加狀態
+    - 被動觸發
+    - 武勇系
+    - 條件觸發
+    raw_text: 戰法名字：S 斬雷神 種類：被動戰法 發動機率：100% 特性清單： 適應兵種：騎、盾、弓、槍、器 目標類型：自己 效果： 戰鬥中，每回合獲得1層蓄勢，若蓄勢層數大於等於2且自身未處於威壓狀態時，消耗全部蓄勢層數，獲得25%→50%會心狀態及60→120點武勇，持續1回合，若蓄勢層數大於2時，則額外獲得12.5%→25%會心狀態及30→60點武勇。
     vars:
-      crit_rate1:
+      stack_threshold: 2
+      crit_rate_at_threshold:
         base: 0.25
         max: 0.5
-      valor_buff1:
+      valor_buff_at_threshold:
         base: 60
         max: 120
         type: flat
-      crit_rate2:
+      buff_duration: 1
+      extra_crit_rate:
         base: 0.125
         max: 0.25
-      valor_buff2:
+      extra_valor_buff:
         base: 30
         max: 60
         type: flat
-    brief_description: 蓄勢爆發獲得會心與武勇屬性
-    tags:
-    - 被動觸發
-    - 回合觸發
-    - 施加狀態
-    - 提升屬性
-    - 武勇系
-    _action: add
+      extra_stack_threshold: 2
+    battle:
+      type: 被動
+      trigger: turnStart
+      rate: 1.0
+      do:
+      - to: self
+        do:
+        - type: addStack
+          stack_name: 蓄勢
+          value: 1
+      - type: conditional
+        condition: stack(蓄勢) >= $stack_threshold && !self_has_status(威壓)
+        on_true:
+        - to: self
+          do:
+          - type: applyStatus
+            status: 會心
+            value: $crit_rate_at_threshold
+            duration: $buff_duration
+          - type: buff
+            stat: 武勇
+            value: $valor_buff_at_threshold
+            duration: $buff_duration
+          - type: addStack
+            stack_name: 蓄勢
+            value: -999
+        - type: conditional
+          condition: prev_stack > $extra_stack_threshold
+          on_true:
+          - to: self
+            do:
+            - type: applyStatus
+              status: 會心
+              value: $extra_crit_rate
+              duration: $buff_duration
+            - type: buff
+              stat: 武勇
+              value: $extra_valor_buff
+              duration: $buff_duration
     is_event_skill: true
+    _action: add
   南蠻東渡:
     name: 南蠻東渡
     type: 主動
     rarity: A
-    target: 我軍群體
+    target: 自軍群體（2-3人）
     activation_rate: 50%
-    description: 準備1回合後，恢復我軍群體（2-3人）兵力（恢復率{var:heal_rate}，{scale:智略}）。恢復南蠻好尚或南蠻信奉的友軍時，恢復率增加至{var:bonus_heal_rate}。
+    description: 準備{var:prep_turns}回合後，恢復我軍群體（2-{var:target_count}人）兵力{var:heal_rate}（{scale:智略}）。
+      恢復南蠻好尚或南蠻信奉的友軍時，恢復率增加至{var:enhanced_heal_rate}。
+    brief_description: 準備恢復並對南蠻人加強效果
+    tags:
+    - 治療
+    - 增益
+    - 主動發動
+    - 智略系
+    - 條件觸發
+    raw_text: 戰法名字：A南蠻東渡種類：主動戰法發動機率：50%效果：準備1回合後，恢復我軍群體（2-3人）兵力（恢復率72%→144%，受智略影響）。恢復南蠻好尚或南蠻信奉的友軍時，恢復率增加至86%→172%。
     vars:
+      prep_turns: 1
       heal_rate:
         base: 0.72
         max: 1.44
-        scale: 智略
-      bonus_heal_rate:
+      enhanced_heal_rate:
         base: 0.86
         max: 1.72
-    brief_description: 準備後治療群體，南蠻友軍加成
-    tags:
-    - 主動發動
-    - 治療
-    - 智略系
-    _action: add
+      target_count: 3
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.5
+      prepTurns: 1
+      do:
+      - to: allyMultiple
+        countMin: 2
+        countMax: 3
+        do:
+        - type: conditional
+          condition: target_is_barbarian_preference || target_is_barbarian_faith
+          on_true:
+          - type: heal
+            value: $enhanced_heal_rate
+            scale: 智略
+          on_false:
+          - type: heal
+            value: $heal_rate
+            scale: 智略
     is_event_skill: true
+    _action: add
   疑心暗鬼:
     name: 疑心暗鬼
     type: 被動
     rarity: S
-    target: 自己
+    target: 自身
     activation_rate: 100%
-    description: 使自身的自帶準備主動戰法發動率增加{var:rate_buff}（{scale:智略}），自帶準備主動戰法開始準備時，自身增加{var:intel_buff}智略（{scale:智略}），持續2回合。
+    description: 使自身的自帶準備主動戰法發動率增加{var:prep_strategy_rate}（{scale:智略}）， 自帶準備主動戰法開始準備時，自身增加{var:intelligence_buff}點智略（{scale:智略}），持續{var:buff_duration}回合。
+    brief_description: 增強準備戰法並增加智略
+    tags:
+    - 增益
+    - 提升屬性
+    - 被動觸發
+    - 智略系
+    - 條件觸發
+    raw_text: 戰法名字：S疑心暗鬼種類：被動戰法發動機率：100%效果：使自身的自帶準備主動戰法發動率增加6%→12%（受智略影響），自帶準備主動戰法開始準備時，自身增加15→30點智略（受智略影響），持續2回合。
     vars:
-      rate_buff:
+      prep_strategy_rate:
         base: 0.06
         max: 0.12
-        scale: 智略
-      intel_buff:
+      intelligence_buff:
         base: 15
         max: 30
         type: flat
-        scale: 智略
-    brief_description: 提升準備戰法發動率並增加智略
-    tags:
-    - 被動觸發
-    - 提升屬性
-    - 智略系
-    _action: add
+      buff_duration: 2
+    battle:
+      type: 被動
+      trigger: always
+      rate: 1.0
+      do:
+      - to: self
+        do:
+        - type: buff
+          stat: prep_strategy_activation_rate
+          value: $prep_strategy_rate
+          scale: 智略
+      - trigger: onPrepStart
+        when: is_prep_active_strategy
+        to: self
+        do:
+        - type: buff
+          stat: 智略
+          value: $intelligence_buff
+          scale: 智略
+          duration: $buff_duration
     is_event_skill: true
+    _action: add
   直言極諫:
     name: 直言極諫
     type: 主動
     rarity: S
-    target: 我軍群體
+    target: 自軍群體（2人）
     activation_rate: 30%
-    description: 使我軍群體（2人）受到傷害降低{var:damage_reduction}（{scale:智略}），持續2回合，最多疊加2次。首回合行動前，使本戰法受到的發動率增加效果將翻倍並持續2回合。
+    description: 使我軍群體（2人）受到傷害降低{var:damage_reduction}（{scale:智略}），持續{var:reduction_duration}回合，最多疊加{var:max_stacks}次。
+      首回合行動前，使本戰法受到的發動率增加效果將翻倍並持續{var:multiplier_duration}回合。
+    brief_description: 降低傷害並增強首回合發動率
+    tags:
+    - 增益
+    - 提升屬性
+    - 主動發動
+    - 智略系
+    - 回合觸發
+    raw_text: 戰法名字：S直言極諫種類：主動戰法發動機率：30%效果：使我軍群體（2人）受到傷害降低12%→24%（受智略影響），持續2回合，最多疊加2次。首回合行動前，使本戰法受到的發動率增加效果將翻倍並持續2回合。
     vars:
       damage_reduction:
         base: 0.12
         max: 0.24
-        scale: 智略
-    brief_description: 群體傷害降低，首回合強化發動率
-    tags:
-    - 主動發動
-    - 增益
-    - 智略系
-    _action: add
+      reduction_duration: 2
+      max_stacks: 2
+      activation_rate_multiplier: 2
+      multiplier_duration: 2
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.3
+      do:
+      - to: allyMultiple
+        count: 2
+        do:
+        - type: buff
+          stat: damage_reduction
+          value: $damage_reduction
+          scale: 智略
+          duration: $reduction_duration
+          maxStacks: $max_stacks
+      - trigger: turnStart
+        when: turn == 1
+        to: self
+        do:
+        - type: buff
+          stat: activation_rate_buff_multiplier
+          value: $activation_rate_multiplier
+          duration: $multiplier_duration
     is_event_skill: true
+    _action: add
   合盟之陣:
     name: 合盟之陣
     type: 陣法
     rarity: S
-    target: 我軍全體
+    target: 自軍大將與副將
     activation_rate: 100%
-    description: 我軍3人所屬勢力均不同，且我軍大將自帶戰法為主動或突擊時生效。戰鬥中，使我軍大將自帶戰法發動率增加{var:commander_rate_buff}。每回合行動前，使兵力較高的副將造成的傷害提高{var:high_hp_dmg_up}，受到的傷害降低{var:high_hp_dmg_down}；兵力較低的副將造成傷害提高{var:low_hp_dmg_up}，受到的傷害降低{var:low_hp_dmg_down}。
-    vars:
-      commander_rate_buff:
-        base: 0.065
-        max: 0.13
-      high_hp_dmg_up:
-        base: 0.09
-        max: 0.18
-      high_hp_dmg_down:
-        base: 0.05
-        max: 0.1
-      low_hp_dmg_up:
-        base: 0.05
-        max: 0.1
-      low_hp_dmg_down:
-        base: 0.09
-        max: 0.18
-    brief_description: 三勢力組隊提升發動率與副將攻防
+    description: 我軍3人所屬勢力均不同，且我軍大將自帶戰法為主動或突擊時生效。 戰鬥中，使我軍大將自帶戰法發動率增加{var:strategy_rate_buff}。
+      每回合行動前，使兵力較高的副將造成的傷害提高{var:higher_hp_damage_buff}，受到的傷害降低{var:higher_hp_damage_reduction}；
+      兵力較低的副將造成傷害提高{var:lower_hp_damage_buff}，受到的傷害降低{var:lower_hp_damage_reduction}。
+    brief_description: 陣型增強大將與副將能力
     tags:
-    - 被動觸發
     - 增益
     - 提升屬性
-    - 條件觸發
-    _action: add
+    - 被動觸發
+    - 指揮效果
+    - 統率系
+    raw_text: 戰法名字：S合盟之陣種類：陣型戰法發動機率：100%效果：我軍3人所屬勢力均不同，且我軍大將自帶戰法為主動或突擊時生效。戰鬥中，使我軍大將自帶戰法發動率增加6.5%→13%。每回合行動前，使兵力較高的副將造成的傷害提高9%→18%，受到的傷害降低5%→10%兵力較低的副將造成傷害提高5%→10%，受到的傷害降低9%→18%。
+    vars:
+      strategy_rate_buff:
+        base: 0.065
+        max: 0.13
+      higher_hp_damage_buff:
+        base: 0.09
+        max: 0.18
+      higher_hp_damage_reduction:
+        base: 0.05
+        max: 0.1
+      lower_hp_damage_buff:
+        base: 0.05
+        max: 0.1
+      lower_hp_damage_reduction:
+        base: 0.09
+        max: 0.18
+    battle:
+      type: 陣法
+      trigger: always
+      rate: 1.0
+      condition: commander_strategy_type_is(主動 || 突擊) && all_three_affiliations_different
+      do:
+      - to: self
+        targetRole: commander
+        do:
+        - type: buff
+          stat: strategy_activation_rate
+          value: $strategy_rate_buff
+      - trigger: turnStart
+        to: allyMultiple
+        targetRole: deputy
+        do:
+        - type: conditional
+          condition: target_hp > other_deputy_hp
+          on_true:
+          - type: buff
+            stat: damage_output
+            value: $higher_hp_damage_buff
+          - type: buff
+            stat: damage_reduction
+            value: $higher_hp_damage_reduction
+          on_false:
+          - type: buff
+            stat: damage_output
+            value: $lower_hp_damage_buff
+          - type: buff
+            stat: damage_reduction
+            value: $lower_hp_damage_reduction
     is_event_skill: true
+    _action: add
 heroes:
   柿崎景家:
     _action: add
