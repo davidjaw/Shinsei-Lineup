@@ -449,6 +449,8 @@
       <span>聯絡作者: yt.neko.vision@gmail.com</span>
       <span class="opacity-50">|</span>
       <span>Discord: neko.vision</span>
+      <span class="opacity-50">|</span>
+      <a href="https://forms.gle/mnMAqAzP595ygCrJ9" target="_blank" class="text-blue-400 hover:text-blue-500">翻譯錯誤回報</a>
     </el-footer>
 
   </el-container>

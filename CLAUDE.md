@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-A data pipeline + SPA for **信長之野望：真戰** (Nobunaga's Ambition: Shinsei). Crawls game data from game8.jp, translates JP→CHT via Gemini LLM, and serves a Vue 3 lineup builder.
+A data pipeline + SPA for **信長之野望：真戰** (Nobunaga's Ambition: Shinsei). Crawls game data from game8.jp, translates JP→CHT via LLM (OpenRouter), and serves a Vue 3 lineup builder.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ game8.jp → crawl_heroes.py → llm_translate.py → build_frontend_data.py →
 |--------|---------|-----|
 | `crawl_heroes.py` | Crawl game8.jp for heroes/skills/traits | `uv run script/crawl_heroes.py --detail` |
 | `llm_translate.py` | Batch translate JP→CHT via Gemini CLI | `uv run script/llm_translate.py --batch-size 5` |
-| `llm_core.py` | Shared LLM infra (prompts, Gemini CLI, cache, parsing) | Imported by other scripts |
+| `llm_core.py` | Shared LLM infra (httpx OpenRouter client, prompt caching, parsing, kana detection) | Imported by other scripts |
 | `build_frontend_data.py` | Merge crawled+translated+overrides → JSON | `uv run script/build_frontend_data.py` |
 | `check_data_integrity.py` | Validate references, scan for untranslated JP kana, cross-check crawled vs translated keys | `uv run script/check_data_integrity.py` |
 | `override.py` | Interactive CLI for manual skill/hero additions | `uv run script/override.py` |
@@ -47,7 +47,7 @@ npm run data         # Build data only (build_frontend_data + check_data_integri
 
 # Pipeline
 uv run script/crawl_heroes.py --detail                    # Full crawl
-uv run script/llm_translate.py --batch-size 5             # Translate all (skills+traits+heroes)
+uv run script/llm_translate.py --batch-size 10 --parallel 3  # Translate all (skills+traits+heroes)
 uv run script/llm_translate.py --skills --force            # Re-translate ALL skills (ignores cache). With --name/--limit, --force only refreshes the matching subset and never truncates the YAML.
 uv run script/llm_translate.py --heroes                    # Translate hero names only
 uv run script/override.py                                  # Interactive override CLI
@@ -86,11 +86,20 @@ All prompts share `COMMON_RULES` from `llm_core.py` which enforces:
 - `activation_rate` as string format
 - `brief_description` (15-25 char summary) and `tags` (from fixed `SKILL_TAGS` set)
 
+### Prompt caching (OpenRouter / Anthropic)
+
+- `llm_core.py` uses raw `httpx` (NOT OpenAI SDK) with per-block `cache_control` in the system message content array — the only method that actually works for prompt caching via OpenRouter
+- Anthropic cache thresholds: Haiku 4096 tokens, Sonnet 2048 tokens. System prompts are sized to exceed these
+- `_run_batches_parallel()` runs batch 1 alone to warm the cache, then dispatches the rest in parallel — avoids multiple cache writes
+- `text.description` uses `{var:}` / `{status:}` / `{scale:}` template syntax; `battle` section uses `$key` for vars and plain Chinese for statuses/scaling — this distinction is a common LLM error source
+- Trait validation uses `validate_trait_entry()` (not `validate_skill_entry()`) — passive traits have `passive` section, no `battle`
+- See `ai-doc/openrouter-cache.md` for tested caching methods and what does NOT work
+
 ## Environment
 
 - Python 3.10+ managed via [uv](https://docs.astral.sh/uv/) (`uv sync` to install deps from `pyproject.toml`)
 - Node 20+ with Vue 3, Element Plus, TailwindCSS
-- Gemini CLI (`gemini`) for LLM calls — requires `GOOGLE_CLOUD_PROJECT` in `.env`
+- OpenRouter API for LLM calls (default: `anthropic/claude-haiku-4.5`, free test: `google/gemma-4-31b-it:free`) — requires `OPENROUTER_API_KEY` in `.env`
 
 ## Conventions
 
