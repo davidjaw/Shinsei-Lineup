@@ -39,6 +39,12 @@
   category: action_restriction
   description: 造成的所有傷害歸零
 
+偽報:
+  id: false_intel
+  name: 偽報
+  category: action_restriction
+  description: 禁用對方指揮與被動技能；同時清除對方已對他人施加的指揮/被動殘留狀態
+
 # === Combat State (戰鬥狀態) ===
 閃避:
   id: dodge
@@ -51,6 +57,12 @@
   name: 抵禦
   category: combat_state
   description: 吸收傷害，突擊仍可觸發
+
+鐵壁:
+  id: iron_wall
+  name: 鐵壁
+  category: combat_state
+  description: 受攻擊時按機率格擋傷害，每次消耗一層，層數或回合耗盡時移除
 
 必中:
   id: sure_hit
@@ -94,7 +106,19 @@
   id: tactical_crit
   name: 奇謀
   category: crit
-  description: 增加計略會心機率
+  description: 增加謀略會心機率
+
+會心傷害率:
+  id: physical_crit_damage
+  name: 會心傷害率
+  category: crit
+  description: 增加兵刃會心傷害倍率（基礎×2.0）
+
+奇謀傷害率:
+  id: tactical_crit_damage
+  name: 奇謀傷害率
+  category: crit
+  description: 增加謀略會心傷害倍率（基礎×2.0）
 
 # === Lifesteal (吸血) ===
 離反:
@@ -107,7 +131,7 @@
   id: tactical_lifesteal
   name: 攻心
   category: lifesteal
-  description: 計略攻擊時依傷害量回復兵力
+  description: 謀略攻擊時依傷害量回復兵力
 
 # === Healing (治療) ===
 休養:
@@ -127,19 +151,19 @@
   id: burn
   name: 火傷
   category: dot
-  description: 每回合行動前受到計略傷害（智略）
+  description: 每回合行動前受到謀略傷害（智略）
 
 水攻:
   id: flood
   name: 水攻
   category: dot
-  description: 每回合行動前受到計略傷害（智略）
+  description: 每回合行動前受到謀略傷害（智略）
 
 中毒:
   id: poison
   name: 中毒
   category: dot
-  description: 每回合行動前受到計略傷害（智略）
+  description: 每回合行動前受到謀略傷害（智略）
 
 潰走:
   id: rout
@@ -151,7 +175,7 @@
   id: demoralize
   name: 消沉
   category: dot
-  description: 每回合行動前受到計略傷害（智略）
+  description: 每回合行動前受到謀略傷害（智略）
 
 # === Immunity (免疫) ===
 洞察:
@@ -185,12 +209,31 @@
   category: targeting_override
   description: 強制目標的技能效果轉向自己
 
+# === Activation Modifier (發動機率) ===
+發動機率增加·主動:
+  id: active_boost
+  name: 發動機率增加·主動
+  category: activation_modifier
+  description: 增加主動戰法發動機率
+
+發動機率增加·突擊:
+  id: assault_boost
+  name: 發動機率增加·突擊
+  category: activation_modifier
+  description: 增加突擊戰法發動機率
+
+發動機率增加·其他:
+  id: other_boost
+  name: 發動機率增加·其他
+  category: activation_modifier
+  description: 增加指定戰法類型發動機率
+
 # === Special (for {dmg:xxx} and {stat:xxx}) ===
 _damage_types:
   physical:
     name: 兵刃
-  strategy:
-    name: 計略
+  tactical:
+    name: 謀略
   true:
     name: 真實
 

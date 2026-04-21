@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Data pipeline + SPA for 信長之野望：真戰"
 requires-python = ">=3.10"
 dependencies = [
+    "anthropic>=0.94.0",
     "beautifulsoup4>=4.12",
     "httpx>=0.27",
     "openai>=1.0",
