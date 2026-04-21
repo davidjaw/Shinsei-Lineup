@@ -1005,6 +1005,183 @@ skills:
             value: $lower_hp_damage_reduction
     is_event_skill: true
     _action: add
+  風姿綽約:
+    name: 風姿綽約
+    type: 指揮
+    rarity: S
+    target: 自軍群體（2人）
+    activation_rate: --
+    raw_text: 戰鬥中，使友軍群體（2人）武勇提升2%->4%（受智略影響），該效果每回合額外疊加1層，最多疊加4層。疊滿後，每回合有32.5%->65%機率（受智略影響）對敵軍單體施加混亂、封擊、無策、疲弊狀態中的一種（不會重複施加），每個狀態持續1回合。
+    description: 戰鬥中，使自軍群體（2人）武勇提升{var:valor_buff}（{scale:智略}），該效果每回合額外疊加1層，最多疊加{var:stack_cap}層。疊滿後，每回合有{var:proc_rate}機率對敵軍單體施加{status:混亂}、{status:封擊}、{status:無策}、{status:疲弊}狀態中的一種（不會重複施加），每個狀態持續{var:status_duration}回合。
+    brief_description: 友軍武勇疊加提升，滿層後機率施加負面狀態
+    tags:
+    - 增益
+    - 提升屬性
+    - 施加狀態
+    - 指揮效果
+    - 智略系
+    - 大將技
+    vars:
+      valor_buff:
+        base: 0.02
+        max: 0.04
+        type: percentage
+        scale: 智略
+      stack_cap: 4
+      stack_per_turn: 1
+      proc_rate:
+        base: 0.325
+        max: 0.65
+        scale: 智略
+      status_duration: 1
+    battle:
+      type: 指揮
+      trigger: always
+      do:
+      - trigger: battleStart
+        to: allyMultiple
+        count: 2
+        do:
+        - type: addStack
+          stack_name: valor_buff_stack
+          max: $stack_cap
+          per_turn: $stack_per_turn
+      - trigger: turnStart
+        when: valor_buff_stack == $stack_cap
+        to: enemySingle
+        do:
+        - type: roll
+          chance: $proc_rate
+          on_success:
+          - type: applyStatus
+            status: 混亂|封擊|無策|疲弊
+            duration: $status_duration
+      bonus:
+        commander:
+          description: 友軍群體（2人）武勇每層提升$valor_buff（受智略影響）
+          do:
+          - type: buff
+            stat: 武勇
+            value: $valor_buff
+            scale: 智略
+            per_stack: valor_buff_stack
+    unique_hero: 阿江
+    is_unique: true
+    _action: add
+  攻其不備:
+    name: 攻其不備
+    type: 主動
+    rarity: S
+    target: 敵軍複數（2人）
+    activation_rate: 40%
+    raw_text: 對統率最低的敵軍單體造成兵刃傷害（傷害率84%->168%），對智略最低的敵軍單體造成謀略傷害（傷害率84%->168%，受智略影響）
+    description: 對統率最低的敵軍單體造成{var:dmg_rate}兵刃傷害，對智略最低的敵軍單體造成{var:dmg_rate}謀略傷害（{scale:智略}）。
+    brief_description: 雙重傷害針對最低屬性敵軍
+    tags:
+    - 兵刃傷害
+    - 謀略傷害
+    - 複數傷害
+    - 主動發動
+    vars:
+      dmg_rate:
+        base: 0.84
+        max: 1.68
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.4
+      do:
+      - to: enemySingle
+        select: lowest_stat
+        stat: 統率
+        do:
+        - type: damage
+          damage_type: 兵刃傷害
+          value: $dmg_rate
+      - to: enemySingle
+        select: lowest_stat
+        stat: 智略
+        do:
+        - type: damage
+          damage_type: 謀略傷害
+          value: $dmg_rate
+          scale: 智略
+    source_hero: 阿江
+    _action: add
+  同氣連枝:
+    name: 同氣連枝
+    type: 指揮
+    rarity: S
+    target: 自軍群體
+    activation_rate: 100%
+    description: 戰鬥中，使友軍群體發動普通攻擊後獲得{var:main_stat_buff}點主屬性（{scale:智略}），最多疊加{var:stack_limit}層。
+      每回合行動前，有{var:trigger_rate}（{scale:智略}）機率選擇敵軍群體（2-3人）， 選定目標每次造成傷害時，自身有{var:heal_proc_rate}機率根據所造成的傷害量的{var:heal_rate}（{scale:智略}），
+      為受到傷害的目標恢復兵力，持續{var:heal_duration}回合。
+    brief_description: 友軍增益且復仇治療敵軍
+    tags:
+    - 增益
+    - 治療
+    - 減益
+    - 指揮效果
+    raw_text: 戰鬥中，使友軍群體發動普通攻擊後獲得2.5->5點主屬性（受智略影響），最多疊加5層。每回合行動前，有24%->48%（受智略影響）機率選擇敵軍群體（2-3人），選定目標每次造成傷害時，自身有80%的機率根據所造成的傷害量的14%->28%（受智略影響），為受到傷害的目標恢復兵力，持續1回合。
+    vars:
+      main_stat_buff:
+        base: 2.5
+        max: 5
+        type: flat
+        scale: 智略
+      stack_limit: 5
+      trigger_rate:
+        base: 0.24
+        max: 0.48
+        scale: 智略
+      heal_rate:
+        base: 0.14
+        max: 0.28
+        scale: 智略
+      heal_proc_rate: 0.8
+      heal_duration: 1
+    battle:
+      type: 指揮
+      trigger: always
+      do:
+      - trigger: afterAction
+        when: action_type == "normal_attack"
+        to: allyAll
+        do:
+        - type: buff
+          stat: main_stat
+          value: $main_stat_buff
+          scale: 智略
+          max_stacks: $stack_limit
+      - trigger: turnStart
+        to: self
+        do:
+        - type: roll
+          chance: $trigger_rate
+          scale: 智略
+          on_success:
+          - to: enemyMultiple
+            count_range:
+            - 2
+            - 3
+            do:
+            - type: conditional
+              condition: on_damage_dealt
+              do:
+              - type: roll
+                chance: $heal_proc_rate
+                on_success:
+                - to: self
+                  do:
+                  - type: heal
+                    value: damage_dealt
+                    rate: $heal_rate
+                    scale: 智略
+                    duration: $heal_duration
+    unique_hero: 阿初
+    is_unique: true
+    _action: add
 heroes:
   柿崎景家:
     _action: add
@@ -1278,3 +1455,67 @@ heroes:
       description: 自身受到普通攻擊的機率小幅提高
       vars: {}
       active: true
+  阿江:
+    name: 阿江
+    portrait: https://duk.tw/ZYcxET.png
+    rarity: 5
+    cost: 6
+    faction: 德川
+    clan: 德川家
+    gender: 女
+    stats:
+      lea: 155.5
+      val: 65.5
+      int: 171
+      pol: 149.5
+      cha: 156
+      spd: 72
+    unique_skill: 風姿綽約
+    teachable_skill: 攻其不備
+    assembly_skill: ''
+    traits:
+    - name: 花枝招展
+      description: 自身受到普通攻擊時，有45%機率（受魅力影響）回復自身兵力（治療率68%，受智略影響），最多觸發3次
+      active: true
+    - name: 馬槍術II
+      description: 部隊的騎兵、足輕等級上升2級
+      active: true
+    - name: 守勢II
+      description: 我軍全體受到傷害減少1.3%
+      active: true
+    - name: 智慧II
+      description: 智略提高2.5%
+      active: true
+    _action: add
+  阿初:
+    name: 阿初
+    portrait: https://duk.tw/OjJGSa.png
+    rarity: 5
+    cost: 6
+    faction: 豐臣
+    clan: 豐臣家
+    gender: 女
+    stats:
+      lea: 145
+      val: 63
+      int: 173
+      pol: 158
+      cha: 153.5
+      spd: 69
+    unique_skill: 同氣連枝
+    teachable_skill: 攻其不備
+    assembly_skill: ''
+    traits:
+    - name: 手足之愛
+      description: 戰鬥中，每回合首次治療其他武將時，有100%機率使自身統率增加其主屬性的12%，持續1回合
+      active: true
+    - name: 弓槍術II
+      description: 部隊的足輕、弓兵等級上升2級
+      active: true
+    - name: 攻勢II
+      description: 我軍全體受到傷害減少1.3%
+      active: true
+    - name: 智慧II
+      description: 智略提高2.5%
+      active: true
+    _action: add
