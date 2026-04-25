@@ -1,14 +1,15 @@
 <template>
   <div class="flex flex-col h-full min-h-0">
     <!-- Filters -->
-    <div class="p-2 border-b border-gray-100 space-y-2">
-      <div class="flex justify-between items-center">
-        <el-input 
-          v-model="searchQuery" 
-          placeholder="搜尋戰法名稱..." 
-          clearable 
+    <div class="p-0 md:p-2 border-b border-gray-100 space-y-1 md:space-y-2">
+      <div class="flex justify-between items-center px-1 md:px-0 pt-1 md:pt-0">
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜尋戰法名稱..."
+          clearable
           prefix-icon="Search"
-          class="flex-1 mr-2"
+          class="flex-1 mr-1 md:mr-2"
+          size="small"
         />
         
         <el-switch 
@@ -24,7 +25,7 @@
         </div>
       </div>
 
-      <div class="flex gap-2 overflow-x-auto pb-1">
+      <div class="flex gap-1 md:gap-2 overflow-x-auto pb-1 px-1 md:px-0">
         <el-select v-model="filterType" placeholder="類型" clearable class="w-28" size="small">
           <el-option label="指揮" value="指揮" />
           <!-- ... -->
@@ -43,7 +44,7 @@
     </div>
 
     <!-- List -->
-    <div class="flex-1 overflow-y-auto p-2" v-loading="loading">
+    <div class="flex-1 overflow-y-auto p-0 md:p-2" v-loading="loading">
        <div v-if="filteredSkills.length === 0" class="text-center py-10 text-gray-400">
         無符合條件的戰法
       </div>
@@ -61,7 +62,7 @@
         >
           <template #reference>
             <div
-              class="p-3 border border-gray-100 rounded-lg flex items-center gap-3 transition-colors relative bg-white cursor-help"
+              class="p-1.5 md:p-3 border border-gray-100 rounded-lg flex items-center gap-1.5 md:gap-3 transition-colors relative bg-white cursor-help"
               :class="{
                 'bg-gray-50 opacity-60 cursor-not-allowed': isUsed(skill) || isFixed(skill),
                 'grayscale opacity-60': mode === 'manage' && !ownedSkills.includes(skill.name),
@@ -72,30 +73,30 @@
               @dragend="emit('skill-drag-end')"
               @click="handleSelect(skill)"
             >
-              <img :src="skill.icon" class="w-10 h-10 rounded-lg bg-gray-200 object-cover flex-shrink-0" :class="{ 'grayscale': isUsed(skill) || isFixed(skill) }" />
+              <img :src="skill.icon" class="w-7 h-7 md:w-10 md:h-10 rounded-md md:rounded-lg bg-gray-200 object-cover flex-shrink-0" :class="{ 'grayscale': isUsed(skill) || isFixed(skill) }" />
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-gray-800">{{ skill.name }}</span>
-                  <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ skill.type }}</span>
-                  <span v-if="skill.rarity === 'S'" class="text-xs font-bold text-yellow-600">S</span>
-                  <span v-if="isUsed(skill)" class="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-bold">已裝備</span>
-                  <span v-if="isFixed(skill)" class="text-[10px] bg-purple-200 text-purple-700 px-1.5 py-0.5 rounded font-bold">固有</span>
-                  <span v-if="mode === 'manage' && !ownedSkills.includes(skill.name)" class="text-[10px] bg-black/70 text-white px-1.5 py-0.5 rounded">未擁有</span>
+                <div class="flex items-center gap-1 md:gap-2 flex-wrap">
+                  <span class="font-bold text-gray-800 text-xs md:text-base">{{ skill.name }}</span>
+                  <span class="text-[9px] md:text-xs px-1 md:px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ skill.type }}</span>
+                  <span v-if="skill.rarity === 'S'" class="text-[9px] md:text-xs font-bold text-yellow-600">S</span>
+                  <span v-if="isUsed(skill)" class="text-[9px] md:text-[10px] bg-gray-200 text-gray-600 px-1 md:px-1.5 py-0.5 rounded font-bold">已裝備</span>
+                  <span v-if="isFixed(skill)" class="text-[9px] md:text-[10px] bg-purple-200 text-purple-700 px-1 md:px-1.5 py-0.5 rounded font-bold">固有</span>
+                  <span v-if="mode === 'manage' && !ownedSkills.includes(skill.name)" class="text-[9px] md:text-[10px] bg-black/70 text-white px-1 md:px-1.5 py-0.5 rounded">未擁有</span>
                   <span
                     v-if="skill.is_event_skill"
-                    class="ml-auto text-[10px] text-gray-400 truncate text-right"
+                    class="ml-auto text-[9px] md:text-[10px] text-gray-400 truncate text-right"
                   >事件戰法</span>
                   <span
                     v-else-if="!isFixed(skill) && teachersBySkill.get(skill.name)?.length"
-                    class="ml-auto text-[10px] text-gray-400 truncate text-right"
+                    class="ml-auto text-[9px] md:text-[10px] text-gray-400 truncate text-right"
                     :title="'傳授: ' + teachersBySkill.get(skill.name)!.join('、')"
                   >傳授: {{ teachersBySkill.get(skill.name)!.join('、') }}</span>
                 </div>
-                <BriefDescription v-if="skill.brief_description" :text="skill.brief_description" class="text-xs mt-1" />
-                <div v-else class="text-xs text-gray-500 mt-1 truncate">{{ skill.description || '暫無描述' }}</div>
+                <BriefDescription v-if="skill.brief_description" :text="skill.brief_description" class="text-[10px] md:text-xs mt-0.5 md:mt-1" />
+                <div v-else class="text-[10px] md:text-xs text-gray-500 mt-0.5 md:mt-1 truncate">{{ skill.description || '暫無描述' }}</div>
                 <!-- Tags in non-hover state -->
-                <div v-if="skill.tags?.length" class="flex flex-wrap gap-1 mt-1">
-                  <span v-for="tag in skill.tags" :key="tag" class="text-[10px] bg-blue-50 text-blue-600 px-1 rounded border border-blue-100">{{ tag }}</span>
+                <div v-if="skill.tags?.length" class="flex flex-wrap gap-0.5 md:gap-1 mt-0.5 md:mt-1">
+                  <span v-for="tag in skill.tags" :key="tag" class="text-[9px] md:text-[10px] bg-blue-50 text-blue-600 px-1 rounded border border-blue-100">{{ tag }}</span>
                 </div>
               </div>
             </div>

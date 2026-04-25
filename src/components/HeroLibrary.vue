@@ -1,14 +1,15 @@
 <template>
   <div class="flex flex-col h-full min-h-0">
     <!-- Filters -->
-    <div class="p-2 border-b border-gray-100 space-y-2">
-      <div class="flex justify-between items-center">
-        <el-input 
-          v-model="searchQuery" 
-          placeholder="搜尋武將..." 
-          clearable 
+    <div class="p-0 md:p-2 border-b border-gray-100 space-y-1 md:space-y-2">
+      <div class="flex justify-between items-center px-1 md:px-0 pt-1 md:pt-0">
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜尋武將..."
+          clearable
           prefix-icon="Search"
-          class="flex-1 mr-2"
+          class="flex-1 mr-1 md:mr-2"
+          size="small"
         />
         <button
           class="relative px-2 py-1 text-xs rounded border mr-2 transition-colors flex-shrink-0"
@@ -37,7 +38,7 @@
          </div>
       </div>
 
-      <div v-show="showFilters" class="space-y-1 pb-1">
+      <div v-show="showFilters" class="space-y-1 pb-1 px-1 md:px-0">
         <div class="flex items-center gap-1">
           <span class="text-xs text-gray-400 w-8 flex-shrink-0">Cost</span>
           <div class="flex gap-1 flex-wrap flex-1">
@@ -103,13 +104,13 @@
     </div>
 
     <!-- Grid -->
-    <div class="flex-1 overflow-y-auto p-2" v-loading="loading">
+    <div class="flex-1 overflow-y-auto p-0 md:p-2" v-loading="loading">
       <div v-if="filteredHeroes.length === 0" class="text-center py-10 text-gray-400">
         無符合條件的武將
       </div>
-      <div 
-        class="grid gap-2"
-        :class="mode === 'manage' ? 'grid-cols-5 sm:grid-cols-8 md:grid-cols-10' : 'grid-cols-3 sm:grid-cols-4'"
+      <div
+        class="grid gap-1 md:gap-2"
+        :class="mode === 'manage' ? 'grid-cols-5 sm:grid-cols-8 md:grid-cols-10' : 'grid-cols-4 sm:grid-cols-4'"
       >
         <div 
           v-for="hero in filteredHeroes" 

@@ -1,10 +1,10 @@
 <template>
   <el-container class="w-full bg-slate-50" style="height: 100dvh">
-    <el-header class="bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-50">
-      <div class="flex items-center gap-4">
+    <el-header class="app-header bg-white border-b border-gray-200 flex items-center justify-between px-0 md:px-4 sticky top-0 z-50">
+      <div class="flex items-center gap-1 md:gap-4">
         <!-- Mobile Menu Button -->
-        <el-button class="md:hidden" text @click="mobileSidebarVisible = true">
-          <el-icon :size="24"><Menu /></el-icon>
+        <el-button class="md:hidden !px-1 !mr-0" text @click="mobileSidebarVisible = true">
+          <el-icon :size="20"><Menu /></el-icon>
         </el-button>
 
         <div class="flex items-center gap-2">
@@ -44,7 +44,7 @@
         </div>
       </div>
 
-      <div>
+      <div class="flex items-center gap-1 md:gap-0 pr-1 md:pr-0">
         <template v-if="!isEditingInventory">
           <el-button type="info" round plain @click="startEditingInventory" class="hidden sm:inline-flex">
             <el-icon class="mr-1"><Edit /></el-icon> 編輯庫存
@@ -78,7 +78,7 @@
       </div>
     </el-header>
 
-    <el-main class="p-0 overflow-hidden" style="height: calc(100dvh - 60px - 32px)">
+    <el-main class="app-main p-0 overflow-hidden">
       
       <!-- View 1: Lineup Builder (Default) -->
       <div v-if="!isEditingInventory" class="flex flex-col md:flex-row h-full">
@@ -255,7 +255,7 @@
         
                                       <div class="flex-1 md:flex-none md:h-full w-full md:w-[45%] bg-white border-t md:border-t-0 md:border-l border-gray-200 flex flex-col shadow-xl z-40 min-h-0">
         
-                                        <el-tabs v-model="activeTab" class="flex-1 flex flex-col px-4 pt-2" stretch>                                <el-tab-pane label="武將庫" name="heroes" class="h-full flex flex-col overflow-hidden">
+                                        <el-tabs v-model="activeTab" class="library-tabs flex-1 flex flex-col px-0 pt-0 md:px-4 md:pt-2" stretch>                                <el-tab-pane label="武將庫" name="heroes" class="h-full flex flex-col overflow-hidden">
                                    <HeroLibrary 
                                      mode="select" 
                                      :used-heroes="allUsedHeroNames" 
@@ -284,20 +284,20 @@
         
               <!-- View 2: Inventory Editor (Full Screen Mode) -->
               <div v-else class="h-full bg-white flex flex-col">
-                <div class="container mx-auto h-full flex flex-col p-4">
-                  <el-tabs v-model="inventoryActiveTab" class="flex-1 flex flex-col" type="border-card">
+                <div class="w-full md:container md:mx-auto h-full flex flex-col p-0 md:p-4">
+                  <el-tabs v-model="inventoryActiveTab" class="inventory-tabs flex-1 flex flex-col" type="border-card">
                     <el-tab-pane label="武將庫存" name="heroes" class="h-full flex flex-col overflow-hidden">
-                       <HeroLibrary 
-                         mode="manage" 
-                         :used-heroes="[]" 
+                       <HeroLibrary
+                         mode="manage"
+                         :used-heroes="[]"
                          :owned-heroes="tempOwnedHeroes"
                          @update:ownedHeroes="val => tempOwnedHeroes = val"
                        />
                     </el-tab-pane>
                     <el-tab-pane label="戰法庫存" name="skills" class="h-full flex flex-col overflow-hidden">
-                       <SkillLibrary 
-                         mode="manage" 
-                         :used-skills="[]" 
+                       <SkillLibrary
+                         mode="manage"
+                         :used-skills="[]"
                          :owned-skills="tempOwnedSkills"
                          @update:ownedSkills="val => tempOwnedSkills = val"
                        />
@@ -896,7 +896,74 @@ onMounted(() => {
 <style>
 body {
   margin: 0;
-  overflow: hidden; 
+  overflow: hidden;
+}
+/* Element Plus' lock-scroll adds `width: calc(100% - <scrollbarWidth>)`
+   (and sometimes padding-right) to body when a modal/drawer mask opens,
+   to compensate for the disappearing scrollbar. But our body is already
+   `overflow: hidden` so there is no scrollbar to compensate for — the
+   shrunk width just makes the content scale down from the top-left and
+   leaves a white stripe on the right/bottom. Neutralize all of them. */
+body.el-popup-parent--hidden,
+html.el-popup-parent--hidden {
+  width: 100% !important;
+  padding-right: 0 !important;
+  padding-bottom: 0 !important;
+  overflow: hidden !important;
+}
+/* Mobile: compact header (height 50px, no horizontal padding). */
+.app-header {
+  --el-header-height: 60px;
+  height: var(--el-header-height);
+}
+.app-main {
+  height: calc(100dvh - var(--el-header-height) - 32px);
+}
+@media (max-width: 767px) {
+  .app-header {
+    --el-header-height: 50px;
+  }
+  /* Tighten Element Plus button default margin between siblings on mobile. */
+  .app-header .el-button + .el-button {
+    margin-left: 4px;
+  }
+}
+/* Tighten the gap between the 武將庫/戰法庫 tab header and its panel content.
+   Element Plus default is margin: 0 0 15px; which leaves too much dead space. */
+.el-tabs--top > .el-tabs__header.is-top {
+  margin-bottom: 6px;
+}
+@media (max-width: 767px) {
+  .el-tabs--top > .el-tabs__header.is-top {
+    margin-bottom: 2px;
+  }
+}
+/* Library tabs (武將庫/戰法庫): shorter header row (80% of EP default 40px). */
+.library-tabs .el-tabs__item {
+  height: 32px;
+  line-height: 32px;
+}
+.library-tabs .el-tabs__nav-wrap::after {
+  height: 1px;
+}
+/* Inventory editor (庫存編輯) — tighten the border-card tab panel.
+   Default .el-tabs--border-card content padding is 15px; shrink on mobile
+   and trim the header row to match the 80% rule used elsewhere. */
+.inventory-tabs.el-tabs--border-card > .el-tabs__header .el-tabs__item {
+  height: 32px;
+  line-height: 32px;
+}
+@media (max-width: 767px) {
+  .inventory-tabs.el-tabs--border-card {
+    border: 0;
+    box-shadow: none;
+  }
+  .inventory-tabs.el-tabs--border-card > .el-tabs__content {
+    padding: 0;
+  }
+  .inventory-tabs.el-tabs--border-card > .el-tabs__header {
+    margin-bottom: 0;
+  }
 }
 .el-tabs {
   display: flex;
