@@ -2,8 +2,8 @@
 // share encodes, but behind a slug so the visible URL stays compact.
 // Uses Supabase PostgREST directly via fetch — no client SDK dependency.
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+import { SUPABASE_URL, SUPABASE_KEY, fetchWithTimeout, isSupabaseConfigured } from './supabase'
+import { getSession, getValidAccessToken } from './auth'
 
 const SLUG_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
@@ -16,44 +16,53 @@ const generateSlug = (len: number): string => {
   return Array.from(bytes, b => SLUG_CHARS[b % SLUG_CHARS.length]).join('')
 }
 
-const authHeaders = (key: string): HeadersInit => ({
-  apikey: key,
-  Authorization: `Bearer ${key}`,
-})
-
-// Promote silent network hangs (slow Supabase, captive portal, etc.) into a
-// fast caught error so initFromHash doesn't leave the user staring at a blank
-// default state for the browser's TCP timeout (~90s).
-const FETCH_TIMEOUT_MS = 8000
-const fetchWithTimeout = async (url: string, init: RequestInit): Promise<Response> => {
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 // Slugs we generate match this shape; widened on collision but never wider
 // than 14 chars. Used to reject malformed input before a wasted round-trip.
 const SLUG_PATTERN = /^[A-Za-z0-9]{12,14}$/
 
-export const isShareEnabled = (): boolean => Boolean(SUPABASE_URL && SUPABASE_KEY)
+// Build PostgREST headers. With a user JWT, PostgREST evaluates RLS as that
+// user (authenticated role). Without one, it evaluates as anon.
+const restHeaders = (userToken: string | null): HeadersInit => {
+  const key = SUPABASE_KEY!
+  return {
+    apikey: key,
+    Authorization: `Bearer ${userToken ?? key}`,
+  }
+}
 
-export const createShare = async (blob: unknown): Promise<string> => {
+export const isShareEnabled = isSupabaseConfigured
+
+export interface CreateShareOptions {
+  /** Sets shares.display_name. Only meaningful when logged in (anon shares
+   *  are unlisted so a name has nowhere to surface). */
+  displayName?: string
+  /** Force creation as anonymous (user_id null) even when logged in. */
+  forceAnonymous?: boolean
+}
+
+export const createShare = async (blob: unknown, opts: CreateShareOptions = {}): Promise<string> => {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')
+
+  const session = opts.forceAnonymous ? null : getSession()
+  const token = session ? await getValidAccessToken() : null
+  const userId = session && token ? session.user.id : null
+
+  const baseRow: Record<string, unknown> = { blob }
+  if (userId) {
+    baseRow.user_id = userId
+    if (opts.displayName) baseRow.display_name = opts.displayName
+  }
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const slug = generateSlug(12 + attempt)
     const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/shares`, {
       method: 'POST',
       headers: {
-        ...authHeaders(SUPABASE_KEY),
+        ...restHeaders(token),
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
       },
-      body: JSON.stringify({ slug, blob }),
+      body: JSON.stringify({ ...baseRow, slug }),
     })
     if (res.ok) return slug
     if (res.status === 409) continue
@@ -67,9 +76,66 @@ export const loadShare = async (slug: string): Promise<unknown> => {
   if (!SLUG_PATTERN.test(slug)) throw new Error('invalid share slug')
 
   const url = `${SUPABASE_URL}/rest/v1/shares?slug=eq.${encodeURIComponent(slug)}&select=blob`
-  const res = await fetchWithTimeout(url, { headers: authHeaders(SUPABASE_KEY) })
+  const res = await fetchWithTimeout(url, { headers: restHeaders(null) })
   if (!res.ok) throw new Error(`share load failed: ${res.status}`)
   const rows = (await res.json()) as Array<{ blob: unknown }>
   if (rows.length === 0) throw new Error('share not found')
   return rows[0].blob
+}
+
+export interface MyShare {
+  slug: string
+  display_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const listMyShares = async (): Promise<MyShare[]> => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')
+  const session = getSession()
+  if (!session) throw new Error('not signed in')
+  const token = await getValidAccessToken()
+  if (!token) throw new Error('session expired')
+
+  const url = `${SUPABASE_URL}/rest/v1/shares?user_id=eq.${session.user.id}` +
+    `&select=slug,display_name,created_at,updated_at&order=updated_at.desc`
+  const res = await fetchWithTimeout(url, { headers: restHeaders(token) })
+  if (!res.ok) throw new Error(`list shares failed: ${res.status}`)
+  return (await res.json()) as MyShare[]
+}
+
+export const renameMyShare = async (slug: string, displayName: string | null): Promise<void> => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')
+  if (!SLUG_PATTERN.test(slug)) throw new Error('invalid share slug')
+  const token = await getValidAccessToken()
+  if (!token) throw new Error('session expired')
+
+  const url = `${SUPABASE_URL}/rest/v1/shares?slug=eq.${encodeURIComponent(slug)}`
+  const res = await fetchWithTimeout(url, {
+    method: 'PATCH',
+    headers: {
+      ...restHeaders(token),
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      display_name: displayName,
+      updated_at: new Date().toISOString(),
+    }),
+  })
+  if (!res.ok) throw new Error(`rename failed: ${res.status} ${await res.text()}`)
+}
+
+export const deleteMyShare = async (slug: string): Promise<void> => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')
+  if (!SLUG_PATTERN.test(slug)) throw new Error('invalid share slug')
+  const token = await getValidAccessToken()
+  if (!token) throw new Error('session expired')
+
+  const url = `${SUPABASE_URL}/rest/v1/shares?slug=eq.${encodeURIComponent(slug)}`
+  const res = await fetchWithTimeout(url, {
+    method: 'DELETE',
+    headers: { ...restHeaders(token), Prefer: 'return=minimal' },
+  })
+  if (!res.ok) throw new Error(`delete failed: ${res.status} ${await res.text()}`)
 }
