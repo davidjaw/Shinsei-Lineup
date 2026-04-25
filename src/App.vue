@@ -168,6 +168,7 @@
                             v-model:stats="currentLineup.main.stats"
                             v-model:equipTraits="currentLineup.main.equipTraits"
                             v-model:breakthrough="currentLineup.main.breakthrough"
+                            v-model:bingxue="currentLineup.main.bingxue"
                             :focused-skill-slot="currentSelectingSkillRole === 'main' ? currentSelectingSkillSlot : null"
                             :is-swap-source="swapModeRole === 'main'"
                             :swap-mode-active="swapModeRole !== null"
@@ -197,6 +198,7 @@
                             v-model:stats="currentLineup.vice1.stats"
                             v-model:equipTraits="currentLineup.vice1.equipTraits"
                             v-model:breakthrough="currentLineup.vice1.breakthrough"
+                            v-model:bingxue="currentLineup.vice1.bingxue"
                             :focused-skill-slot="currentSelectingSkillRole === 'vice1' ? currentSelectingSkillSlot : null"
                             :is-swap-source="swapModeRole === 'vice1'"
                             :swap-mode-active="swapModeRole !== null"
@@ -226,6 +228,7 @@
                             v-model:stats="currentLineup.vice2.stats"
                             v-model:equipTraits="currentLineup.vice2.equipTraits"
                             v-model:breakthrough="currentLineup.vice2.breakthrough"
+                            v-model:bingxue="currentLineup.vice2.bingxue"
                             :focused-skill-slot="currentSelectingSkillRole === 'vice2' ? currentSelectingSkillSlot : null"
                             :is-swap-source="swapModeRole === 'vice2'"
                             :swap-mode-active="swapModeRole !== null"
@@ -250,7 +253,7 @@
         
                                       <!-- Right: Library (Select Mode) - On mobile this is below the lineups -->
         
-                                      <div class="flex-1 md:flex-none md:h-full w-full md:w-[35%] bg-white border-t md:border-t-0 md:border-l border-gray-200 flex flex-col shadow-xl z-40 min-h-0">
+                                      <div class="flex-1 md:flex-none md:h-full w-full md:w-[45%] bg-white border-t md:border-t-0 md:border-l border-gray-200 flex flex-col shadow-xl z-40 min-h-0">
         
                                         <el-tabs v-model="activeTab" class="flex-1 flex flex-col px-4 pt-2" stretch>                                <el-tab-pane label="武將庫" name="heroes" class="h-full flex flex-col overflow-hidden">
                                    <HeroLibrary 
@@ -495,8 +498,8 @@ import SkillLibrary from './components/SkillLibrary.vue'
 import MobileSlotDetail from './components/MobileSlotDetail.vue'
 
 import { useData, Hero, Skill, Trait } from './composables/useData'
-import { MOCK_EQUIP_TRAITS, ShareableData, ShareableLineup } from './constants/gameData'
-import { useLineups, type RoleData } from './composables/useLineups'
+import { MOCK_EQUIP_TRAITS, ShareableData, ShareableLineup, ShareableBingxue } from './constants/gameData'
+import { useLineups, type RoleData, type BingxueActive } from './composables/useLineups'
 import { useTroopLevels } from './composables/useTroopLevels'
 import { TROOP_TYPES, TROOP_LABELS } from './constants/traits'
 import { useInventory } from './composables/useInventory'
@@ -786,6 +789,11 @@ const openShareDialog = () => {
   shareDialogVisible.value = true
 }
 
+const serializeBx = (bx?: BingxueActive): ShareableBingxue | undefined =>
+  bx?.direction
+    ? { d: bx.direction, m: bx.major, n: bx.minors.map(mi => ({ n: mi.name, l: mi.level })) }
+    : undefined
+
 const shareLineup = (type: 'all' | 'current' | 'inventory') => {
   const data: ShareableData = {}
   if (type === 'inventory' || type === 'all') {
@@ -796,17 +804,17 @@ const shareLineup = (type: 'all' | 'current' | 'inventory') => {
     const l = currentLineup.value
     data.lineups = [{
       name: l.name,
-      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), m_bt: l.main.breakthrough,
-      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v1_bt: l.vice1.breakthrough,
-      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v2_bt: l.vice2.breakthrough,
+      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), m_bt: l.main.breakthrough, m_bx: serializeBx(l.main.bingxue),
+      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v1_bt: l.vice1.breakthrough, v1_bx: serializeBx(l.vice1.bingxue),
+      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v2_bt: l.vice2.breakthrough, v2_bx: serializeBx(l.vice2.bingxue),
     }]
   }
   if (type === 'all') {
     data.lineups = lineups.map(l => ({
       name: l.name,
-      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), m_bt: l.main.breakthrough,
-      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v1_bt: l.vice1.breakthrough,
-      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v2_bt: l.vice2.breakthrough,
+      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), m_bt: l.main.breakthrough, m_bx: serializeBx(l.main.bingxue),
+      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v1_bt: l.vice1.breakthrough, v1_bx: serializeBx(l.vice1.bingxue),
+      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v2_bt: l.vice2.breakthrough, v2_bx: serializeBx(l.vice2.bingxue),
     }))
   }
   
@@ -858,6 +866,14 @@ const initFromHash = () => {
             }
             const bt = safeL[prefix + '_bt']
             if (typeof bt === 'number') role.breakthrough = Math.max(0, Math.min(5, bt))
+            const bx = safeL[prefix + '_bx']
+            if (bx && bx.d) {
+              role.bingxue = {
+                direction: bx.d,
+                major: bx.m ?? null,
+                minors: Array.isArray(bx.n) ? bx.n.map((mi: any) => ({ name: mi.n, level: mi.l })) : [],
+              }
+            }
           }
           restore('m', target.main)
           restore('v1', target.vice1)

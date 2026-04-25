@@ -1006,6 +1006,7 @@ skills:
     is_event_skill: true
     _action: add
   風姿綽約:
+    _replaces: 風姿綽約  # JP and CHT names identical — drops untranslated crawled entry
     name: 風姿綽約
     type: 指揮
     rarity: S
@@ -1069,6 +1070,7 @@ skills:
     is_unique: true
     _action: add
   攻其不備:
+    _replaces: 攻其不備  # JP and CHT names identical — drops untranslated crawled entry
     name: 攻其不備
     type: 主動
     rarity: S
@@ -1109,6 +1111,7 @@ skills:
     source_hero: 阿江
     _action: add
   同氣連枝:
+    _replaces: 同気連枝  # drops the kana-description crawled entry
     name: 同氣連枝
     type: 指揮
     rarity: S
@@ -1456,6 +1459,7 @@ heroes:
       vars: {}
       active: true
   阿江:
+    _replaces: お江  # drops the kana-named crawled hero
     name: 阿江
     portrait: https://duk.tw/ZYcxET.png
     rarity: 5
@@ -1488,6 +1492,7 @@ heroes:
       active: true
     _action: add
   阿初:
+    _replaces: お初  # drops the kana-named crawled hero
     name: 阿初
     portrait: https://duk.tw/OjJGSa.png
     rarity: 5

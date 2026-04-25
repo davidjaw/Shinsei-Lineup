@@ -30,11 +30,19 @@ export const MOCK_EQUIP_TRAITS: Trait[] = [
   { name: '馬術', rank: 'C', active: true, description: '騎兵適性提升' }
 ]
 
+// Compact bingxue payload — `d` = CHT direction, `m` = major JP name,
+// `n` = array of { n: minor JP name, l: level 1|2 }.
+export interface ShareableBingxue {
+  d: string | null
+  m: string | null
+  n: { n: string; l: number }[]
+}
+
 export interface ShareableLineup {
   name?: string
-  m?: string; m_s1?: string; m_s2?: string; m_st?: any; m_eq?: any[]
-  v1?: string; v1_s1?: string; v1_s2?: string; v1_st?: any; v1_eq?: any[]
-  v2?: string; v2_s1?: string; v2_s2?: string; v2_st?: any; v2_eq?: any[]
+  m?: string; m_s1?: string; m_s2?: string; m_st?: any; m_eq?: any[]; m_bt?: number; m_bx?: ShareableBingxue
+  v1?: string; v1_s1?: string; v1_s2?: string; v1_st?: any; v1_eq?: any[]; v1_bt?: number; v1_bx?: ShareableBingxue
+  v2?: string; v2_s1?: string; v2_s2?: string; v2_st?: any; v2_eq?: any[]; v2_bt?: number; v2_bx?: ShareableBingxue
 }
 
 export interface ShareableData {

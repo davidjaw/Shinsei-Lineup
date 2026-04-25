@@ -126,6 +126,25 @@ export interface Trait {
   affinity?: TroopAffinity | null
 }
 
+export type BingxueDirection = '武略' | '陣立' | '機略' | '臨戰'
+export const BINGXUE_DIRECTIONS: BingxueDirection[] = ['武略', '陣立', '機略', '臨戰']
+export type BingxueTier = 'major' | 'minor'
+
+export interface BingxueOption {
+  name: string           // CHT display name
+  name_jp: string        // JP key — used in references
+  direction: BingxueDirection
+  direction_jp: string
+  tier: BingxueTier
+  description: string    // CHT with {var:}/{status:}/{scale:} template
+  description_jp: string
+  vars: Record<string, any>
+}
+
+// Per-hero available bingxue: CHT direction → {major, minor} JP name arrays.
+// Each direction offers 3 majors + 6 minors for the hero to pick from.
+export type HeroBingxue = Record<BingxueDirection, { major: string[]; minor: string[] }>
+
 export interface Hero {
   name: string
   name_jp?: string
@@ -148,11 +167,13 @@ export interface Hero {
     spd: number
   }
   traits?: Trait[]
+  bingxue?: HeroBingxue | null
 }
 
 import heroesData from '../../.build/heroes.json'
 import skillsData from '../../.build/skills.json'
 import statusesData from '../../.build/statuses.json'
+import bingxueData from '../../.build/bingxue.json'
 
 const DEFAULT_ICONS: Record<string, string> = {
   '指揮': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_zh_kongzhi.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
@@ -171,6 +192,9 @@ const skills = ref<Skill[]>(skillsData && Array.isArray(skillsData) ? (skillsDat
   icon: s.icon || DEFAULT_ICONS[s.type] || ''
 })) : [])
 const statuses = ref<Record<string, any>>(statusesData || {})
+const bingxue = ref<Record<string, BingxueOption>>(
+  (bingxueData as Record<string, BingxueOption>) || {}
+)
 
 const loading = ref(false)
 
@@ -178,5 +202,5 @@ export function useData() {
   const fetchAllData = async () => {
     loading.value = false
   }
-  return { heroes, skills, statuses, loading, fetchAllData }
+  return { heroes, skills, statuses, bingxue, loading, fetchAllData }
 }

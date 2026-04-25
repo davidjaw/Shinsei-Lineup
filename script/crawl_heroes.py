@@ -38,8 +38,8 @@ from tqdm import tqdm
 
 from paths import (
     CRAWL_CACHE_DIR, HERO_INDEX_CACHE,
-    HEROES_CRAWLED, SKILLS_CRAWLED, ASSEMBLY_CRAWLED,
-    SKILLS_CANONICAL, TRAITS_CANONICAL,
+    HEROES_CRAWLED, SKILLS_CRAWLED, ASSEMBLY_CRAWLED, BINGXUE_CRAWLED,
+    SKILLS_CANONICAL, TRAITS_CANONICAL, BINGXUE_CANONICAL,
 )
 
 DEFAULT_INDEX_URL = "https://game8.jp/nobunaga-shinsen/737773"
@@ -71,7 +71,9 @@ def validate_url(url: str) -> str:
     return url
 
 
-def fetch_page(url: str, timeout: float = DEFAULT_TIMEOUT) -> BeautifulSoup:
+def fetch_page(url: str, timeout: float = DEFAULT_TIMEOUT) -> tuple[BeautifulSoup, str]:
+    """Returns (soup, raw_html). Raw HTML needed because html.parser strips
+    <template> contents — 兵学 effect extraction re-parses those via regex."""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -81,7 +83,7 @@ def fetch_page(url: str, timeout: float = DEFAULT_TIMEOUT) -> BeautifulSoup:
     }
     resp = requests.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
-    return BeautifulSoup(resp.text, "html.parser")
+    return BeautifulSoup(resp.text, "html.parser"), resp.text
 
 
 def crawl_delay():
@@ -227,9 +229,13 @@ STAT_MAP = {
 }
 
 
-def extract_hero_detail(soup: BeautifulSoup, hero_name: str) -> dict:
+def extract_hero_detail(soup: BeautifulSoup, html: str, hero_name: str) -> dict:
     """Returns hero detail dict. Skills stored under 'skills' as raw dicts
-    (will be split into hero ref + skill file later)."""
+    (will be split into hero ref + skill file later).
+
+    `html` is the raw response text — needed for 兵学 extraction since html.parser
+    drops <template> contents.
+    """
     detail = {}
     text = soup.get_text(separator="\n")
 
@@ -255,7 +261,101 @@ def extract_hero_detail(soup: BeautifulSoup, hero_name: str) -> dict:
             if sk.get("is_teachable"):
                 detail["teachable_skill"] = sk["name"]
 
+    bingxue = _extract_bingxue(html)
+    if bingxue:
+        detail["_raw_bingxue"] = bingxue
+
     return detail
+
+
+# ---------------------------------------------------------------------------
+# 兵学 (heigaku) extraction
+# ---------------------------------------------------------------------------
+# Structure per hero detail page (4-5★ only; lower rarities lack the section):
+#   <th colspan=20>兵学</th>
+#   <th>DIR_1</th><th>DIR_2</th>                       ← direction names
+#   <td>major×3 (hr-sep)</td><td>minor×6</td><td>major×3</td><td>minor×6</td>
+#   <th>DIR_3</th><th>DIR_4</th>
+#   <td>...</td><td>...</td><td>...</td>...
+# Each option is a <span class="js-detail-tooltip"> NAME <template> ... EFFECT ... </template> </span>.
+# HTML parsers (html.parser, lxml) mishandle <template>; we regex-extract effects
+# from raw HTML before stripping <template> and walking the structure with BS4.
+
+_TOOLTIP_RE = re.compile(
+    r'<span class="js-detail-tooltip[^"]*"[^>]*>\s*'
+    r'([^<]+?)\s*'
+    r'<template[^>]*>\s*<table[^>]*>\s*<tr>\s*<td[^>]*>'
+    r'(.+?)'
+    r'</td>\s*</tr>\s*</table>\s*</template>',
+    re.DOTALL,
+)
+_TEMPLATE_RE = re.compile(r'<template[^>]*>.*?</template>', re.DOTALL)
+_TAG_RE = re.compile(r'<[^>]+>')
+_WS_RE = re.compile(r'\s+')
+
+
+def _clean_effect(raw: str) -> str:
+    return _WS_RE.sub(" ", _TAG_RE.sub("", raw)).strip()
+
+
+def _extract_bingxue(html: str) -> dict | None:
+    """Returns {direction: {"major": [{name, effect}], "minor": [...]}} or None."""
+    name_to_effect: dict[str, str] = {}
+    for m in _TOOLTIP_RE.finditer(html):
+        name_to_effect[m.group(1).strip()] = _clean_effect(m.group(2))
+
+    cleaned = _TEMPLATE_RE.sub("", html)
+    soup = BeautifulSoup(cleaned, "html.parser")
+
+    heading = next(
+        (th for th in soup.find_all("th") if th.get_text(strip=True) == "兵学"),
+        None,
+    )
+    if heading is None:
+        return None
+    table = heading.find_parent("table")
+    if table is None:
+        return None
+
+    rows = table.find_all("tr")
+    start_idx = next(
+        (i for i, r in enumerate(rows) if heading in r.find_all("th")), None
+    )
+    if start_idx is None:
+        return None
+
+    result: dict[str, dict] = {}
+    i = start_idx + 1
+    while i + 1 < len(rows):
+        dir_ths = rows[i].find_all("th", recursive=False)
+        data_tds = rows[i + 1].find_all("td", recursive=False)
+        # 2 direction headers + 4 data cells per logical row; anything else = end of section
+        if len(dir_ths) != 2 or len(data_tds) != 4:
+            break
+
+        directions = []
+        for th in dir_ths:
+            img = th.find("img")
+            directions.append(img["alt"] if img and img.get("alt") else th.get_text(strip=True))
+
+        for d_idx, direction in enumerate(directions):
+            result[direction] = {
+                "major": _options_from_cell(data_tds[d_idx * 2], name_to_effect),
+                "minor": _options_from_cell(data_tds[d_idx * 2 + 1], name_to_effect),
+            }
+        i += 2
+
+    return result or None
+
+
+def _options_from_cell(cell, name_to_effect: dict[str, str]) -> list[dict]:
+    options = []
+    for span in cell.find_all("span", class_="js-detail-tooltip"):
+        name = span.get_text(" ", strip=True)
+        if not name:
+            continue
+        options.append({"name": name, "effect": name_to_effect.get(name, "")})
+    return options
 
 
 def _extract_traits(soup: BeautifulSoup) -> list[dict]:
@@ -371,18 +471,27 @@ def _extract_skill_details(soup: BeautifulSoup, hero_name: str) -> list[dict]:
 # Output: split hero YAML + skill YAML
 # ---------------------------------------------------------------------------
 
-def save_outputs(heroes: list[dict], heroes_path: str, skills_path: str, assembly_path: str):
+def save_outputs(
+    heroes: list[dict],
+    heroes_path: str,
+    skills_path: str,
+    assembly_path: str,
+    bingxue_path: str,
+):
     """Split crawled data into:
-    - heroes YAML (skill refs only)
+    - heroes YAML (skill refs only, + per-hero bingxue reference structure)
     - skills YAML (battle skills: 固有戦法 + 伝授戦法)
     - assembly skills YAML (評定衆技能 — non-battle / domestic skills)
+    - bingxue YAML (canonical 兵学 option definitions, deduped across heroes)
     """
     skills_db: dict[str, dict] = {}
     assembly_db: dict[str, dict] = {}
+    bingxue_db: dict[str, dict] = {}
     hero_list = []
 
     for h in heroes:
         raw_skills = h.pop("_raw_skills", [])
+        raw_bingxue = h.pop("_raw_bingxue", None)
 
         for sk in raw_skills:
             sk_name = sk["name"]
@@ -423,17 +532,48 @@ def save_outputs(heroes: list[dict], heroes_path: str, skills_path: str, assembl
         hero_out["teachable_skill"] = h.get("teachable_skill")
         hero_out["assembly_skill"] = asm_name
 
+        # 兵学: hero stores direction → {major: [names], minor: [names]}
+        # Option definitions go into bingxue_db (dedup by name).
+        if raw_bingxue:
+            hero_out["bingxue"] = {}
+            for direction, groups in raw_bingxue.items():
+                hero_out["bingxue"][direction] = {
+                    "major": [opt["name"] for opt in groups["major"]],
+                    "minor": [opt["name"] for opt in groups["minor"]],
+                }
+                for tier in ("major", "minor"):
+                    for opt in groups[tier]:
+                        name = opt["name"]
+                        if name in bingxue_db:
+                            # Same option name reused; extend source list.
+                            # (Effect-collision detection deferred to integrity check.)
+                            if h["name"] not in bingxue_db[name]["source_heroes"]:
+                                bingxue_db[name]["source_heroes"].append(h["name"])
+                        else:
+                            bingxue_db[name] = {
+                                "name": name,
+                                "direction": direction,
+                                "tier": tier,
+                                "effect": opt["effect"],
+                                "source_heroes": [h["name"]],
+                            }
+
         hero_list.append(hero_out)
 
-    for path, data in [(heroes_path, hero_list), (skills_path, skills_db), (assembly_path, assembly_db)]:
+    for path, data in [
+        (heroes_path, hero_list),
+        (skills_path, skills_db),
+        (assembly_path, assembly_db),
+        (bingxue_path, bingxue_db),
+    ]:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
-    return hero_list, skills_db, assembly_db
+    return hero_list, skills_db, assembly_db, bingxue_db
 
 
-def sync_canonical(hero_list: list[dict], skills_db: dict[str, dict]):
+def sync_canonical(hero_list: list[dict], skills_db: dict[str, dict], bingxue_db: dict[str, dict]):
     """Update canonical files' raw sections with freshly crawled data.
 
     Preserves existing text/vars/battle/passive sections — only overwrites raw.
@@ -494,6 +634,23 @@ def sync_canonical(hero_list: list[dict], skills_db: dict[str, dict]):
         yaml.dump(canonical_t, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
     tqdm.write(f"[sync] {len(traits_db)} traits → {TRAITS_CANONICAL} ({new_traits} new)")
 
+    # --- 兵学 options ---
+    if BINGXUE_CANONICAL.exists():
+        canonical_b = yaml.safe_load(BINGXUE_CANONICAL.read_text("utf-8")) or {}
+    else:
+        canonical_b = {}
+
+    new_bingxue = 0
+    for name, crawled in bingxue_db.items():
+        if name not in canonical_b:
+            canonical_b[name] = {}
+            new_bingxue += 1
+        canonical_b[name]["raw"] = crawled
+
+    with open(BINGXUE_CANONICAL, "w", encoding="utf-8") as f:
+        yaml.dump(canonical_b, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    tqdm.write(f"[sync] {len(bingxue_db)} bingxue options → {BINGXUE_CANONICAL} ({new_bingxue} new)")
+
 
 # ---------------------------------------------------------------------------
 # Orchestrator
@@ -511,6 +668,7 @@ def crawl(
     heroes_path: str = str(HEROES_CRAWLED),
     skills_path: str = str(SKILLS_CRAWLED),
     assembly_path: str = str(ASSEMBLY_CRAWLED),
+    bingxue_path: str = str(BINGXUE_CRAWLED),
 ):
     index_url = validate_url(index_url)
 
@@ -522,7 +680,7 @@ def crawl(
         tqdm.write(f"[index] Loaded {len(heroes)} heroes from {HERO_INDEX_CACHE}")
     else:
         tqdm.write(f"[index] Fetching hero list: {index_url}")
-        soup = fetch_page(index_url, timeout=timeout)
+        soup, _ = fetch_page(index_url, timeout=timeout)
         heroes = extract_hero_list(soup, index_url)
         tqdm.write(f"[index] Found {len(heroes)} heroes")
         if heroes:
@@ -564,8 +722,8 @@ def crawl(
                     continue
 
             try:
-                detail_soup = fetch_page(url, timeout=timeout)
-                detail = extract_hero_detail(detail_soup, hero["name"])
+                detail_soup, detail_html = fetch_page(url, timeout=timeout)
+                detail = extract_hero_detail(detail_soup, detail_html, hero["name"])
                 hero.update(detail)
                 save_detail_cache(url, detail)
             except Exception as e:
@@ -580,15 +738,18 @@ def crawl(
             tqdm.write(f"[warn] {len(failed)} failed — re-run to retry (cache preserved)")
 
     # --- Save ---
-    hero_list, skills_db, assembly_db = save_outputs(heroes, heroes_path, skills_path, assembly_path)
+    hero_list, skills_db, assembly_db, bingxue_db = save_outputs(
+        heroes, heroes_path, skills_path, assembly_path, bingxue_path
+    )
     tqdm.write(f"\n[done] {len(hero_list)} heroes → {heroes_path}")
     tqdm.write(f"[done] {len(skills_db)} skills → {skills_path}")
     tqdm.write(f"[done] {len(assembly_db)} assembly skills → {assembly_path}")
+    tqdm.write(f"[done] {len(bingxue_db)} bingxue options → {bingxue_path}")
 
     # Sync raw sections into canonical files
-    sync_canonical(hero_list, skills_db)
+    sync_canonical(hero_list, skills_db, bingxue_db)
 
-    return hero_list, skills_db, assembly_db
+    return hero_list, skills_db, assembly_db, bingxue_db
 
 
 def main():
@@ -597,6 +758,7 @@ def main():
     p.add_argument("--heroes-out", default=str(HEROES_CRAWLED), help="Heroes YAML output path")
     p.add_argument("--skills-out", default=str(SKILLS_CRAWLED), help="Skills YAML output path")
     p.add_argument("--assembly-out", default=str(ASSEMBLY_CRAWLED), help="Assembly skills YAML output path")
+    p.add_argument("--bingxue-out", default=str(BINGXUE_CRAWLED), help="Bingxue (兵学) options YAML output path")
     p.add_argument("--detail", action="store_true", help="Enable stage 2 (crawl detail pages)")
     p.add_argument("--limit", type=int, help="Max heroes to crawl detail for")
     p.add_argument("--name", help="Filter heroes by name (substring match)")
@@ -616,6 +778,7 @@ def main():
         heroes_path=args.heroes_out,
         skills_path=args.skills_out,
         assembly_path=args.assembly_out,
+        bingxue_path=args.bingxue_out,
     )
 
 

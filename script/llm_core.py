@@ -597,6 +597,37 @@ def validate_trait_entry(data: dict) -> list[str]:
     return errors
 
 
+def validate_bingxue_entry(data: dict) -> list[str]:
+    """Validate a single 兵学 option's LLM output.
+
+    Unlike skills/traits, bingxue only needs:
+      - text.description (CHT with template syntax)
+      - vars (when effect has Lv1/Lv2 or scaling values)
+    No battle/passive sections — those are deferred to a later phase.
+    The name field is NOT validated here because it's hand-maintained
+    in data/bingxue.yaml and LLM is told not to emit it.
+    """
+    errors = []
+    if not isinstance(data, dict):
+        return ["not a dict"]
+
+    text = data.get("text")
+    if not text:
+        errors.append("missing text")
+    elif not isinstance(text, dict):
+        errors.append("text not a dict")
+    else:
+        if not text.get("description"):
+            errors.append("text.description missing")
+
+    # vars is optional but if present must be a dict
+    vars_ = data.get("vars")
+    if vars_ is not None and not isinstance(vars_, dict):
+        errors.append("vars not a dict")
+
+    return errors
+
+
 def validate_entry_quality(data: dict) -> list[str]:
     """Post-LLM quality checks on text section. Auto-fixes what it can, returns hard errors only."""
     text = data.get("text", {})

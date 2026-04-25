@@ -22,14 +22,15 @@ from pathlib import Path
 from llm_core import clean_strings, load_overrides
 from paths import (
     HEROES_CRAWLED, HEROES_TRANSLATED,
-    SKILLS_CANONICAL, TRAITS_CANONICAL,
+    SKILLS_CANONICAL, TRAITS_CANONICAL, BINGXUE_CANONICAL,
     STATUSES_YAML,
-    HEROES_JSON, SKILLS_JSON, STATUSES_JSON,
+    HEROES_JSON, SKILLS_JSON, STATUSES_JSON, BINGXUE_JSON,
+    BINGXUE_JP_TO_CHT_DIR,
 )
 
 # Untranslated-text warnings collected during build_skills/build_heroes.
 # Surfaced at end of main() so admin sees a summary, but does not fail the
-# build (check_data_integrity.py is the gatekeeper that fails CI).
+# build (check_build.py + check_coverage.py are the gatekeepers that fail CI).
 _BUILD_WARNINGS: list[str] = []
 
 # LLM skill name corrections (wrong CHT → correct CHT)
@@ -69,36 +70,67 @@ def deep_merge(base: dict, override: dict) -> dict:
 
 
 
+def _skill_stub_defaults(clean: dict) -> dict:
+    """Fill in default fields for an added/replaced skill entry."""
+    clean.setdefault("name_jp", "")
+    clean.setdefault("vars", {})
+    clean.setdefault("commander_description", "")
+    clean.setdefault("source_hero", "")
+    clean.setdefault("unique_hero", "")
+    clean.setdefault("is_unique", bool(clean.get("unique_hero")))
+    # Teachable only if explicitly has source_hero or is_teachable set
+    clean.setdefault("is_teachable", bool(clean.get("source_hero")))
+    clean.setdefault("is_fixed", clean.get("is_unique", False) and not clean.get("is_teachable", False))
+    clean.setdefault("icon", "")
+    clean.setdefault("tags", [])
+    clean.setdefault("brief_description", "")
+    return clean
+
+
 def apply_skill_overrides(skills: list[dict], overrides: dict) -> list[dict]:
-    """Apply skill overrides: modify existing or add new skills."""
+    """Apply skill overrides.
+
+    Supported actions:
+      - `modify` (default): deep-merge into existing skill matched by dict key
+      - `add`: append new skill (key is JP or CHT name). Auto-dedups by same
+        `name` and honors the legacy `_replaces: <jp_name>` field.
+      - `replace`: drop existing skill matched by dict key (must be JP name),
+        then append the entry. The symmetric "delete-then-add" form.
+      - `delete`: remove existing skill matched by dict key.
+    """
     skill_index = {s["name"]: i for i, s in enumerate(skills)}
-    skill_index_jp = {s["name_jp"]: i for i, s in enumerate(skills)}
+    skill_index_jp = {s.get("name_jp"): i for i, s in enumerate(skills) if s.get("name_jp")}
+
+    def _find(key: str) -> int | None:
+        idx = skill_index.get(key)
+        return skill_index_jp.get(key) if idx is None else idx
+
+    def _drop(victim_key: str):
+        idx = _find(victim_key)
+        if idx is not None and skills[idx] is not None:
+            skills[idx] = None
 
     for key, ov in overrides.items():
         action = ov.get("_action", "modify")
         if action == "delete":
-            idx = skill_index.get(key) or skill_index_jp.get(key)
-            if idx is not None:
-                skills[idx] = None
+            _drop(key)
+            continue
+        if action == "replace":
+            _drop(key)
+            clean = {k: v for k, v in ov.items() if not k.startswith("_")}
+            skills.append(_skill_stub_defaults(clean))
             continue
         if action == "add":
+            # Only honor explicit _replaces. Duplicate-name detection is
+            # check_build.py's job — silently dropping a same-named existing
+            # entry here would mask typos.
+            if ov.get("_replaces"):
+                _drop(ov["_replaces"])
             clean = {k: v for k, v in ov.items() if not k.startswith("_")}
-            clean.setdefault("name_jp", "")
-            clean.setdefault("vars", {})
-            clean.setdefault("commander_description", "")
-            clean.setdefault("source_hero", "")
-            clean.setdefault("unique_hero", "")
-            clean.setdefault("is_unique", bool(clean.get("unique_hero")))
-            # Teachable only if explicitly has source_hero or is_teachable set, NOT just "not event"
-            clean.setdefault("is_teachable", bool(clean.get("source_hero")))
-            clean.setdefault("is_fixed", clean.get("is_unique", False) and not clean.get("is_teachable", False))
-            clean.setdefault("icon", "")
-            clean.setdefault("tags", [])
-            clean.setdefault("brief_description", "")
-            skills.append(clean)
+            skills.append(_skill_stub_defaults(clean))
             continue
         # modify: deep merge into existing skill
-        idx = skill_index.get(key) or skill_index_jp.get(key)
+        idx = _find(key)
         if idx is not None:
             clean = {k: v for k, v in ov.items() if not k.startswith("_")}
             skills[idx] = deep_merge(skills[idx], clean)
@@ -106,36 +138,65 @@ def apply_skill_overrides(skills: list[dict], overrides: dict) -> list[dict]:
     return [s for s in skills if s is not None]
 
 
+def _hero_stub_defaults(clean: dict, key: str) -> dict:
+    """Fill in default fields for an added/replaced hero entry."""
+    clean.setdefault("name", key)
+    clean.setdefault("rarity", 5)
+    clean.setdefault("cost", 0)
+    clean.setdefault("faction", "")
+    clean.setdefault("clan", "")
+    clean.setdefault("gender", "")
+    clean.setdefault("portrait", "")
+    clean.setdefault("detail_url", "")
+    clean.setdefault("unique_skill", "")
+    clean.setdefault("teachable_skill", "")
+    clean.setdefault("assembly_skill", "")
+    clean.setdefault("stats", {})
+    clean.setdefault("traits", [])
+    return clean
+
+
 def apply_hero_overrides(heroes: list[dict], overrides: dict) -> list[dict]:
-    """Apply hero overrides: modify existing or add new heroes."""
+    """Apply hero overrides.
+
+    Supported actions:
+      - `modify` (default): deep-merge into existing hero matched by dict key
+      - `add`: append new hero. Honors legacy `_replaces: <jp_name>` and
+        auto-dedups by same `name`.
+      - `replace`: drop existing hero matched by dict key (must be JP name)
+        then append the new entry. Symmetric delete-then-add.
+      - `delete`: remove existing hero matched by dict key.
+    """
     hero_index = {h["name"]: i for i, h in enumerate(heroes)}
+    hero_index_jp = {h.get("name_jp"): i for i, h in enumerate(heroes) if h.get("name_jp")}
+
+    def _find(key: str) -> int | None:
+        idx = hero_index.get(key)
+        return hero_index_jp.get(key) if idx is None else idx
+
+    def _drop(victim_key: str):
+        idx = _find(victim_key)
+        if idx is not None and heroes[idx] is not None:
+            heroes[idx] = None
 
     for key, ov in overrides.items():
         action = ov.get("_action", "modify")
         if action == "delete":
-            idx = hero_index.get(key)
-            if idx is not None:
-                heroes[idx] = None
+            _drop(key)
+            continue
+        if action == "replace":
+            _drop(key)
+            clean = {k: v for k, v in ov.items() if not k.startswith("_")}
+            heroes.append(_hero_stub_defaults(clean, key))
             continue
         if action == "add":
+            if ov.get("_replaces"):
+                _drop(ov["_replaces"])
             clean = {k: v for k, v in ov.items() if not k.startswith("_")}
-            clean.setdefault("name", key)
-            clean.setdefault("rarity", 5)
-            clean.setdefault("cost", 0)
-            clean.setdefault("faction", "")
-            clean.setdefault("clan", "")
-            clean.setdefault("gender", "")
-            clean.setdefault("portrait", "")
-            clean.setdefault("detail_url", "")
-            clean.setdefault("unique_skill", "")
-            clean.setdefault("teachable_skill", "")
-            clean.setdefault("assembly_skill", "")
-            clean.setdefault("stats", {})
-            clean.setdefault("traits", [])
-            heroes.append(clean)
+            heroes.append(_hero_stub_defaults(clean, key))
             continue
         # modify
-        idx = hero_index.get(key)
+        idx = _find(key)
         if idx is not None:
             clean = {k: v for k, v in ov.items() if not k.startswith("_")}
             heroes[idx] = deep_merge(heroes[idx], clean)
@@ -337,6 +398,7 @@ def build_heroes(heroes_raw: list[dict], traits_data: dict, skill_name_map: dict
             "assembly_skill": h.get("assembly_skill"),
             "stats": h.get("stats", {}),
             "traits": traits,
+            "bingxue": h.get("bingxue"),  # JP-direction-keyed; re-keyed to CHT in main()
         })
     return out
 
@@ -467,19 +529,44 @@ def main():
     # Post-process: normalize text, fix types, sort
     heroes, skills = postprocess(heroes, skills)
 
-    HEROES_JSON.parent.mkdir(parents=True, exist_ok=True)
-    HEROES_JSON.write_text(
-        json.dumps(heroes, ensure_ascii=False, indent=2), "utf-8"
-    )
-    SKILLS_JSON.write_text(
-        json.dumps(skills, ensure_ascii=False, indent=2), "utf-8"
-    )
+    # Build bingxue catalog + re-key each hero's bingxue from JP direction to
+    # CHT direction (handles the 臨戦↔機略 localization swap) so the frontend
+    # can display without knowing about the swap. Done BEFORE writing heroes.json
+    # so a single write produces the final file.
+    bingxue_data = yaml.safe_load(BINGXUE_CANONICAL.read_text("utf-8")) if BINGXUE_CANONICAL.exists() else {}
+    bingxue_out = {}
+    for jp_name, entry in (bingxue_data or {}).items():
+        raw = entry.get("raw", {})
+        jp_dir = raw.get("direction", "")
+        cht_dir = BINGXUE_JP_TO_CHT_DIR.get(jp_dir, jp_dir)
+        bingxue_out[jp_name] = {
+            "name": entry.get("name") or jp_name,
+            "name_jp": jp_name,
+            "direction": cht_dir,
+            "direction_jp": jp_dir,
+            "tier": raw.get("tier", ""),
+            "description": (entry.get("text") or {}).get("description", ""),
+            "description_jp": raw.get("effect", ""),
+            "vars": entry.get("vars") or {},
+        }
 
-    # Build statuses.json from YAML
+    for h in heroes:
+        hero_bx = h.get("bingxue")
+        if not hero_bx:
+            continue
+        h["bingxue"] = {
+            BINGXUE_JP_TO_CHT_DIR.get(jp_dir, jp_dir): groups
+            for jp_dir, groups in hero_bx.items()
+        }
+
+    # Write all build artifacts
+    HEROES_JSON.parent.mkdir(parents=True, exist_ok=True)
+    HEROES_JSON.write_text(json.dumps(heroes, ensure_ascii=False, indent=2), "utf-8")
+    SKILLS_JSON.write_text(json.dumps(skills, ensure_ascii=False, indent=2), "utf-8")
+    BINGXUE_JSON.write_text(json.dumps(bingxue_out, ensure_ascii=False, indent=2), "utf-8")
+
     statuses_yaml = yaml.safe_load(STATUSES_YAML.read_text("utf-8"))
-    STATUSES_JSON.write_text(
-        json.dumps(statuses_yaml, ensure_ascii=False, indent=2), "utf-8"
-    )
+    STATUSES_JSON.write_text(json.dumps(statuses_yaml, ensure_ascii=False, indent=2), "utf-8")
 
     # Stats
     traits_with_translation = sum(
@@ -488,6 +575,7 @@ def main():
     heroes_with_cht = sum(1 for h in heroes if h.get("name") != h.get("name_jp"))
     print(f"[done] {len(heroes)} heroes → {HEROES_JSON}")
     print(f"[done] {len(skills)} skills → {SKILLS_JSON}")
+    print(f"[done] {len(bingxue_out)} bingxue options → {BINGXUE_JSON}")
     print(f"[info] {heroes_with_cht} hero names translated to CHT")
     print(f"[info] {traits_with_translation} traits translated to CHT")
     if override_count:

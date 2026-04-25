@@ -1,5 +1,20 @@
 import { reactive, ref, computed } from 'vue'
-import { Hero, Skill, Trait } from './useData'
+import { Hero, Skill, Trait, BingxueDirection } from './useData'
+
+// Active 兵學 selection for a hero. A hero activates ONE direction at a time,
+// picks 1 of 3 majors (1 pt), plus minors from 6 available using a 5-point budget.
+// Each minor costs `level` points (Lv1=1pt, Lv2=2pt). Total of .minors.level sums
+// must be ≤5. `direction: null` = 兵學 not yet configured.
+export interface BingxueMinor {
+  name: string          // JP key
+  level: 1 | 2
+}
+
+export interface BingxueActive {
+  direction: BingxueDirection | null
+  major: string | null
+  minors: BingxueMinor[]
+}
 
 // Types
 export interface RoleData {
@@ -16,6 +31,7 @@ export interface RoleData {
   }
   equipTraits: (Trait | null)[]
   breakthrough: number  // 0-5, controls which traits are active
+  bingxue: BingxueActive
 }
 
 export interface Lineup {
@@ -28,13 +44,20 @@ export interface Lineup {
 // State
 const defaultStats = { lea: 100, val: 100, int: 100, pol: 100, cha: 100, spd: 100 }
 
+const emptyBingxue = (): BingxueActive => ({
+  direction: null,
+  major: null,
+  minors: [],
+})
+
 const emptyRole = (): RoleData => ({
   hero: null,
   skill1: null,
   skill2: null,
   stats: { ...defaultStats },
   equipTraits: [null, null, null, null],
-  breakthrough: 0
+  breakthrough: 0,
+  bingxue: emptyBingxue(),
 })
 
 const lineups = reactive<Lineup[]>(Array.from({ length: 5 }, (_, i) => ({
@@ -88,8 +111,14 @@ const totalCost = computed(() => {
 const swapRoles = (roleA: 'main' | 'vice1' | 'vice2', roleB: 'main' | 'vice1' | 'vice2') => {
   if (roleA === roleB) return
   const l = currentLineup.value
-  const temp = { ...l[roleA], stats: { ...l[roleA].stats }, equipTraits: [...l[roleA].equipTraits] }
-  l[roleA] = { ...l[roleB], stats: { ...l[roleB].stats }, equipTraits: [...l[roleB].equipTraits] }
+  const clone = (r: RoleData): RoleData => ({
+    ...r,
+    stats: { ...r.stats },
+    equipTraits: [...r.equipTraits],
+    bingxue: { ...r.bingxue, minors: r.bingxue.minors.map(m => ({ ...m })) },
+  })
+  const temp = clone(l[roleA])
+  l[roleA] = clone(l[roleB])
   l[roleB] = temp
 }
 

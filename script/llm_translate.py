@@ -30,13 +30,14 @@ from llm_core import (
     CANONICAL_STATUSES, COMMON_RULES, SKILL_TAGS, SKILL_OUTPUT_FORMAT,
     DEFAULT_MODEL, MODEL_FREE, MODEL_GEMMA, MODEL_HAIKU, MODEL_SONNET,
     call_llm, parse_llm_output, autofix_frontend, has_kana,
-    validate_skill_entry, validate_trait_entry, validate_entry_quality,
+    validate_skill_entry, validate_trait_entry, validate_bingxue_entry,
+    validate_entry_quality,
     load_llm_cache, save_llm_cache, save_raw_cache,
     reset_token_totals, get_token_totals,
 )
 from paths import (
     HEROES_CRAWLED, SKILLS_CRAWLED, TRAITS_CRAWLED,
-    SKILLS_CANONICAL, TRAITS_CANONICAL,
+    SKILLS_CANONICAL, TRAITS_CANONICAL, BINGXUE_CANONICAL, BINGXUE_CRAWLED,
     HEROES_TRANSLATED,
     TRANSLATION_FAILURES_JSON,
 )
@@ -44,7 +45,7 @@ DEFAULT_BATCH_SIZE = 5
 
 # In-process accumulator for failures across all process_* runs in a single
 # invocation. Flushed to TRANSLATION_FAILURES_JSON in main().
-_FAILURE_LOG: dict[str, list[dict]] = {"skills": [], "traits": [], "heroes": []}
+_FAILURE_LOG: dict[str, list[dict]] = {"skills": [], "traits": [], "heroes": [], "bingxue": []}
 
 # Stores previous LLM output for failed items so retry can feed it back.
 # Populated by process_batch, consumed by retry logic.
@@ -135,8 +136,8 @@ def _write_failure_manifest():
     """Write a manifest with copy-pasteable suggested fixes for the admin.
 
     Always overwrites the file: an empty manifest is itself useful (signals
-    "last run was clean"). The build is NOT failed here — check_data_integrity
-    is the gatekeeper.
+    "last run was clean"). The build is NOT failed here — check_build.py
+    and check_coverage.py are the gatekeepers.
     """
     has_any = any(_FAILURE_LOG.values())
     # NOTE: do NOT suggest --force here. --force means "ignore cache and
@@ -157,7 +158,7 @@ def _write_failure_manifest():
             suggestions.append(f"uv run script/llm_translate.py --{kind}")
     if suggestions:
         suggestions.append(
-            "uv run script/build_frontend_data.py && uv run script/check_data_integrity.py"
+            "uv run script/build_frontend_data.py && uv run script/check_build.py && uv run script/check_coverage.py"
         )
 
     manifest = {
@@ -694,6 +695,201 @@ In `battle`, use $key to reference vars (NOT {{var:key}})."""
 
 
 # ---------------------------------------------------------------------------
+# Bingxue (兵学) Prompts
+# ---------------------------------------------------------------------------
+# Each bingxue option is a passive effect with a short JP description.
+# LLM job: translate description → CHT with {var:}/{status:}/{scale:} templates,
+# and emit vars for any numeric values (especially Lv1/Lv2 X%/Y% on minors).
+# Name + cht_direction are HAND-MAINTAINED in data/bingxue.yaml — DO NOT translate.
+# Battle/passive engine sections are out of scope for this phase.
+
+BINGXUE_SYSTEM_PROMPT = f"""\
+You are a game data translator for 信長之野望：真戰 (Nobunaga's Ambition: Shinsei).
+
+{COMMON_RULES}
+
+You translate 兵学 (heigaku — military studies) options. Each option has:
+- A `direction` (one of 武略, 陣立, 臨戦, 機略)
+- A `tier` (major or minor)
+- An `effect` description in Japanese
+
+Minor options usually contain a "X%/Y%" or "X/Y" slash format representing
+LEVEL 1 / LEVEL 2 values (e.g. `回避を2.5%/5%獲得` means Lv1 gives 2.5%, Lv2 gives 5%).
+Major options usually have fixed values (no slash format).
+
+### OUTPUT RULES (STRICT)
+
+For each option, output YAML with the JP name as top-level key. Include ONLY:
+
+- `text.description` — translated effect in CHT using template syntax:
+  - `{{var:name}}` for numeric values
+  - `{{status:name}}` for canonical status effects
+  - `（{{scale:statName}}）` for stat-dependency indicators (e.g. 知略依存 → （{{scale:智略}}）)
+- `vars` — required when the effect has numeric values:
+  - Slash values X%/Y% → `{{base: X/100, max: Y/100}}` (both required)
+  - Slash flat values X/Y (e.g. `20/40` speed) → `{{base: X, max: Y, type: flat}}`
+  - Single fixed percentage (major only) → plain decimal number, no base/max
+  - Single fixed flat value → plain number with `type: flat`
+  - Fixed probabilities (e.g. `40%の確率`) → plain decimal (0.4), no base/max
+
+### DO NOT OUTPUT
+
+- `text.name` — NEVER. Names are hand-maintained.
+- `kind`, `battle`, `passive` — OUT OF SCOPE for this phase.
+- `text.type`, `text.rarity`, `text.target`, `text.activation_rate`, `text.tags` — bingxue
+  options are always passive-style; no need for these fields.
+- `brief_description` — not needed.
+
+### EXAMPLES
+
+Example 1 (minor with Lv1/Lv2 percentage):
+Input:
+  key: 慧眼
+  direction: 陣立
+  tier: minor
+  effect: 自身が大将の場合、3ターン目終了まで、回避を2.5%/5%獲得
+Output:
+慧眼:
+  vars:
+    dodge_rate:
+      base: 0.025
+      max: 0.05
+  text:
+    description: 自身為大將時，3回合結束前獲得迴避{{var:dodge_rate}}
+
+Example 2 (minor with Lv1/Lv2 flat value):
+Input:
+  key: 早駆
+  direction: 臨戦
+  tier: minor
+  effect: 初ターン時の自身の速度を20/40増加
+Output:
+早駆:
+  vars:
+    speed_bonus:
+      base: 20
+      max: 40
+      type: flat
+  text:
+    description: 首回合時速度提升{{var:speed_bonus}}
+
+Example 3 (major with fixed values, scaling indicator):
+Input:
+  key: 生々流転
+  direction: 陣立
+  tier: major
+  effect: 行動開始時、40%の確率で兵力を回復（回復率50%）
+Output:
+生々流転:
+  vars:
+    activation_rate: 0.4
+    heal_rate: 0.5
+  text:
+    description: 行動開始時，{{var:activation_rate}}機率回復兵力（回復率{{var:heal_rate}}）
+
+Example 4 (minor with scaling dependency):
+Input:
+  key: 妙策
+  direction: 武略
+  tier: minor
+  effect: 2%/4%の奇策を獲得（知略依存）
+Output:
+妙策:
+  vars:
+    rate:
+      base: 0.02
+      max: 0.04
+  text:
+    description: 獲得{{var:rate}}{{status:奇謀}}（{{scale:智略}}）
+
+Example 5 (conditional, dual-mode minor):
+Input:
+  key: 強靭
+  direction: 臨戦
+  tier: minor
+  effect: 5ターン目に、兵力が50%を超えている場合、自身の与ダメージを2%/4%上昇。兵力が50%以下の場合は被ダメージを2%/4%低下
+Output:
+強靭:
+  vars:
+    buff_rate:
+      base: 0.02
+      max: 0.04
+  text:
+    description: 第5回合時，兵力高於50%時自身造成傷害提升{{var:buff_rate}}；兵力低於50%時自身受到傷害降低{{var:buff_rate}}
+
+Output ONLY valid YAML. No markdown fences. No explanation."""
+
+
+def build_bingxue_single_prompt(entry: dict) -> tuple[str, str]:
+    raw = entry.get("raw", entry)
+    user = f"""\
+Input bingxue option:
+key: {raw.get('name', entry.get('name', ''))}
+direction: {raw.get('direction', '')}
+tier: {raw.get('tier', '')}
+effect: |
+  {raw.get('effect', '')}
+
+---
+Output YAML with the JP key as top-level key.
+Include ONLY `text.description` and `vars` (if any).
+DO NOT output text.name, kind, battle, or passive."""
+    return (BINGXUE_SYSTEM_PROMPT, user)
+
+
+def build_bingxue_batch_prompt(entries: list[tuple[str, dict]]) -> tuple[str, str]:
+    blocks = []
+    for i, (name, entry) in enumerate(entries, 1):
+        raw = entry.get("raw", entry)
+        blocks.append(f"""\
+Option {i}:
+  key: {raw.get('name', name)}
+  direction: {raw.get('direction', '')}
+  tier: {raw.get('tier', '')}
+  effect: |
+    {raw.get('effect', '')}""")
+
+    joined = "\n\n".join(blocks)
+    user = f"""\
+Input ({len(entries)} bingxue options):
+
+{joined}
+
+---
+Output YAML: each JP key as top-level key.
+Each option must include `text.description` and `vars` (if numeric values present).
+DO NOT output text.name — names are hand-maintained separately.
+Process ALL {len(entries)} options above."""
+    return (BINGXUE_SYSTEM_PROMPT, user)
+
+
+def build_bingxue_correction_prompt(
+    entry: dict, prev_yaml: str, errors: str,
+) -> tuple[str, str]:
+    raw = entry.get("raw", entry)
+    user = f"""\
+Your previous translation of this bingxue option had errors. Fix them.
+
+ERRORS:
+{errors}
+
+YOUR PREVIOUS OUTPUT (contains mistakes — fix them):
+{prev_yaml}
+
+ORIGINAL INPUT:
+key: {raw.get('name', entry.get('name', ''))}
+direction: {raw.get('direction', '')}
+tier: {raw.get('tier', '')}
+effect: |
+  {raw.get('effect', '')}
+
+---
+Output corrected YAML with the JP key as top-level key.
+Include ONLY `text.description` and `vars` (if any). No text.name, no battle, no passive."""
+    return (BINGXUE_SYSTEM_PROMPT, user)
+
+
+# ---------------------------------------------------------------------------
 # Processing
 # ---------------------------------------------------------------------------
 
@@ -1199,6 +1395,120 @@ def process_traits(
     return all_results
 
 
+def process_bingxue(
+    *,
+    offset: int = 0,
+    limit: int | None = None,
+    name_filter: str | None = None,
+    force: bool = False,
+    model: str = DEFAULT_MODEL,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    parallel: int = 1,
+    provider: str | None = None,
+    preserve_vars: bool = False,
+):
+    """Translate 兵学 option effect descriptions JP → CHT.
+
+    Only writes `text.description` and `vars` into data/bingxue.yaml.
+    Hand-maintained fields (`name`, `cht_direction`, `raw`) are preserved untouched.
+    """
+    canonical_path = Path(BINGXUE_CANONICAL)
+    if canonical_path.exists():
+        canonical = yaml.safe_load(canonical_path.read_text("utf-8")) or {}
+        targets = [(name, entry) for name, entry in canonical.items()]
+    else:
+        crawled = yaml.safe_load(Path(BINGXUE_CRAWLED).read_text("utf-8")) or {}
+        if not crawled:
+            print("[error] No bingxue options found")
+            sys.exit(1)
+        targets = list(crawled.items())
+
+    if name_filter:
+        targets = [(n, t) for n, t in targets if name_filter in n]
+        tqdm.write(f"[filter] Matched {len(targets)} bingxue options for '{name_filter}'")
+    if offset:
+        targets = targets[offset:]
+    if limit:
+        targets = targets[:limit]
+
+    tqdm.write(f"[llm] Processing {len(targets)} bingxue options with {model} (batch={batch_size}, parallel={parallel})")
+
+    batches = [targets[i:i + batch_size] for i in range(0, len(targets), batch_size)]
+    all_results, all_failed = _run_batches_parallel(
+        batches,
+        desc="bingxue",
+        parallel=parallel,
+        process_fn=lambda b: process_batch(
+            b, model, force,
+            single_prompt_fn=build_bingxue_single_prompt,
+            batch_prompt_fn=build_bingxue_batch_prompt,
+            cache_prefix="bingxue",
+            provider=provider,
+            validate_fn=validate_bingxue_entry,
+        ),
+    )
+
+    # Auto-retry failures with correction feedback (single-item)
+    if all_failed:
+        retry_names = {name for name, _ in all_failed}
+        retry_targets = [(n, t) for n, t in targets if n in retry_names]
+        corrections = {n: _correction_store.pop(n) for n in retry_names if n in _correction_store}
+        tqdm.write(f"\n[retry] {len(retry_targets)} failed bingxue options ({len(corrections)} with correction feedback)...")
+        retry_batches = [[item] for item in retry_targets]
+        retry_results, all_failed = _run_batches_parallel(
+            retry_batches,
+            desc="retry",
+            parallel=parallel,
+            process_fn=lambda b: process_batch(
+                b, model, force=True,
+                single_prompt_fn=build_bingxue_single_prompt,
+                batch_prompt_fn=build_bingxue_batch_prompt,
+                cache_prefix="bingxue",
+                corrections=corrections,
+                correction_prompt_fn=build_bingxue_correction_prompt,
+                provider=provider,
+                validate_fn=validate_bingxue_entry,
+            ),
+        )
+        all_results.update(retry_results)
+
+    # Merge results into canonical file — preserve name / cht_direction / raw
+    canonical = yaml.safe_load(canonical_path.read_text("utf-8")) or {} if canonical_path.exists() else {}
+
+    updated = 0
+    for name, data in all_results.items():
+        entry = canonical.setdefault(name, {})
+        # Only merge text.description and vars from LLM output. NEVER overwrite
+        # top-level name / cht_direction / raw — those are hand-maintained.
+        llm_text = data.get("text") or {}
+        if llm_text.get("description"):
+            entry.setdefault("text", {})["description"] = llm_text["description"]
+        if data.get("vars") is not None:
+            if preserve_vars and entry.get("vars"):
+                new_keys = set(data["vars"].keys())
+                old_keys = set(entry["vars"].keys())
+                if new_keys != old_keys:
+                    tqdm.write(f"  [preserve-vars] {name}: vars keys differ "
+                               f"(added: {new_keys - old_keys}, removed: {old_keys - new_keys}). "
+                               f"Use --force-vars to accept.")
+                    all_failed.append((name, "vars key mismatch under --preserve-vars"))
+                    continue
+            else:
+                entry["vars"] = data["vars"]
+        updated += 1
+
+    _save_yaml(canonical_path, canonical)
+
+    tqdm.write(f"\n[done] {len(canonical)} bingxue options ({updated} updated) → {canonical_path}")
+    if all_failed:
+        tqdm.write(f"[warn] {len(all_failed)} failed:")
+        for name, err in all_failed:
+            tqdm.write(f"  {name}: {err}")
+    _record_failures("bingxue", all_failed)
+
+    return all_results
+
+
 def process_hero_batch(
     heroes: list[tuple[str, str, str]],
     model: str,
@@ -1344,6 +1654,7 @@ def main():
     p.add_argument("--skills", action="store_true", help="Process skills only")
     p.add_argument("--traits", action="store_true", help="Process traits only")
     p.add_argument("--heroes", action="store_true", help="Process heroes only")
+    p.add_argument("--bingxue", action="store_true", help="Process 兵学 options only")
     p.add_argument("--offset", type=int, default=0, help="Skip first N items")
     p.add_argument("--limit", type=int, help="Max items to process")
     p.add_argument("--name", help="Filter by name (substring)")
@@ -1362,10 +1673,11 @@ def main():
     reset_token_totals()
 
     # Default: all if none specified
-    none_specified = not args.skills and not args.traits and not args.heroes
+    none_specified = not args.skills and not args.traits and not args.heroes and not args.bingxue
     do_skills = args.skills or none_specified
     do_traits = args.traits or none_specified
     do_heroes = args.heroes or none_specified
+    do_bingxue = args.bingxue or none_specified
 
     pv = args.preserve_vars and not args.force_vars
 
@@ -1402,6 +1714,18 @@ def main():
             model=args.model,
             batch_size=args.batch_size,
             parallel=args.parallel,
+            provider=args.provider,
+        )
+    if do_bingxue:
+        process_bingxue(
+            offset=args.offset,
+            limit=args.limit,
+            name_filter=args.name,
+            force=args.force,
+            model=args.model,
+            batch_size=args.batch_size,
+            parallel=args.parallel,
+            preserve_vars=pv,
             provider=args.provider,
         )
 

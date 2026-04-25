@@ -141,7 +141,7 @@
     </div>
 
     <!-- Stats & Traits Area (Only when hero exists) -->
-    <div v-if="hero" class="relative md:-mt-2 mb-1 md:mb-2 z-10 flex items-center gap-1 md:gap-3 px-1 md:px-2 justify-between md:justify-start md:order-3">
+    <div v-if="hero" class="relative mb-1 md:mb-2 md:mt-1 md:pt-2 md:border-t md:border-gray-200 z-10 flex items-center gap-1 md:gap-3 px-1 md:px-2 justify-between md:justify-start md:order-3">
       <!-- Radar Chart (Desktop Only) -->
       <el-popover
         placement="right"
@@ -153,7 +153,7 @@
             class="hidden md:block bg-white rounded-full p-0.5 md:p-1 shadow-md border border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors group flex-shrink-0"
             @click.stop="openStatsEditor"
           >
-            <RadarChart :stats="stats" :base-stats="heroBaseStats" :size="90" />
+            <RadarChart :stats="stats" :base-stats="heroBaseStats" :size="72" />
           </div>
         </template>
         
@@ -226,11 +226,23 @@
        </div>
     </div>
 
+    <!-- 兵學 Section (desktop only; mobile not yet supported) -->
+    <!-- md:order-2 puts this above radar/traits (order-3) and equip-traits (order-4).
+         Shares order-2 with Skills Area below; DOM order keeps bingxue on top. -->
+    <div v-if="hero" class="hidden md:block px-1 md:px-2 md:order-2">
+      <BingxueSection
+        :hero="hero"
+        :model-value="bingxue || { direction: null, major: null, minors: [] }"
+        @update:model-value="(v) => $emit('update:bingxue', v)"
+      />
+    </div>
+
     <!-- Skills Area -->
     <div class="flex flex-col gap-0.5 md:gap-2 md:order-2 md:flex-1 md:min-h-0">
       <!-- Unique Skill (Auto-filled) -->
       <el-popover
-        placement="top"
+        placement="bottom"
+        :offset="12"
         :title="hero?.unique_skill || '---'"
         :width="240"
         trigger="hover"
@@ -285,7 +297,8 @@
 
       <!-- Learnable Slot 1 -->
       <el-popover
-        placement="top"
+        placement="bottom"
+        :offset="12"
         :title="skill1?.name"
         :width="240"
         trigger="hover"
@@ -365,7 +378,8 @@
 
       <!-- Learnable Slot 2 -->
       <el-popover
-        placement="top"
+        placement="bottom"
+        :offset="12"
         :title="skill2?.name"
         :width="240"
         trigger="hover"
@@ -514,6 +528,8 @@ import HeroCard from './HeroCard.vue'
 import RadarChart from './RadarChart.vue'
 import SkillDescription from './SkillDescription.vue'
 import BriefDescription from './BriefDescription.vue'
+import BingxueSection from './BingxueSection.vue'
+import type { BingxueActive } from '../composables/useLineups'
 import { Hero, Skill, Trait, useData } from '../composables/useData'
 import { useTemplateParser } from '../composables/useTemplateParser'
 
@@ -529,6 +545,7 @@ const props = defineProps({
   stats: Object as PropType<any>,
   equipTraits: Array as PropType<Trait[]>,
   breakthrough: { type: Number, default: 0 },
+  bingxue: { type: Object as PropType<BingxueActive>, default: () => ({ direction: null, major: null, minors: [] }) },
   focusedSkillSlot: Number as PropType<number | null>,
   isSwapSource: { type: Boolean, default: false },
   swapModeActive: { type: Boolean, default: false },
@@ -567,6 +584,7 @@ const emit = defineEmits([
   'update:stats',
   'update:equipTraits',
   'update:breakthrough',
+  'update:bingxue',
   'open-hero-select',
   'open-skill-select',
   'skill-drop',
@@ -586,6 +604,7 @@ const removeHero = () => {
   emit('update:skill2', null)
   emit('update:equipTraits', [])
   emit('update:breakthrough', 0)
+  emit('update:bingxue', { direction: null, major: null, minors: [] })
   // Reset stats to default not handled here explicitly but usually desired
 }
 
