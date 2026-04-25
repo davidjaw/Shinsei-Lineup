@@ -67,7 +67,7 @@
             <el-icon><Delete /></el-icon>
           </el-button>
 
-          <!-- Auth: login button when logged out, email-prefix dropdown when logged in -->
+          <!-- Auth: login button when logged out, branded user pill when logged in -->
           <template v-if="!isLoggedIn">
             <el-button text @click="authDialogVisible = true" class="hidden sm:inline-flex !ml-1">
               <el-icon class="mr-1"><User /></el-icon> 登入
@@ -76,14 +76,19 @@
               <el-icon><User /></el-icon>
             </el-button>
           </template>
-          <el-dropdown v-else trigger="click" @command="onUserMenu">
-            <el-button text class="!ml-1">
-              <el-icon class="mr-1"><User /></el-icon>
-              <span class="hidden sm:inline">{{ emailPrefix }}</span>
-              <el-icon class="ml-1"><ArrowDown /></el-icon>
-            </el-button>
+          <el-dropdown v-else trigger="click" @command="onUserMenu" placement="bottom-end">
+            <button class="user-pill">
+              <span class="user-pill-dot" />
+              <el-icon><User /></el-icon>
+              <span class="hidden sm:inline truncate max-w-[120px]">{{ emailPrefix }}</span>
+              <el-icon class="opacity-70"><ArrowDown /></el-icon>
+            </button>
             <template #dropdown>
               <el-dropdown-menu>
+                <div class="px-3 py-2 border-b border-gray-100 min-w-[200px]">
+                  <div class="text-[10px] text-gray-400 uppercase tracking-wide">已登入帳號</div>
+                  <div class="text-sm font-medium text-gray-800 truncate mt-0.5">{{ user?.email }}</div>
+                </div>
                 <el-dropdown-item command="signout">
                   <el-icon class="mr-1"><Close /></el-icon> 登出
                 </el-dropdown-item>
@@ -1213,5 +1218,38 @@ html.el-popup-parent--hidden {
 }
 .oauth-btn-github:active {
   background: #1c2128;
+}
+
+/* Logged-in pill — visually distinct from the plain "登入" text button */
+.user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: #eef2ff;        /* indigo-50 */
+  border: 1px solid #c7d2fe;  /* indigo-200 */
+  color: #4338ca;             /* indigo-700 */
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  line-height: 1;
+}
+.user-pill:hover {
+  background: #e0e7ff;        /* indigo-100 */
+  border-color: #a5b4fc;      /* indigo-300 */
+}
+.user-pill:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+.user-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #22c55e;        /* green-500 — "online/active" indicator */
+  box-shadow: 0 0 0 2px #dcfce7;
 }
 </style>
