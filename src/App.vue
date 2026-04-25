@@ -85,10 +85,9 @@
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <div class="px-3 py-2 border-b border-gray-100 min-w-[220px]">
-                  <div class="text-[10px] text-gray-400 uppercase tracking-wide">已登入帳號</div>
+                <div class="px-3 py-2 border-b border-gray-100 min-w-[200px]">
+                  <div class="text-[10px] text-gray-400 uppercase tracking-wide">已登入</div>
                   <div class="text-sm font-medium text-gray-800 truncate mt-0.5">{{ displayName }}</div>
-                  <div class="text-xs text-gray-500 truncate">{{ user?.email }}</div>
                 </div>
                 <el-dropdown-item command="rename">
                   <el-icon class="mr-1"><Edit /></el-icon> 編輯名稱
