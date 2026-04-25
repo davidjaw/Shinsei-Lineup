@@ -46,6 +46,7 @@ export interface ShareableLineup {
 }
 
 export interface ShareableData {
+  v?: number  // format version. Absent = v1 (CHT names). 2 = JP names (rename-resilient).
   inv_h?: string[]
   inv_s?: string[]
   inventory?: string[] // legacy support

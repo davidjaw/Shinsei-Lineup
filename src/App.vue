@@ -503,6 +503,7 @@ import { useLineups, type RoleData, type BingxueActive } from './composables/use
 import { useTroopLevels } from './composables/useTroopLevels'
 import { TROOP_TYPES, TROOP_LABELS } from './constants/traits'
 import { useInventory } from './composables/useInventory'
+import { createShare, loadShare, isShareEnabled } from './lib/share'
 
 const { 
   lineups, 
@@ -794,34 +795,67 @@ const serializeBx = (bx?: BingxueActive): ShareableBingxue | undefined =>
     ? { d: bx.direction, m: bx.major, n: bx.minors.map(mi => ({ n: mi.name, l: mi.level })) }
     : undefined
 
-const shareLineup = (type: 'all' | 'current' | 'inventory') => {
-  const data: ShareableData = {}
+// CHT → JP name mapping happens only at share/restore boundary.
+// Internal state stays CHT (rest of app filters by CHT name).
+const heroToJp = (cht: string | undefined): string | undefined =>
+  cht ? (heroes.value.find(h => h.name === cht)?.name_jp ?? cht) : undefined
+const skillToJp = (cht: string | undefined): string | undefined =>
+  cht ? (skills.value.find(s => s.name === cht)?.name_jp ?? cht) : undefined
+
+// Computed keys widen to `string` in TS, so the explicit Partial cast is the
+// honest contract — the runtime field names (`m_s1`, `v1_s1`, etc.) match
+// ShareableLineup by convention. Typos in the template literals would silently
+// produce ignored fields; the cast at least keeps callers honest about shape.
+const serializeRole = (role: RoleData, prefix: 'm' | 'v1' | 'v2'): Partial<ShareableLineup> => ({
+  [prefix]: heroToJp(role.hero?.name),
+  [`${prefix}_s1`]: skillToJp(role.skill1?.name),
+  [`${prefix}_s2`]: skillToJp(role.skill2?.name),
+  [`${prefix}_st`]: role.stats,
+  [`${prefix}_eq`]: role.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null),
+  [`${prefix}_bt`]: role.breakthrough,
+  [`${prefix}_bx`]: serializeBx(role.bingxue),
+}) as Partial<ShareableLineup>
+
+const serializeLineup = (l: typeof lineups[number]): ShareableLineup => ({
+  name: l.name,
+  ...serializeRole(l.main, 'm'),
+  ...serializeRole(l.vice1, 'v1'),
+  ...serializeRole(l.vice2, 'v2'),
+})
+
+const shareLineup = async (type: 'all' | 'current' | 'inventory') => {
+  const data: ShareableData = { v: 2 }
   if (type === 'inventory' || type === 'all') {
-    data.inv_h = ownedHeroes.value
-    data.inv_s = ownedSkills.value
+    data.inv_h = ownedHeroes.value.map(n => heroToJp(n) ?? n)
+    data.inv_s = ownedSkills.value.map(n => skillToJp(n) ?? n)
   }
   if (type === 'current') {
-    const l = currentLineup.value
-    data.lineups = [{
-      name: l.name,
-      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), m_bt: l.main.breakthrough, m_bx: serializeBx(l.main.bingxue),
-      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v1_bt: l.vice1.breakthrough, v1_bx: serializeBx(l.vice1.bingxue),
-      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v2_bt: l.vice2.breakthrough, v2_bx: serializeBx(l.vice2.bingxue),
-    }]
+    data.lineups = [serializeLineup(currentLineup.value)]
   }
   if (type === 'all') {
-    data.lineups = lineups.map(l => ({
-      name: l.name,
-      m: l.main.hero?.name, m_s1: l.main.skill1?.name, m_s2: l.main.skill2?.name, m_st: l.main.stats, m_eq: l.main.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), m_bt: l.main.breakthrough, m_bx: serializeBx(l.main.bingxue),
-      v1: l.vice1.hero?.name, v1_s1: l.vice1.skill1?.name, v1_s2: l.vice1.skill2?.name, v1_st: l.vice1.stats, v1_eq: l.vice1.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v1_bt: l.vice1.breakthrough, v1_bx: serializeBx(l.vice1.bingxue),
-      v2: l.vice2.hero?.name, v2_s1: l.vice2.skill1?.name, v2_s2: l.vice2.skill2?.name, v2_st: l.vice2.stats, v2_eq: l.vice2.equipTraits?.map(t => t ? {n: t.name, r: t.rank, d: t.description} : null), v2_bt: l.vice2.breakthrough, v2_bx: serializeBx(l.vice2.bingxue),
-    }))
+    data.lineups = lineups.map(serializeLineup)
   }
-  
-  const json = JSON.stringify(data)
-  const b64 = btoa(unescape(encodeURIComponent(json)))
-  const url = `${window.location.origin}${window.location.pathname}#${b64}`
-  
+
+  const origin = `${window.location.origin}${window.location.pathname}`
+  const buildLegacyUrl = () => {
+    const json = JSON.stringify(data)
+    const b64 = btoa(unescape(encodeURIComponent(json)))
+    return `${origin}#${b64}`
+  }
+
+  let url: string
+  if (isShareEnabled()) {
+    try {
+      const slug = await createShare(data)
+      url = `${origin}#s/${slug}`
+    } catch (e) {
+      console.warn('[share] short URL failed, using long URL fallback:', e)
+      url = buildLegacyUrl()
+    }
+  } else {
+    url = buildLegacyUrl()
+  }
+
   navigator.clipboard.writeText(url).then(() => {
     ElMessage.success('分享連結已複製到剪貼簿！')
     shareDialogVisible.value = false
@@ -832,21 +866,33 @@ const shareLineup = (type: 'all' | 'current' | 'inventory') => {
 
 const { heroes, skills } = useData()
 
-const initFromHash = () => {
+const initFromHash = async () => {
   if (window.location.hash) {
     try {
-      const b64 = window.location.hash.slice(1)
-      const json = decodeURIComponent(escape(atob(b64)))
-      const data = JSON.parse(json) as ShareableData
-            if (data.inventory) ownedHeroes.value = data.inventory
-            if (data.inv_h) ownedHeroes.value = data.inv_h
-            if (data.inv_s) ownedSkills.value = data.inv_s
-            
+      const hash = window.location.hash.slice(1)
+      let data: ShareableData
+      if (hash.startsWith('s/')) {
+        data = (await loadShare(hash.slice(2))) as ShareableData
+      } else {
+        const json = decodeURIComponent(escape(atob(hash)))
+        data = JSON.parse(json) as ShareableData
+      }
+            // Lookups try JP first (v2 format), CHT second (v1 / legacy base64).
+            // Inventory state is stored as CHT internally regardless of share format.
+            const findHeroByKey = (key: string) => heroes.value.find(h => h.name_jp === key || h.name === key)
+            const findSkillByKey = (key: string) => skills.value.find(s => s.name_jp === key || s.name === key)
+            const toCht = <T extends { name: string }>(arr: string[], finder: (k: string) => T | undefined): string[] =>
+              arr.map(k => finder(k)?.name ?? k)
+
+            if (data.inventory) ownedHeroes.value = toCht(data.inventory, findHeroByKey)
+            if (data.inv_h) ownedHeroes.value = toCht(data.inv_h, findHeroByKey)
+            if (data.inv_s) ownedSkills.value = toCht(data.inv_s, findSkillByKey)
+
             // Auto-activate "Owned Only" filter if inventory data exists
             if ((data.inv_h && data.inv_h.length > 0) || (data.inv_s && data.inv_s.length > 0) || (data.inventory && data.inventory.length > 0)) {
               showOwnedOnly.value = true
             }
-            
+
             if (data.lineups && Array.isArray(data.lineups)) {
         data.lineups.forEach((l, i) => {
           if (i >= 5) return
@@ -855,11 +901,11 @@ const initFromHash = () => {
           const restore = (prefix: string, role: RoleData) => {
             const safeL = l as any
             const hName = safeL[prefix]
-            if (hName) role.hero = heroes.value.find(h => h.name === hName) || null
+            if (hName) role.hero = findHeroByKey(hName) || null
             const s1Name = safeL[prefix + '_s1']
-            if (s1Name) role.skill1 = skills.value.find(s => s.name === s1Name || s.name_jp === s1Name) || null
+            if (s1Name) role.skill1 = findSkillByKey(s1Name) || null
             const s2Name = safeL[prefix + '_s2']
-            if (s2Name) role.skill2 = skills.value.find(s => s.name === s2Name || s.name_jp === s2Name) || null
+            if (s2Name) role.skill2 = findSkillByKey(s2Name) || null
             if (safeL[prefix + '_st']) role.stats = safeL[prefix + '_st']
             if (safeL[prefix + '_eq']) {
               role.equipTraits = safeL[prefix + '_eq'].map((t: any) => t ? { name: t.n, rank: t.r, description: t.d, active: true } : null)
