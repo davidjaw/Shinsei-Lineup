@@ -110,7 +110,7 @@
       </div>
       <div
         class="grid gap-1 md:gap-2"
-        :class="mode === 'manage' ? 'grid-cols-5 sm:grid-cols-8 md:grid-cols-10' : 'grid-cols-4 sm:grid-cols-4'"
+        :class="mode === 'manage' ? 'grid-cols-5 sm:grid-cols-8 md:grid-cols-10' : 'grid-cols-4 md:grid-cols-5'"
       >
         <div 
           v-for="hero in filteredHeroes" 
