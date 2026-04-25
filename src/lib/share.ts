@@ -86,6 +86,7 @@ export const loadShare = async (slug: string): Promise<unknown> => {
 export interface MyShare {
   slug: string
   display_name: string | null
+  pinned: boolean
   created_at: string
   updated_at: string
 }
@@ -98,13 +99,18 @@ export const listMyShares = async (): Promise<MyShare[]> => {
   if (!token) throw new Error('session expired')
 
   const url = `${SUPABASE_URL}/rest/v1/shares?user_id=eq.${session.user.id}` +
-    `&select=slug,display_name,created_at,updated_at&order=updated_at.desc`
+    `&select=slug,display_name,pinned,created_at,updated_at&order=updated_at.desc`
   const res = await fetchWithTimeout(url, { headers: restHeaders(token) })
   if (!res.ok) throw new Error(`list shares failed: ${res.status}`)
   return (await res.json()) as MyShare[]
 }
 
-export const renameMyShare = async (slug: string, displayName: string | null): Promise<void> => {
+// Generic owner-only PATCH. RLS guarantees only the owner reaches Postgres.
+export interface MySharePatch {
+  display_name?: string | null
+  pinned?: boolean
+}
+export const updateMyShare = async (slug: string, patch: MySharePatch): Promise<void> => {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')
   if (!SLUG_PATTERN.test(slug)) throw new Error('invalid share slug')
   const token = await getValidAccessToken()
@@ -118,13 +124,16 @@ export const renameMyShare = async (slug: string, displayName: string | null): P
       'Content-Type': 'application/json',
       Prefer: 'return=minimal',
     },
-    body: JSON.stringify({
-      display_name: displayName,
-      updated_at: new Date().toISOString(),
-    }),
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
   })
-  if (!res.ok) throw new Error(`rename failed: ${res.status} ${await res.text()}`)
+  if (!res.ok) throw new Error(`update failed: ${res.status} ${await res.text()}`)
 }
+
+export const renameMyShare = (slug: string, displayName: string | null) =>
+  updateMyShare(slug, { display_name: displayName })
+
+export const pinMyShare = (slug: string, pinned: boolean) =>
+  updateMyShare(slug, { pinned })
 
 export const deleteMyShare = async (slug: string): Promise<void> => {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')

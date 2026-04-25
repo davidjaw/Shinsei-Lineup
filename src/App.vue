@@ -432,8 +432,21 @@
     </el-dialog>
 
     <!-- Share Dialog -->
-    <el-dialog v-model="shareDialogVisible" title="分享配置" width="320px" align-center>
+    <el-dialog v-model="shareDialogVisible" title="分享配置" width="340px" align-center>
       <div class="flex flex-col gap-3">
+        <!-- Logged-in users can name shares for the 我的分享 list -->
+        <div v-if="isLoggedIn" class="flex flex-col gap-1">
+          <el-input
+            v-model="shareNameInput"
+            maxlength="50"
+            placeholder="名稱（可選）"
+            clearable
+          />
+          <p class="text-[11px] text-gray-400 leading-snug">
+            此名稱僅顯示於「我的分享」列表，不會出現在分享連結或對方畫面
+          </p>
+        </div>
+
         <el-button type="primary" plain size="large" @click="shareLineup('all')" class="w-full !m-0">
           <div class="flex flex-col items-center">
             <span class="font-bold">分享全部</span>
@@ -486,8 +499,20 @@
           還沒有任何已建立的分享。<br>
           登入狀態下用右上角「分享」建立的連結會自動顯示在這裡。
         </p>
-        <el-table v-else-if="myShares.length > 0" :data="myShares" size="default" style="width: 100%">
-          <el-table-column label="名稱" min-width="200">
+        <el-table v-else-if="myShares.length > 0" :data="sortedMyShares" size="default" style="width: 100%">
+          <el-table-column label="" width="44" align="center">
+            <template #default="{ row }">
+              <button
+                @click="togglePinShare(row)"
+                :title="row.pinned ? '取消釘選' : '釘選到頂端'"
+                class="pin-btn"
+                :class="{ 'pin-btn-on': row.pinned }"
+              >
+                <el-icon><component :is="row.pinned ? StarFilled : Star" /></el-icon>
+              </button>
+            </template>
+          </el-table-column>
+          <el-table-column label="名稱" min-width="180">
             <template #default="{ row }">
               <div v-if="editingSlug === row.slug" class="flex items-center gap-1">
                 <el-input
@@ -655,7 +680,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Flag, Share, Delete, Edit, Close, Check, Menu, User, ArrowDown } from '@element-plus/icons-vue'
+import { Flag, Share, Delete, Edit, Close, Check, Menu, User, ArrowDown, Star, StarFilled } from '@element-plus/icons-vue'
 import LineupSlot from './components/LineupSlot.vue'
 import SkillDescription from './components/SkillDescription.vue'
 import HeroLibrary from './components/HeroLibrary.vue'
@@ -670,7 +695,7 @@ import { TROOP_TYPES, TROOP_LABELS } from './constants/traits'
 import { useInventory } from './composables/useInventory'
 import {
   createShare, loadShare, isShareEnabled,
-  listMyShares, renameMyShare, deleteMyShare, type MyShare,
+  listMyShares, renameMyShare, pinMyShare, deleteMyShare, type MyShare,
 } from './lib/share'
 import { handleAuthCallback, type OAuthProvider } from './lib/auth'
 import { useAuth } from './composables/useAuth'
@@ -957,6 +982,7 @@ const clearLineup = (type: 'all' | 'current' | 'inventory') => {
 
 const shareDialogVisible = ref(false)
 const openShareDialog = () => {
+  shareNameInput.value = ''
   shareDialogVisible.value = true
 }
 
@@ -993,6 +1019,10 @@ const serializeLineup = (l: typeof lineups[number]): ShareableLineup => ({
   ...serializeRole(l.vice2, 'v2'),
 })
 
+// Optional name for the next share — entered in the share dialog when logged
+// in. Reset on every dialog open so it doesn't carry over between actions.
+const shareNameInput = ref('')
+
 const shareLineup = async (type: 'all' | 'current' | 'inventory') => {
   const data: ShareableData = { v: 2 }
   if (type === 'inventory' || type === 'all') {
@@ -1013,10 +1043,13 @@ const shareLineup = async (type: 'all' | 'current' | 'inventory') => {
     return `${origin}#${b64}`
   }
 
+  // Only logged-in shares can be named — anon shares aren't listed anywhere.
+  const displayName = isLoggedIn.value ? shareNameInput.value.trim() : ''
+
   let url: string
   if (isShareEnabled()) {
     try {
-      const slug = await createShare(data)
+      const slug = await createShare(data, displayName ? { displayName } : undefined)
       url = `${origin}#s/${slug}`
     } catch (e) {
       console.warn('[share] short URL failed, using long URL fallback:', e)
@@ -1029,6 +1062,7 @@ const shareLineup = async (type: 'all' | 'current' | 'inventory') => {
   navigator.clipboard.writeText(url).then(() => {
     ElMessage.success('分享連結已複製到剪貼簿！')
     shareDialogVisible.value = false
+    shareNameInput.value = ''
   }).catch(() => {
     ElMessage.error('複製失敗，請手動複製網址')
   })
@@ -1198,6 +1232,32 @@ const removeMyShare = async (s: MyShare) => {
     ElMessage.error(`刪除失敗：${(e as Error).message}`)
   }
 }
+
+const togglePinShare = async (s: MyShare) => {
+  const next = !s.pinned
+  try {
+    await pinMyShare(s.slug, next)
+    s.pinned = next  // mutate in place; sortedMyShares is a computed off myShares
+    s.updated_at = new Date().toISOString()
+  } catch (e) {
+    ElMessage.error(`${next ? '釘選' : '取消釘選'}失敗：${(e as Error).message}`)
+  }
+}
+
+// Sort: pinned first, then named (alphabetical), then unnamed (newest first).
+const sortedMyShares = computed(() => {
+  return [...myShares.value].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    const aName = a.display_name?.trim() ?? ''
+    const bName = b.display_name?.trim() ?? ''
+    if (!!aName !== !!bName) return aName ? -1 : 1
+    if (aName && bName) {
+      const cmp = aName.localeCompare(bName, 'zh-Hant')
+      if (cmp !== 0) return cmp
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+})
 
 const copyShareUrl = (slug: string) => {
   const url = `${window.location.origin}${window.location.pathname}#s/${slug}`
@@ -1469,5 +1529,31 @@ html.el-popup-parent--hidden {
   border-radius: 999px;
   background: #22c55e;        /* green-500 — "online/active" indicator */
   box-shadow: 0 0 0 2px #dcfce7;
+}
+
+/* Pin star button in 我的分享 table — subtle when off, gold when on */
+.pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #cbd5e1;             /* slate-300 */
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.pin-btn:hover {
+  background: #f1f5f9;        /* slate-100 */
+  color: #94a3b8;             /* slate-400 */
+}
+.pin-btn-on,
+.pin-btn-on:hover {
+  color: #f59e0b;             /* amber-500 */
+}
+.pin-btn-on:hover {
+  background: #fef3c7;        /* amber-100 */
 }
 </style>
