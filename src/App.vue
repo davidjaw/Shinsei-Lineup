@@ -84,11 +84,10 @@
               <el-icon class="opacity-70"><ArrowDown /></el-icon>
             </button>
             <template #dropdown>
-              <el-dropdown-menu>
-                <div class="px-3 py-2 border-b border-gray-100 min-w-[200px]">
-                  <div class="text-[10px] text-gray-400 uppercase tracking-wide">已登入</div>
-                  <div class="text-sm font-medium text-gray-800 truncate mt-0.5">{{ displayName }}</div>
-                </div>
+              <el-dropdown-menu class="min-w-[180px]">
+                <el-dropdown-item command="my-shares">
+                  <el-icon class="mr-1"><Share /></el-icon> 我的分享
+                </el-dropdown-item>
                 <el-dropdown-item command="rename">
                   <el-icon class="mr-1"><Edit /></el-icon> 編輯名稱
                 </el-dropdown-item>
@@ -480,6 +479,78 @@
       </div>
     </el-dialog>
 
+    <!-- My Shares Dialog -->
+    <el-dialog v-model="mySharesDialogVisible" title="我的分享" width="640px" align-center>
+      <div v-loading="mySharesLoading" class="min-h-[120px]">
+        <p v-if="!mySharesLoading && myShares.length === 0" class="text-center text-gray-400 py-8 text-sm">
+          還沒有任何已建立的分享。<br>
+          登入狀態下用右上角「分享」建立的連結會自動顯示在這裡。
+        </p>
+        <el-table v-else-if="myShares.length > 0" :data="myShares" size="default" style="width: 100%">
+          <el-table-column label="名稱" min-width="200">
+            <template #default="{ row }">
+              <div v-if="editingSlug === row.slug" class="flex items-center gap-1">
+                <el-input
+                  v-model="editingDraft"
+                  size="small"
+                  maxlength="50"
+                  placeholder="輸入名稱"
+                  @keyup.enter="saveShareName(row)"
+                  @keyup.esc="cancelEditShareName"
+                  autofocus
+                />
+                <el-button size="small" type="primary" :icon="Check" @click="saveShareName(row)" />
+                <el-button size="small" :icon="Close" @click="cancelEditShareName" />
+              </div>
+              <div v-else class="flex items-center gap-2 group">
+                <span :class="row.display_name ? 'text-gray-800' : 'text-gray-400 italic'">
+                  {{ row.display_name || '未命名' }}
+                </span>
+                <el-button
+                  text
+                  size="small"
+                  :icon="Edit"
+                  class="opacity-0 group-hover:opacity-100"
+                  @click="startEditShareName(row)"
+                />
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="連結" width="160">
+            <template #default="{ row }">
+              <button
+                @click="copyShareUrl(row.slug)"
+                class="text-xs text-indigo-600 hover:text-indigo-800 hover:underline font-mono"
+                title="點擊複製分享連結"
+              >
+                #s/{{ row.slug }}
+              </button>
+            </template>
+          </el-table-column>
+          <el-table-column label="更新" width="100">
+            <template #default="{ row }">
+              <span class="text-xs text-gray-500">{{ relativeTime(row.updated_at) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="" width="60" align="center">
+            <template #default="{ row }">
+              <el-popconfirm
+                title="確定刪除這個分享？刪除後連結會立刻失效。"
+                confirm-button-text="刪除"
+                cancel-button-text="取消"
+                confirm-button-type="danger"
+                @confirm="removeMyShare(row)"
+              >
+                <template #reference>
+                  <el-button text size="small" type="danger" :icon="Delete" />
+                </template>
+              </el-popconfirm>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
+
     <!-- Rename Dialog (first-time prompt + dropdown action) -->
     <el-dialog v-model="renameDialogVisible" title="設定顯示名稱" width="340px" align-center>
       <div class="flex flex-col gap-3 pb-1">
@@ -597,7 +668,10 @@ import { useLineups, type RoleData, type BingxueActive } from './composables/use
 import { useTroopLevels } from './composables/useTroopLevels'
 import { TROOP_TYPES, TROOP_LABELS } from './constants/traits'
 import { useInventory } from './composables/useInventory'
-import { createShare, loadShare, isShareEnabled } from './lib/share'
+import {
+  createShare, loadShare, isShareEnabled,
+  listMyShares, renameMyShare, deleteMyShare, type MyShare,
+} from './lib/share'
 import { handleAuthCallback, type OAuthProvider } from './lib/auth'
 import { useAuth } from './composables/useAuth'
 
@@ -1063,7 +1137,85 @@ const onUserMenu = async (cmd: string) => {
     ElMessage.success('已登出')
   } else if (cmd === 'rename') {
     openRenameDialog()
+  } else if (cmd === 'my-shares') {
+    openMySharesDialog()
   }
+}
+
+// --- My Shares ---
+const mySharesDialogVisible = ref(false)
+const mySharesLoading = ref(false)
+const myShares = ref<MyShare[]>([])
+// Inline rename: track which row (slug) is editing + the draft value.
+const editingSlug = ref<string | null>(null)
+const editingDraft = ref('')
+
+const openMySharesDialog = async () => {
+  mySharesDialogVisible.value = true
+  mySharesLoading.value = true
+  try {
+    myShares.value = await listMyShares()
+  } catch (e) {
+    ElMessage.error(`載入失敗：${(e as Error).message}`)
+  } finally {
+    mySharesLoading.value = false
+  }
+}
+
+const startEditShareName = (s: MyShare) => {
+  editingSlug.value = s.slug
+  editingDraft.value = s.display_name ?? ''
+}
+
+const cancelEditShareName = () => {
+  editingSlug.value = null
+  editingDraft.value = ''
+}
+
+const saveShareName = async (s: MyShare) => {
+  const next = editingDraft.value.trim()
+  if (next === (s.display_name ?? '').trim()) {
+    cancelEditShareName()
+    return
+  }
+  try {
+    await renameMyShare(s.slug, next || null)
+    s.display_name = next || null
+    s.updated_at = new Date().toISOString()
+    cancelEditShareName()
+    ElMessage.success('已更新')
+  } catch (e) {
+    ElMessage.error(`更新失敗：${(e as Error).message}`)
+  }
+}
+
+const removeMyShare = async (s: MyShare) => {
+  try {
+    await deleteMyShare(s.slug)
+    myShares.value = myShares.value.filter(x => x.slug !== s.slug)
+    ElMessage.success('已刪除')
+  } catch (e) {
+    ElMessage.error(`刪除失敗：${(e as Error).message}`)
+  }
+}
+
+const copyShareUrl = (slug: string) => {
+  const url = `${window.location.origin}${window.location.pathname}#s/${slug}`
+  navigator.clipboard.writeText(url).then(() => {
+    ElMessage.success('連結已複製')
+  }).catch(() => {
+    ElMessage.error('複製失敗')
+  })
+}
+
+// "5 分鐘前" / "2 天前" relative-time, no Intl dependency.
+const relativeTime = (iso: string): string => {
+  const sec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  if (sec < 60) return '剛剛'
+  if (sec < 3600) return `${Math.floor(sec / 60)} 分鐘前`
+  if (sec < 86400) return `${Math.floor(sec / 3600)} 小時前`
+  if (sec < 86400 * 30) return `${Math.floor(sec / 86400)} 天前`
+  return new Date(iso).toLocaleDateString('zh-Hant')
 }
 
 const openRenameDialog = () => {
