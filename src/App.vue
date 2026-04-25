@@ -66,6 +66,30 @@
            <el-button type="danger" circle plain @click="openResetDialog" class="sm:hidden">
             <el-icon><Delete /></el-icon>
           </el-button>
+
+          <!-- Auth: login button when logged out, email-prefix dropdown when logged in -->
+          <template v-if="!isLoggedIn">
+            <el-button text @click="authDialogVisible = true" class="hidden sm:inline-flex !ml-1">
+              <el-icon class="mr-1"><User /></el-icon> 登入
+            </el-button>
+            <el-button text @click="authDialogVisible = true" class="sm:hidden !px-2">
+              <el-icon><User /></el-icon>
+            </el-button>
+          </template>
+          <el-dropdown v-else trigger="click" @command="onUserMenu">
+            <el-button text class="!ml-1">
+              <el-icon class="mr-1"><User /></el-icon>
+              <span class="hidden sm:inline">{{ emailPrefix }}</span>
+              <el-icon class="ml-1"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="signout">
+                  <el-icon class="mr-1"><Close /></el-icon> 登出
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
         <template v-else>
           <el-button round @click="cancelEditingInventory">
@@ -448,6 +472,22 @@
       </div>
     </el-dialog>
 
+    <!-- Auth Dialog -->
+    <el-dialog v-model="authDialogVisible" title="登入" width="320px" align-center>
+      <div class="flex flex-col gap-3">
+        <el-button plain size="large" @click="onSignIn('google')" class="w-full !m-0">
+          使用 Google 登入
+        </el-button>
+        <el-button plain size="large" @click="onSignIn('github')" class="w-full !m-0">
+          使用 GitHub 登入
+        </el-button>
+        <p class="text-xs text-gray-500 text-center mt-2 leading-relaxed">
+          登入是選用的；不登入也能使用所有基本功能。<br>
+          登入後可儲存與管理你的分享連結。
+        </p>
+      </div>
+    </el-dialog>
+
     <el-footer class="bg-white border-t border-gray-200 flex items-center justify-center text-xs text-gray-400 h-8 gap-2">
       <span>聯絡作者: yt.neko.vision@gmail.com</span>
       <span class="opacity-50">|</span>
@@ -490,7 +530,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Flag, Share, Delete, Edit, Close, Check, Menu } from '@element-plus/icons-vue'
+import { Flag, Share, Delete, Edit, Close, Check, Menu, User, ArrowDown } from '@element-plus/icons-vue'
 import LineupSlot from './components/LineupSlot.vue'
 import SkillDescription from './components/SkillDescription.vue'
 import HeroLibrary from './components/HeroLibrary.vue'
@@ -504,6 +544,8 @@ import { useTroopLevels } from './composables/useTroopLevels'
 import { TROOP_TYPES, TROOP_LABELS } from './constants/traits'
 import { useInventory } from './composables/useInventory'
 import { createShare, loadShare, isShareEnabled } from './lib/share'
+import { handleAuthCallback, type OAuthProvider } from './lib/auth'
+import { useAuth } from './composables/useAuth'
 
 const { 
   lineups, 
@@ -866,7 +908,118 @@ const shareLineup = async (type: 'all' | 'current' | 'inventory') => {
 
 const { heroes, skills } = useData()
 
+// Restore in-memory state from a ShareableData blob (used by share links AND
+// by sign-in recovery). Lookups try JP first (v2), CHT second (v1 / legacy).
+const restoreFromBlob = (data: ShareableData) => {
+  const findHeroByKey = (key: string) => heroes.value.find(h => h.name_jp === key || h.name === key)
+  const findSkillByKey = (key: string) => skills.value.find(s => s.name_jp === key || s.name === key)
+  const toCht = <T extends { name: string }>(arr: string[], finder: (k: string) => T | undefined): string[] =>
+    arr.map(k => finder(k)?.name ?? k)
+
+  if (data.inventory) ownedHeroes.value = toCht(data.inventory, findHeroByKey)
+  if (data.inv_h) ownedHeroes.value = toCht(data.inv_h, findHeroByKey)
+  if (data.inv_s) ownedSkills.value = toCht(data.inv_s, findSkillByKey)
+
+  if ((data.inv_h && data.inv_h.length > 0) || (data.inv_s && data.inv_s.length > 0) || (data.inventory && data.inventory.length > 0)) {
+    showOwnedOnly.value = true
+  }
+
+  if (data.lineups && Array.isArray(data.lineups)) {
+    data.lineups.forEach((l, i) => {
+      if (i >= 5) return
+      const target = lineups[i]
+      if (l.name) target.name = l.name
+      const restore = (prefix: string, role: RoleData) => {
+        const safeL = l as any
+        const hName = safeL[prefix]
+        if (hName) role.hero = findHeroByKey(hName) || null
+        const s1Name = safeL[prefix + '_s1']
+        if (s1Name) role.skill1 = findSkillByKey(s1Name) || null
+        const s2Name = safeL[prefix + '_s2']
+        if (s2Name) role.skill2 = findSkillByKey(s2Name) || null
+        if (safeL[prefix + '_st']) role.stats = safeL[prefix + '_st']
+        if (safeL[prefix + '_eq']) {
+          role.equipTraits = safeL[prefix + '_eq'].map((t: any) => t ? { name: t.n, rank: t.r, description: t.d, active: true } : null)
+        }
+        const bt = safeL[prefix + '_bt']
+        if (typeof bt === 'number') role.breakthrough = Math.max(0, Math.min(5, bt))
+        const bx = safeL[prefix + '_bx']
+        if (bx && bx.d) {
+          role.bingxue = {
+            direction: bx.d,
+            major: bx.m ?? null,
+            minors: Array.isArray(bx.n) ? bx.n.map((mi: any) => ({ name: mi.n, level: mi.l })) : [],
+          }
+        }
+      }
+      restore('m', target.main)
+      restore('v1', target.vice1)
+      restore('v2', target.vice2)
+    })
+  }
+}
+
+// Snapshot current state under a recovery key before OAuth full-page redirect,
+// so handleAuthCallback's success path can restore the lineup the user was
+// building. 5-minute TTL so a stale snapshot from days ago doesn't surprise.
+const RECOVERY_KEY = 'nobunaga.auth.recovery'
+const RECOVERY_TTL_MS = 5 * 60 * 1000
+
+const snapshotForRecovery = () => {
+  const blob: ShareableData = { v: 2 }
+  blob.lineups = lineups.map(serializeLineup)
+  blob.inv_h = ownedHeroes.value.map(n => heroToJp(n) ?? n)
+  blob.inv_s = ownedSkills.value.map(n => skillToJp(n) ?? n)
+  localStorage.setItem(RECOVERY_KEY, JSON.stringify({ blob, ts: Date.now() }))
+}
+
+const consumeRecovery = (): boolean => {
+  const raw = localStorage.getItem(RECOVERY_KEY)
+  if (!raw) return false
+  localStorage.removeItem(RECOVERY_KEY)
+  try {
+    const { blob, ts } = JSON.parse(raw) as { blob: ShareableData; ts: number }
+    if (Date.now() - ts > RECOVERY_TTL_MS) return false
+    restoreFromBlob(blob)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// --- Auth ---
+const { user, isLoggedIn, signIn, signOut, refreshFromStorage } = useAuth()
+const authDialogVisible = ref(false)
+const emailPrefix = computed(() => user.value?.email?.split('@')[0] ?? '')
+
+const onSignIn = (provider: OAuthProvider) => {
+  authDialogVisible.value = false
+  snapshotForRecovery()
+  signIn(provider)  // full-page redirect — nothing after this runs
+}
+
+const onUserMenu = async (cmd: string) => {
+  if (cmd === 'signout') {
+    await signOut()
+    ElMessage.success('已登出')
+  }
+}
+
 const initFromHash = async () => {
+  // 1. OAuth callback first — must consume the auth hash before share-loading.
+  try {
+    if (handleAuthCallback()) {
+      refreshFromStorage()
+      const recovered = consumeRecovery()
+      ElMessage.success(recovered ? '登入成功，已還原配置' : '登入成功')
+      return
+    }
+  } catch (e) {
+    ElMessage.error(`登入失敗：${(e as Error).message}`)
+    return
+  }
+
+  // 2. Share link (slug or legacy base64).
   if (window.location.hash) {
     try {
       const hash = window.location.hash.slice(1)
@@ -877,55 +1030,7 @@ const initFromHash = async () => {
         const json = decodeURIComponent(escape(atob(hash)))
         data = JSON.parse(json) as ShareableData
       }
-            // Lookups try JP first (v2 format), CHT second (v1 / legacy base64).
-            // Inventory state is stored as CHT internally regardless of share format.
-            const findHeroByKey = (key: string) => heroes.value.find(h => h.name_jp === key || h.name === key)
-            const findSkillByKey = (key: string) => skills.value.find(s => s.name_jp === key || s.name === key)
-            const toCht = <T extends { name: string }>(arr: string[], finder: (k: string) => T | undefined): string[] =>
-              arr.map(k => finder(k)?.name ?? k)
-
-            if (data.inventory) ownedHeroes.value = toCht(data.inventory, findHeroByKey)
-            if (data.inv_h) ownedHeroes.value = toCht(data.inv_h, findHeroByKey)
-            if (data.inv_s) ownedSkills.value = toCht(data.inv_s, findSkillByKey)
-
-            // Auto-activate "Owned Only" filter if inventory data exists
-            if ((data.inv_h && data.inv_h.length > 0) || (data.inv_s && data.inv_s.length > 0) || (data.inventory && data.inventory.length > 0)) {
-              showOwnedOnly.value = true
-            }
-
-            if (data.lineups && Array.isArray(data.lineups)) {
-        data.lineups.forEach((l, i) => {
-          if (i >= 5) return
-          const target = lineups[i]
-          if (l.name) target.name = l.name
-          const restore = (prefix: string, role: RoleData) => {
-            const safeL = l as any
-            const hName = safeL[prefix]
-            if (hName) role.hero = findHeroByKey(hName) || null
-            const s1Name = safeL[prefix + '_s1']
-            if (s1Name) role.skill1 = findSkillByKey(s1Name) || null
-            const s2Name = safeL[prefix + '_s2']
-            if (s2Name) role.skill2 = findSkillByKey(s2Name) || null
-            if (safeL[prefix + '_st']) role.stats = safeL[prefix + '_st']
-            if (safeL[prefix + '_eq']) {
-              role.equipTraits = safeL[prefix + '_eq'].map((t: any) => t ? { name: t.n, rank: t.r, description: t.d, active: true } : null)
-            }
-            const bt = safeL[prefix + '_bt']
-            if (typeof bt === 'number') role.breakthrough = Math.max(0, Math.min(5, bt))
-            const bx = safeL[prefix + '_bx']
-            if (bx && bx.d) {
-              role.bingxue = {
-                direction: bx.d,
-                major: bx.m ?? null,
-                minors: Array.isArray(bx.n) ? bx.n.map((mi: any) => ({ name: mi.n, level: mi.l })) : [],
-              }
-            }
-          }
-          restore('m', target.main)
-          restore('v1', target.vice1)
-          restore('v2', target.vice2)
-        })
-      }
+      restoreFromBlob(data)
       ElMessage.success('已載入分享的配置')
       history.replaceState(null, '', window.location.pathname)
     } catch (e) {
