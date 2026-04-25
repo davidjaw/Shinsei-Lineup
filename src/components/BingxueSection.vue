@@ -6,11 +6,11 @@
     class="bingxue-empty-btn relative w-full flex items-stretch rounded border border-dashed border-gray-300 bg-white hover:border-indigo-400 hover:bg-indigo-50 transition-all overflow-hidden group"
     @click="openDialog"
   >
-    <div class="flex-1 h-6 md:h-7 bg-red-400/70 group-hover:bg-red-500"></div>
-    <div class="flex-1 h-6 md:h-7 bg-amber-500/70 group-hover:bg-amber-600"></div>
-    <div class="flex-1 h-6 md:h-7 bg-purple-400/70 group-hover:bg-purple-500"></div>
-    <div class="flex-1 h-6 md:h-7 bg-emerald-400/70 group-hover:bg-emerald-500"></div>
-    <div class="absolute inset-0 pointer-events-none flex items-center justify-center font-bold text-white text-[10px] md:text-xs tracking-wider" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5)">
+    <div class="flex-1 h-5 md:h-7 bg-red-400/70 group-hover:bg-red-500"></div>
+    <div class="flex-1 h-5 md:h-7 bg-amber-500/70 group-hover:bg-amber-600"></div>
+    <div class="flex-1 h-5 md:h-7 bg-purple-400/70 group-hover:bg-purple-500"></div>
+    <div class="flex-1 h-5 md:h-7 bg-emerald-400/70 group-hover:bg-emerald-500"></div>
+    <div class="absolute inset-0 pointer-events-none flex items-center justify-center font-bold text-white text-[9px] md:text-xs tracking-wider" style="text-shadow: 0 1px 2px rgba(0,0,0,0.5)">
       兵學 配置
     </div>
   </button>
@@ -22,7 +22,7 @@
     v-else
     placement="bottom"
     :width="340"
-    trigger="hover"
+    :trigger="isDesktop ? 'hover' : 'click'"
     :show-after="200"
     :offset="8"
   >
@@ -30,15 +30,15 @@
       <div
         class="w-full rounded border overflow-hidden cursor-pointer transition-all"
         :class="borderClass"
-        @click="openDialog"
+        @click="isDesktop && openDialog()"
       >
         <!-- Major name header (100% width, direction-colored) -->
         <div
-          class="flex items-center justify-between px-1.5 md:px-2 py-1 text-white font-bold text-[10px] md:text-sm"
+          class="flex items-center justify-between px-1 md:px-2 py-0.5 md:py-1 text-white font-bold text-[9px] md:text-sm"
           :class="headerClass"
         >
-          <div class="flex items-center gap-1.5 min-w-0">
-            <span class="text-[9px] md:text-[11px] opacity-80 flex-shrink-0">{{ modelValue.direction }}</span>
+          <div class="flex items-center gap-1 md:gap-1.5 min-w-0">
+            <span class="text-[8px] md:text-[11px] opacity-80 flex-shrink-0">{{ modelValue.direction }}</span>
             <span class="truncate">{{ majorDisplay }}</span>
           </div>
           <button
@@ -47,19 +47,19 @@
             @click.stop="clearSelection"
             title="清除兵學"
           >
-            <el-icon :size="12"><Close /></el-icon>
+            <el-icon :size="11"><Close /></el-icon>
           </button>
         </div>
 
         <!-- Minor chips: w-1/3 each, wrap. Only show actually-selected minors. -->
         <div
           v-if="modelValue.minors.length"
-          class="flex flex-wrap p-0.5 md:p-1 gap-0.5 md:gap-1 bg-white"
+          class="flex flex-wrap p-0 md:p-1 gap-0 md:gap-1 bg-white"
         >
           <div
             v-for="(minor, idx) in modelValue.minors"
             :key="minor.name + idx"
-            class="w-[calc(33.333%-2px)] md:w-[calc(33.333%-4px)] text-center rounded border text-[8px] md:text-[11px] px-1 py-0.5 truncate"
+            class="w-1/3 md:w-[calc(33.333%-4px)] text-center rounded-none md:rounded border-0 md:border text-[8px] md:text-[11px] px-0.5 md:px-1 py-0.5 truncate"
             :class="chipClass"
           >
             {{ optionName(minor.name) }} {{ roman(minor.level) }}
@@ -119,10 +119,11 @@
     v-model="dialogVisible"
     :title="`兵學配置 — ${hero?.name || ''}`"
     width="820px"
+    class="bingxue-dialog"
     append-to-body
     align-center
   >
-    <div v-if="!hero?.bingxue" class="text-center text-gray-500 text-base py-10">
+    <div v-if="!hero?.bingxue" class="text-center text-gray-500 text-sm md:text-base py-6 md:py-10">
       此武將尚未開放兵學系統
     </div>
     <template v-else>
@@ -136,31 +137,31 @@
           <template #label>
             <span :class="colorTextClassFor(dir)">{{ dir }}</span>
           </template>
-          <div v-if="!hero?.bingxue?.[dir]" class="text-base text-gray-400 py-6 text-center">
+          <div v-if="!hero?.bingxue?.[dir]" class="text-sm md:text-base text-gray-400 py-4 md:py-6 text-center">
             此方向未開放
           </div>
           <template v-else>
             <!-- Major selection -->
-            <div class="mb-4">
-              <div class="text-sm font-bold mb-2 flex items-center justify-between">
+            <div class="mb-3 md:mb-4">
+              <div class="text-xs md:text-sm font-bold mb-1 md:mb-2 flex items-center justify-between">
                 <span :class="colorTextClassFor(dir)">主戰法（擇一）</span>
-                <span class="text-xs text-gray-400">1 點</span>
+                <span class="text-[10px] md:text-xs text-gray-400">1 點</span>
               </div>
-              <div class="grid grid-cols-3 gap-2">
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 md:gap-2">
                 <div
                   v-for="jp in hero.bingxue[dir].major"
                   :key="jp"
-                  class="relative rounded border p-2.5 cursor-pointer transition-all"
+                  class="relative rounded border p-1.5 md:p-2.5 cursor-pointer transition-all"
                   :class="draftMajor === jp
                     ? colorCardActiveFor(dir)
                     : 'border-gray-200 hover:border-gray-400 bg-gray-50'"
                   @click="selectMajor(jp)"
                 >
-                  <div class="font-bold text-sm mb-1 truncate">{{ optionName(jp) }}</div>
+                  <div class="font-bold text-xs md:text-sm mb-0.5 md:mb-1 truncate">{{ optionName(jp) }}</div>
                   <SkillDescription
                     :description="optionDescription(jp)"
                     :vars="optionVars(jp)"
-                    class="!text-xs !leading-relaxed"
+                    class="!text-[10px] md:!text-xs !leading-snug md:!leading-relaxed"
                   />
                 </div>
               </div>
@@ -169,17 +170,17 @@
             <!-- Minor selection: click the card to level up (none → I → II).
                  The × button in the corner resets back to unselected. -->
             <div>
-              <div class="text-sm font-bold mb-2 flex items-center justify-between">
+              <div class="text-xs md:text-sm font-bold mb-1 md:mb-2 flex items-center justify-between">
                 <span :class="colorTextClassFor(dir)">副戰法（點卡片升級，總共 5 點）</span>
-                <span class="text-xs" :class="pointsOverflow ? 'text-red-500' : 'text-gray-400'">
+                <span class="text-[10px] md:text-xs" :class="pointsOverflow ? 'text-red-500' : 'text-gray-400'">
                   {{ draftPoints }} / {{ MAX_POINTS }} 點
                 </span>
               </div>
-              <div class="grid grid-cols-3 gap-2">
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 md:gap-2">
                 <div
                   v-for="jp in hero.bingxue[dir].minor"
                   :key="jp"
-                  class="relative rounded border p-2.5 transition-all select-none"
+                  class="relative rounded border p-1.5 md:p-2.5 pb-3.5 md:pb-4 transition-all select-none"
                   :class="minorLevel(jp) > 0
                     ? colorCardActiveFor(dir) + ' cursor-pointer'
                     : canAdvanceMinor(jp)
@@ -198,30 +199,29 @@
                     <el-icon :size="12"><Close /></el-icon>
                   </button>
 
-                  <div class="flex items-center gap-1.5 mb-1.5 pr-6">
-                    <div class="font-bold text-sm truncate">{{ optionName(jp) }}</div>
+                  <div class="flex items-center gap-1.5 mb-1 md:mb-1.5 pr-6">
+                    <div class="font-bold text-xs md:text-sm truncate">{{ optionName(jp) }}</div>
                     <span
                       v-if="minorLevel(jp) > 0"
-                      class="text-[10px] font-extrabold px-1.5 py-0.5 rounded flex-shrink-0"
+                      class="text-[9px] md:text-[10px] font-extrabold px-1 md:px-1.5 py-0.5 rounded flex-shrink-0"
                       :class="colorBadgeClassFor(dir)"
                     >Lv {{ roman(minorLevel(jp)) }}</span>
-                    <span
-                      v-else-if="canAdvanceMinor(jp)"
-                      class="text-[10px] text-gray-400 italic flex-shrink-0"
-                    >點擊選取</span>
                   </div>
                   <SkillDescription
                     :description="optionDescription(jp)"
                     :vars="optionVars(jp)"
                     :is-max-level="minorLevel(jp) === 2"
-                    class="!text-xs !leading-relaxed"
+                    class="!text-[10px] md:!text-xs !leading-snug md:!leading-relaxed"
                   />
-                  <div
-                    v-if="minorLevel(jp) === 1 && canAdvanceMinor(jp)"
-                    class="mt-1.5 text-[10px] italic text-gray-500"
-                  >
-                    再點一次 → Lv II
-                  </div>
+                  <!-- Corner hint: bottom-right, absolute so it never pushes into the name row -->
+                  <span
+                    v-if="minorLevel(jp) === 0 && canAdvanceMinor(jp)"
+                    class="absolute bottom-0.5 right-1.5 text-[9px] md:text-[10px] italic text-gray-400"
+                  >點擊選取</span>
+                  <span
+                    v-else-if="minorLevel(jp) === 1 && canAdvanceMinor(jp)"
+                    class="absolute bottom-0.5 right-1.5 text-[9px] md:text-[10px] italic text-gray-500"
+                  >再點 → Lv II</span>
                 </div>
               </div>
             </div>
@@ -234,9 +234,9 @@
       <div class="flex items-center justify-between">
         <el-button v-if="modelValue.direction" link type="danger" @click="resetAll">清除</el-button>
         <div v-else></div>
-        <div class="flex gap-2">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" :disabled="!canApply" @click="applyDraft">套用</el-button>
+        <div class="flex gap-1 md:gap-2">
+          <el-button size="small" @click="dialogVisible = false">取消</el-button>
+          <el-button size="small" type="primary" :disabled="!canApply" @click="applyDraft">套用</el-button>
         </div>
       </div>
     </template>
@@ -244,7 +244,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import SkillDescription from './SkillDescription.vue'
 import { useData, BINGXUE_DIRECTIONS, type Hero, type BingxueDirection } from '../composables/useData'
@@ -263,6 +263,23 @@ const MAX_MINORS = 5     // display cap (also 5 slots max even if you only spent
 const MAX_POINTS = 5     // minor skill-point budget
 
 const { bingxue: bingxueCatalog } = useData()
+
+// Track viewport so filled-state behavior can differ: desktop click opens
+// the edit dialog; mobile click shows the description popover (trigger=click)
+// and the edit dialog is only reachable via the × reset → empty-state button.
+const isDesktop = ref(false)
+let mq: MediaQueryList | null = null
+const updateIsDesktop = (e: MediaQueryListEvent | MediaQueryList) => {
+  isDesktop.value = e.matches
+}
+onMounted(() => {
+  mq = window.matchMedia('(min-width: 768px)')
+  isDesktop.value = mq.matches
+  mq.addEventListener('change', updateIsDesktop)
+})
+onBeforeUnmount(() => {
+  mq?.removeEventListener('change', updateIsDesktop)
+})
 
 // Dialog state (draft is a local copy; applied on save)
 const dialogVisible = ref(false)
@@ -415,14 +432,73 @@ const colorBadgeClassFor = (d: BingxueDirection) => {
 
 </script>
 
-<style scoped>
-:deep(.bingxue-tabs .el-tabs__item) {
+<!-- Global (unscoped) because el-dialog with append-to-body teleports
+     .bingxue-tabs outside this component's DOM, so scoped :deep() can't
+     reach it. -->
+<style>
+.bingxue-tabs .el-tabs__item {
   font-weight: 700;
   font-size: 15px;
   height: 42px;
   line-height: 42px;
 }
-:deep(.bingxue-tabs .el-tabs__nav-wrap::after) {
+.bingxue-tabs .el-tabs__nav-wrap::after {
   height: 1px;
+}
+/* Bingxue dialog — tighten Element Plus' default header/body/footer
+   padding. Element Plus 2.x also sets `padding: var(--el-dialog-padding-primary)`
+   on `.el-dialog` itself (default 16px), so the inner sections sit on top
+   of an outer padding ring. Zero the var so child paddings define the box
+   exactly. Use !important to beat default rule specificity. */
+.bingxue-dialog {
+  --el-dialog-padding-primary: 0 !important;
+  padding: 0 !important;
+}
+.bingxue-dialog .el-dialog__header {
+  padding: 12px 16px 8px !important;
+  margin-right: 0 !important;
+}
+.bingxue-dialog .el-dialog__body {
+  padding: 8px 16px !important;
+}
+.bingxue-dialog .el-dialog__footer {
+  padding: 8px 16px 12px !important;
+}
+/* Re-anchor the close button now that the outer padding ring is gone. */
+.bingxue-dialog .el-dialog__headerbtn {
+  top: 4px;
+  right: 6px;
+}
+
+@media (max-width: 767px) {
+  .bingxue-tabs .el-tabs__item {
+    font-size: 13px;
+    height: 34px;
+    line-height: 34px;
+  }
+  /* Shrink the dialog for mobile so it doesn't overflow the viewport. */
+  .bingxue-dialog {
+    width: 95vw !important;
+    max-width: 95vw;
+  }
+  .bingxue-dialog .el-dialog__header {
+    padding: 6px 8px 4px !important;
+  }
+  .bingxue-dialog .el-dialog__title {
+    font-size: 13px;
+  }
+  .bingxue-dialog .el-dialog__body {
+    padding: 4px 6px !important;
+  }
+  .bingxue-dialog .el-dialog__footer {
+    padding: 4px 8px 6px !important;
+  }
+  /* Headerless close button column shouldn't reserve space when header is tight. */
+  .bingxue-dialog .el-dialog__headerbtn {
+    top: 0;
+    right: 4px;
+    width: 36px;
+    height: 36px;
+  }
 }
 </style>

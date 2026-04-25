@@ -226,10 +226,10 @@
        </div>
     </div>
 
-    <!-- 兵學 Section (desktop only; mobile not yet supported) -->
+    <!-- 兵學 Section -->
     <!-- md:order-2 puts this above radar/traits (order-3) and equip-traits (order-4).
          Shares order-2 with Skills Area below; DOM order keeps bingxue on top. -->
-    <div v-if="hero" class="hidden md:block px-1 md:px-2 md:order-2">
+    <div v-if="hero" class="px-0 md:px-2 md:order-2">
       <BingxueSection
         :hero="hero"
         :model-value="bingxue || { direction: null, major: null, minors: [] }"
