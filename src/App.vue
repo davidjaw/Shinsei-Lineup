@@ -80,16 +80,20 @@
             <button class="user-pill">
               <span class="user-pill-dot" />
               <el-icon><User /></el-icon>
-              <span class="hidden sm:inline truncate max-w-[120px]">{{ emailPrefix }}</span>
+              <span class="hidden sm:inline truncate max-w-[120px]">{{ displayName }}</span>
               <el-icon class="opacity-70"><ArrowDown /></el-icon>
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <div class="px-3 py-2 border-b border-gray-100 min-w-[200px]">
+                <div class="px-3 py-2 border-b border-gray-100 min-w-[220px]">
                   <div class="text-[10px] text-gray-400 uppercase tracking-wide">已登入帳號</div>
-                  <div class="text-sm font-medium text-gray-800 truncate mt-0.5">{{ user?.email }}</div>
+                  <div class="text-sm font-medium text-gray-800 truncate mt-0.5">{{ displayName }}</div>
+                  <div class="text-xs text-gray-500 truncate">{{ user?.email }}</div>
                 </div>
-                <el-dropdown-item command="signout">
+                <el-dropdown-item command="rename">
+                  <el-icon class="mr-1"><Edit /></el-icon> 編輯名稱
+                </el-dropdown-item>
+                <el-dropdown-item command="signout" divided>
                   <el-icon class="mr-1"><Close /></el-icon> 登出
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -473,6 +477,31 @@
             <span class="font-bold">全部重置</span>
             <span class="text-xs opacity-80">清空所有隊伍與庫存 (慎用)</span>
           </div>
+        </el-button>
+      </div>
+    </el-dialog>
+
+    <!-- Rename Dialog (first-time prompt + dropdown action) -->
+    <el-dialog v-model="renameDialogVisible" title="設定顯示名稱" width="340px" align-center>
+      <div class="flex flex-col gap-3 pb-1">
+        <p class="text-xs text-gray-500 -mt-1 mb-1">
+          這個名稱會顯示在你的分享、未來功能會用到。隨時可從右上角下拉選單再改。
+        </p>
+        <el-input
+          v-model="renameInput"
+          maxlength="30"
+          show-word-limit
+          placeholder="例：張三"
+          @keyup.enter="submitRename"
+          autofocus
+        />
+        <el-button
+          type="primary"
+          :loading="renameSaving"
+          @click="submitRename"
+          class="w-full !m-0"
+        >
+          確定
         </el-button>
       </div>
     </el-dialog>
@@ -1014,9 +1043,14 @@ const consumeRecovery = (): boolean => {
 }
 
 // --- Auth ---
-const { user, isLoggedIn, signIn, signOut, refreshFromStorage } = useAuth()
+const {
+  user, isLoggedIn, displayName, needsDisplayName,
+  signIn, signOut, updateDisplayName, refreshFromStorage,
+} = useAuth()
 const authDialogVisible = ref(false)
-const emailPrefix = computed(() => user.value?.email?.split('@')[0] ?? '')
+const renameDialogVisible = ref(false)
+const renameInput = ref('')
+const renameSaving = ref(false)
 
 const onSignIn = (provider: OAuthProvider) => {
   authDialogVisible.value = false
@@ -1028,6 +1062,31 @@ const onUserMenu = async (cmd: string) => {
   if (cmd === 'signout') {
     await signOut()
     ElMessage.success('已登出')
+  } else if (cmd === 'rename') {
+    openRenameDialog()
+  }
+}
+
+const openRenameDialog = () => {
+  renameInput.value = displayName.value
+  renameDialogVisible.value = true
+}
+
+const submitRename = async () => {
+  const name = renameInput.value.trim()
+  if (!name) {
+    ElMessage.warning('名稱不可為空')
+    return
+  }
+  renameSaving.value = true
+  try {
+    await updateDisplayName(name)
+    renameDialogVisible.value = false
+    ElMessage.success('名稱已更新')
+  } catch (e) {
+    ElMessage.error(`更新失敗：${(e as Error).message}`)
+  } finally {
+    renameSaving.value = false
   }
 }
 
@@ -1038,6 +1097,11 @@ const initFromHash = async () => {
       refreshFromStorage()
       const recovered = consumeRecovery()
       ElMessage.success(recovered ? '登入成功，已還原配置' : '登入成功')
+      // First-time prompt: ask new users to pick a display name.
+      if (needsDisplayName.value) {
+        renameInput.value = displayName.value  // prefill with email prefix
+        renameDialogVisible.value = true
+      }
       return
     }
   } catch (e) {
@@ -1220,12 +1284,14 @@ html.el-popup-parent--hidden {
   background: #1c2128;
 }
 
-/* Logged-in pill — visually distinct from the plain "登入" text button */
+/* Logged-in pill — visually distinct from the plain "登入" text button.
+   Height matches el-button default (32px) so it lines up with 重置 etc. */
 .user-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px 5px 8px;
+  height: 32px;
+  padding: 0 12px 0 10px;
   margin-left: 4px;
   border-radius: 999px;
   background: #eef2ff;        /* indigo-50 */
@@ -1236,6 +1302,7 @@ html.el-popup-parent--hidden {
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
   line-height: 1;
+  box-sizing: border-box;
 }
 .user-pill:hover {
   background: #e0e7ff;        /* indigo-100 */

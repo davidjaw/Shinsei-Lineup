@@ -14,6 +14,9 @@ export interface Session {
   user: {
     id: string
     email: string
+    /** User-editable display name stored in auth.users.user_metadata.
+     *  null on first signup until the user (or first-time prompt) sets one. */
+    display_name: string | null
   }
 }
 
@@ -23,7 +26,12 @@ const REFRESH_LEEWAY_SEC = 60
 
 // Decode (NOT verify) a JWT payload. Safe because Supabase already validated
 // the token before issuing it; we only read it to display user info.
-const decodeJwtPayload = (token: string): { sub: string; email?: string } | null => {
+interface JwtPayload {
+  sub: string
+  email?: string
+  user_metadata?: { display_name?: string | null }
+}
+const decodeJwtPayload = (token: string): JwtPayload | null => {
   try {
     const part = token.split('.')[1]
     const padded = part + '='.repeat((4 - (part.length % 4)) % 4)
@@ -98,7 +106,11 @@ export const handleAuthCallback = (): boolean => {
     access_token,
     refresh_token,
     expires_at: Math.floor(Date.now() / 1000) + expires_in,
-    user: { id: payload.sub, email: payload.email || '' },
+    user: {
+      id: payload.sub,
+      email: payload.email || '',
+      display_name: payload.user_metadata?.display_name ?? null,
+    },
   })
   cleanHash()
   return true
@@ -123,7 +135,7 @@ const refreshSession = async (refresh_token: string): Promise<Session | null> =>
       access_token: string
       refresh_token: string
       expires_in: number
-      user?: { id: string; email?: string }
+      user?: { id: string; email?: string; user_metadata?: { display_name?: string | null } }
     }
     const payload = decodeJwtPayload(data.access_token)
     const id = data.user?.id ?? payload?.sub
@@ -133,7 +145,13 @@ const refreshSession = async (refresh_token: string): Promise<Session | null> =>
       access_token: data.access_token,
       refresh_token: data.refresh_token,
       expires_at: Math.floor(Date.now() / 1000) + data.expires_in,
-      user: { id, email: data.user?.email ?? payload?.email ?? '' },
+      user: {
+        id,
+        email: data.user?.email ?? payload?.email ?? '',
+        display_name: data.user?.user_metadata?.display_name
+          ?? payload?.user_metadata?.display_name
+          ?? null,
+      },
     }
     persistSession(session)
     return session
@@ -159,6 +177,36 @@ export const getValidAccessToken = async (): Promise<string | null> => {
     return null
   }
   return refreshed.access_token
+}
+
+// PATCH the current user's display_name into auth.users.user_metadata.
+// Updates the local session immediately so reactive UIs reflect the change
+// without waiting for the next JWT refresh.
+export const updateDisplayName = async (displayName: string): Promise<void> => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('auth not configured')
+  const trimmed = displayName.trim()
+  if (!trimmed) throw new Error('display name cannot be empty')
+  if (trimmed.length > 50) throw new Error('display name too long (max 50)')
+
+  const token = await getValidAccessToken()
+  if (!token) throw new Error('not signed in')
+
+  const res = await fetchWithTimeout(`${SUPABASE_URL}/auth/v1/user`, {
+    method: 'PUT',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ data: { display_name: trimmed } }),
+  })
+  if (!res.ok) throw new Error(`update display name failed: ${res.status}`)
+
+  const session = getSession()
+  if (session) {
+    session.user.display_name = trimmed
+    persistSession(session)
+  }
 }
 
 // Best-effort server-side logout. Clears local state regardless of network

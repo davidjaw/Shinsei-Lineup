@@ -2,6 +2,7 @@ import { ref, computed, readonly } from 'vue'
 import {
   type Session, type OAuthProvider,
   getSession, signInWithProvider, signOut as signOutLib,
+  updateDisplayName as updateDisplayNameLib,
 } from '../lib/auth'
 
 // Single shared reactive session for the whole app. Initialized from
@@ -24,13 +25,31 @@ const signOut = async (): Promise<void> => {
   session.value = null
 }
 
+const updateDisplayName = async (name: string): Promise<void> => {
+  await updateDisplayNameLib(name)
+  // Re-read from storage so the reactive ref picks up the persisted change.
+  session.value = getSession()
+}
+
 export function useAuth() {
   return {
     session: readonly(session),
     user: computed(() => session.value?.user ?? null),
     isLoggedIn: computed(() => session.value !== null),
+    // Best-effort name to display: explicit display_name > email prefix > 'user'
+    displayName: computed(() => {
+      const u = session.value?.user
+      if (!u) return ''
+      return u.display_name?.trim() || u.email.split('@')[0] || 'user'
+    }),
+    /** True if user has never set display_name — used to trigger first-time prompt. */
+    needsDisplayName: computed(() => {
+      const u = session.value?.user
+      return u != null && (!u.display_name || u.display_name.trim() === '')
+    }),
     signIn,
     signOut,
+    updateDisplayName,
     refreshFromStorage,
   }
 }
