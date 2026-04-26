@@ -36,14 +36,12 @@ export interface CreateShareOptions {
   /** Sets shares.display_name. Only meaningful when logged in (anon shares
    *  are unlisted so a name has nowhere to surface). */
   displayName?: string
-  /** Force creation as anonymous (user_id null) even when logged in. */
-  forceAnonymous?: boolean
 }
 
 export const createShare = async (blob: unknown, opts: CreateShareOptions = {}): Promise<string> => {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')
 
-  const session = opts.forceAnonymous ? null : getSession()
+  const session = getSession()
   const token = session ? await getValidAccessToken() : null
   const userId = session && token ? session.user.id : null
 
@@ -106,11 +104,11 @@ export const listMyShares = async (): Promise<MyShare[]> => {
 }
 
 // Generic owner-only PATCH. RLS guarantees only the owner reaches Postgres.
-export interface MySharePatch {
+interface MySharePatch {
   display_name?: string | null
   pinned?: boolean
 }
-export const updateMyShare = async (slug: string, patch: MySharePatch): Promise<void> => {
+const updateMyShare = async (slug: string, patch: MySharePatch): Promise<void> => {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')
   if (!SLUG_PATTERN.test(slug)) throw new Error('invalid share slug')
   const token = await getValidAccessToken()

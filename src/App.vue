@@ -67,8 +67,14 @@
             <el-icon><Delete /></el-icon>
           </el-button>
 
-          <!-- Auth: login button when logged out, branded user pill when logged in -->
+          <!-- Auth: login button when logged out, user pill when logged in.
+               Logged-out: standalone bell so anonymous users can still see updates.
+               Logged-in:  bell collapses into the user dropdown to save space. -->
           <template v-if="!isLoggedIn">
+            <el-button text class="help-btn !px-2" :title="'更新紀錄'" @click="openChangelogDialog">
+              <el-icon><Bell /></el-icon>
+              <span v-if="hasUnseenChangelog" class="help-btn-dot" />
+            </el-button>
             <el-button text @click="authDialogVisible = true" class="hidden sm:inline-flex !ml-1">
               <el-icon class="mr-1"><User /></el-icon> 登入
             </el-button>
@@ -78,9 +84,9 @@
           </template>
           <el-dropdown v-else trigger="click" @command="onUserMenu" placement="bottom-end">
             <button class="user-pill">
-              <span class="user-pill-dot" />
               <el-icon><User /></el-icon>
               <span class="hidden sm:inline truncate max-w-[120px]">{{ displayName }}</span>
+              <span v-if="hasUnseenChangelog" class="user-pill-badge" />
               <el-icon class="opacity-70"><ArrowDown /></el-icon>
             </button>
             <template #dropdown>
@@ -90,6 +96,14 @@
                 </el-dropdown-item>
                 <el-dropdown-item command="rename">
                   <el-icon class="mr-1"><Edit /></el-icon> 編輯名稱
+                </el-dropdown-item>
+                <el-dropdown-item command="changelog" divided>
+                  <el-icon class="mr-1"><Bell /></el-icon>
+                  <span>更新紀錄</span>
+                  <span
+                    v-if="hasUnseenChangelog"
+                    class="ml-auto pl-2 text-[10px] font-bold text-emerald-600"
+                  >NEW</span>
                 </el-dropdown-item>
                 <el-dropdown-item command="signout" divided>
                   <el-icon class="mr-1"><Close /></el-icon> 登出
@@ -601,6 +615,9 @@
       </div>
     </el-dialog>
 
+    <!-- Changelog Dialog -->
+    <ChangelogDialog v-model="changelogDialogVisible" />
+
     <!-- Auth Dialog -->
     <el-dialog v-model="authDialogVisible" title="登入帳號" width="340px" align-center>
       <div class="flex flex-col gap-3 pb-1">
@@ -678,14 +695,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Flag, Share, Delete, Edit, Close, Check, Menu, User, ArrowDown, Star, StarFilled } from '@element-plus/icons-vue'
+import { Flag, Share, Delete, Edit, Close, Check, Menu, User, ArrowDown, Star, StarFilled, Bell } from '@element-plus/icons-vue'
 import LineupSlot from './components/LineupSlot.vue'
 import SkillDescription from './components/SkillDescription.vue'
 import HeroLibrary from './components/HeroLibrary.vue'
 import SkillLibrary from './components/SkillLibrary.vue'
 import MobileSlotDetail from './components/MobileSlotDetail.vue'
+import ChangelogDialog from './components/ChangelogDialog.vue'
+import { LATEST_VERSION } from './constants/changelog'
 
 import { useData, Hero, Skill, Trait } from './composables/useData'
 import { MOCK_EQUIP_TRAITS, ShareableData, ShareableLineup, ShareableBingxue } from './constants/gameData'
@@ -993,10 +1012,16 @@ const serializeBx = (bx?: BingxueActive): ShareableBingxue | undefined =>
 
 // CHT → JP name mapping happens only at share/restore boundary.
 // Internal state stays CHT (rest of app filters by CHT name).
+// Maps are built once per data load and reused across every share serialization
+// (each call would otherwise scan the whole heroes/skills array per lookup).
+const heroChtToJp = computed(() =>
+  new Map(heroes.value.map(h => [h.name, h.name_jp])))
+const skillChtToJp = computed(() =>
+  new Map(skills.value.map(s => [s.name, s.name_jp])))
 const heroToJp = (cht: string | undefined): string | undefined =>
-  cht ? (heroes.value.find(h => h.name === cht)?.name_jp ?? cht) : undefined
+  cht ? (heroChtToJp.value.get(cht) ?? cht) : undefined
 const skillToJp = (cht: string | undefined): string | undefined =>
-  cht ? (skills.value.find(s => s.name === cht)?.name_jp ?? cht) : undefined
+  cht ? (skillChtToJp.value.get(cht) ?? cht) : undefined
 
 // Computed keys widen to `string` in TS, so the explicit Partial cast is the
 // honest contract — the runtime field names (`m_s1`, `v1_s1`, etc.) match
@@ -1044,12 +1069,13 @@ const shareLineup = async (type: 'all' | 'current' | 'inventory') => {
   }
 
   // Only logged-in shares can be named — anon shares aren't listed anywhere.
-  const displayName = isLoggedIn.value ? shareNameInput.value.trim() : ''
+  // (Local var name avoids shadowing the displayName computed from useAuth.)
+  const shareName = isLoggedIn.value ? shareNameInput.value.trim() : ''
 
   let url: string
   if (isShareEnabled()) {
     try {
-      const slug = await createShare(data, displayName ? { displayName } : undefined)
+      const slug = await createShare(data, shareName ? { displayName: shareName } : undefined)
       url = `${origin}#s/${slug}`
     } catch (e) {
       console.warn('[share] short URL failed, using long URL fallback:', e)
@@ -1149,6 +1175,30 @@ const consumeRecovery = (): boolean => {
   }
 }
 
+// --- Changelog ---
+// Single localStorage key stores the last version the user dismissed the
+// changelog for. Mismatch with LATEST_VERSION → auto-open + show red dot.
+// First-time users (no stored value) also see the dialog once.
+const CHANGELOG_SEEN_KEY = 'nobunaga.changelog.lastSeen'
+const changelogDialogVisible = ref(false)
+const hasUnseenChangelog = ref(false)
+
+const checkUnseenChangelog = () => {
+  hasUnseenChangelog.value = localStorage.getItem(CHANGELOG_SEEN_KEY) !== LATEST_VERSION
+}
+
+const openChangelogDialog = () => {
+  changelogDialogVisible.value = true
+}
+
+// Persist seen state when the user dismisses the dialog (any close path).
+watch(changelogDialogVisible, (now, prev) => {
+  if (prev && !now) {
+    localStorage.setItem(CHANGELOG_SEEN_KEY, LATEST_VERSION)
+    hasUnseenChangelog.value = false
+  }
+})
+
 // --- Auth ---
 const {
   user, isLoggedIn, displayName, needsDisplayName,
@@ -1173,6 +1223,8 @@ const onUserMenu = async (cmd: string) => {
     openRenameDialog()
   } else if (cmd === 'my-shares') {
     openMySharesDialog()
+  } else if (cmd === 'changelog') {
+    openChangelogDialog()
   }
 }
 
@@ -1244,7 +1296,9 @@ const togglePinShare = async (s: MyShare) => {
   }
 }
 
-// Sort: pinned first, then named (alphabetical), then unnamed (newest first).
+// Sort: pinned first, then named (alphabetical), then unnamed (most recent first).
+// Tiebreaker uses updated_at to match the "更新" column shown in the table —
+// otherwise a renamed/pinned row visibly updates its time without moving.
 const sortedMyShares = computed(() => {
   return [...myShares.value].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
@@ -1255,7 +1309,7 @@ const sortedMyShares = computed(() => {
       const cmp = aName.localeCompare(bName, 'zh-Hant')
       if (cmp !== 0) return cmp
     }
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   })
 })
 
@@ -1301,7 +1355,9 @@ const submitRename = async () => {
   }
 }
 
-const initFromHash = async () => {
+// Returns true if a competing UI was shown (toast / rename dialog) — caller
+// uses this to suppress the changelog auto-open so it doesn't overlay them.
+const initFromHash = async (): Promise<boolean> => {
   // 1. OAuth callback first — must consume the auth hash before share-loading.
   try {
     if (handleAuthCallback()) {
@@ -1313,11 +1369,11 @@ const initFromHash = async () => {
         renameInput.value = displayName.value  // prefill with email prefix
         renameDialogVisible.value = true
       }
-      return
+      return true
     }
   } catch (e) {
     ElMessage.error(`登入失敗：${(e as Error).message}`)
-    return
+    return true
   }
 
   // 2. Share link (slug or legacy base64).
@@ -1337,11 +1393,20 @@ const initFromHash = async () => {
     } catch (e) {
       ElMessage.error('無效的分享連結')
     }
+    return true
   }
+  return false
 }
 
-onMounted(() => {
-  setTimeout(initFromHash, 100)
+onMounted(async () => {
+  checkUnseenChangelog()
+  const consumedHash = await initFromHash()
+  // Auto-open changelog only when nothing else is competing for the user's
+  // attention. Triggers for both first-time visitors and returning users on
+  // a release day (LATEST_VERSION mismatch).
+  if (hasUnseenChangelog.value && !consumedHash) {
+    changelogDialogVisible.value = true
+  }
 })
 </script>
 
@@ -1496,13 +1561,15 @@ html.el-popup-parent--hidden {
 }
 
 /* Logged-in pill — visually distinct from the plain "登入" text button.
-   Height matches el-button default (32px) so it lines up with 重置 etc. */
+   Height matches el-button default (32px) so it lines up with 重置 etc.
+   Mobile shrinks to icon-only so it fits the cramped header. */
 .user-pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 32px;
-  padding: 0 12px 0 10px;
+  padding: 0 10px;
   margin-left: 4px;
   border-radius: 999px;
   background: #eef2ff;        /* indigo-50 */
@@ -1523,12 +1590,24 @@ html.el-popup-parent--hidden {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
 }
-.user-pill-dot {
-  width: 7px;
-  height: 7px;
+@media (max-width: 767px) {
+  .user-pill {
+    padding: 0 6px;
+    gap: 2px;
+  }
+}
+/* Unread-changelog badge on the user pill — same vocabulary as .help-btn-dot
+   so logged-in users still get a visual nudge that there's a new version. */
+.user-pill-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
-  background: #22c55e;        /* green-500 — "online/active" indicator */
-  box-shadow: 0 0 0 2px #dcfce7;
+  background: #ef4444;        /* red-500 */
+  box-shadow: 0 0 0 2px #ffffff;
+  pointer-events: none;
 }
 
 /* Pin star button in 我的分享 table — subtle when off, gold when on */
@@ -1555,5 +1634,21 @@ html.el-popup-parent--hidden {
 }
 .pin-btn-on:hover {
   background: #fef3c7;        /* amber-100 */
+}
+
+/* Help icon — hosts the unread-changelog dot in the upper-right corner */
+.help-btn {
+  position: relative;
+}
+.help-btn-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;          /* red-500 */
+  box-shadow: 0 0 0 2px #ffffff;
+  pointer-events: none;
 }
 </style>
