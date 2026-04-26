@@ -3,6 +3,7 @@ import App from './App.vue'
 import ElementPlus from 'element-plus'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { router } from './router'
+import './assets/tailwind.css'
 
 const app = createApp(App)
 
