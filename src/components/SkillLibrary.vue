@@ -12,12 +12,24 @@
           size="small"
         />
         
-        <el-switch 
+        <button
+          v-if="mode === 'manage'"
+          class="px-2 py-1 text-xs rounded border mr-2 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+          :class="allFilteredOwned
+            ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-amber-500 hover:text-amber-600'"
+          :disabled="filteredSkills.length === 0"
+          :title="allFilteredOwned ? '取消勾選所有篩選結果' : '勾選所有篩選結果為已擁有'"
+          @click="toggleSelectAllFiltered"
+        >
+          {{ allFilteredOwned ? '取消全選' : '全選' }}
+        </button>
+        <el-switch
           v-if="mode !== 'manage'"
           :model-value="filterOwned"
           @update:model-value="val => $emit('update:filterOwned', val)"
-          inline-prompt 
-          active-text="已擁有" 
+          inline-prompt
+          active-text="已擁有"
           inactive-text="全部"
         />
         <div v-else class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
@@ -266,6 +278,26 @@ const toggleOwned = (name: string) => {
     newOwned.push(name)
   }
   emit('update:ownedSkills', newOwned)
+}
+
+// Select-all toggle for manage mode — scopes to the current filter (search +
+// type + rarity). Same toggle behavior as HeroLibrary.
+const allFilteredOwned = computed(() =>
+  filteredSkills.value.length > 0 &&
+  filteredSkills.value.every(s => props.ownedSkills.includes(s.name))
+)
+
+const toggleSelectAllFiltered = () => {
+  const filteredNames = filteredSkills.value.map(s => s.name)
+  if (allFilteredOwned.value) {
+    const filteredSet = new Set(filteredNames)
+    emit('update:ownedSkills', props.ownedSkills.filter(n => !filteredSet.has(n)))
+  } else {
+    const ownedSet = new Set(props.ownedSkills)
+    const newOwned = [...props.ownedSkills]
+    for (const n of filteredNames) if (!ownedSet.has(n)) newOwned.push(n)
+    emit('update:ownedSkills', newOwned)
+  }
 }
 
 const handleSelect = (skill: any) => {

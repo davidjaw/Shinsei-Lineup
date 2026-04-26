@@ -25,6 +25,18 @@
             class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold"
           >{{ activeFilterCount }}</span>
         </button>
+        <button
+          v-if="mode === 'manage'"
+          class="px-2 py-1 text-xs rounded border mr-2 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+          :class="allFilteredOwned
+            ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-amber-500 hover:text-amber-600'"
+          :disabled="filteredHeroes.length === 0"
+          :title="allFilteredOwned ? '取消勾選所有篩選結果' : '勾選所有篩選結果為已擁有'"
+          @click="toggleSelectAllFiltered"
+        >
+          {{ allFilteredOwned ? '取消全選' : '全選' }}
+        </button>
         <el-switch
           :model-value="filterOwned"
           @update:model-value="val => $emit('update:filterOwned', val)"
@@ -261,6 +273,28 @@ const toggleOwned = (name: string) => {
     newOwned.push(name)
   }
   emit('update:ownedHeroes', newOwned)
+}
+
+// Select-all toggle for manage mode: scopes the action to whatever the user
+// has currently filtered (search + cost/faction/clan/troop). Toggle behavior
+// avoids needing two separate buttons — re-clicking after a "select all"
+// becomes a "deselect all" of the same scope.
+const allFilteredOwned = computed(() =>
+  filteredHeroes.value.length > 0 &&
+  filteredHeroes.value.every(h => props.ownedHeroes.includes(h.name))
+)
+
+const toggleSelectAllFiltered = () => {
+  const filteredNames = filteredHeroes.value.map(h => h.name)
+  if (allFilteredOwned.value) {
+    const filteredSet = new Set(filteredNames)
+    emit('update:ownedHeroes', props.ownedHeroes.filter(n => !filteredSet.has(n)))
+  } else {
+    const ownedSet = new Set(props.ownedHeroes)
+    const newOwned = [...props.ownedHeroes]
+    for (const n of filteredNames) if (!ownedSet.has(n)) newOwned.push(n)
+    emit('update:ownedHeroes', newOwned)
+  }
 }
 
 const handleClick = (hero: Hero) => {
