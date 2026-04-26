@@ -48,12 +48,38 @@ function rebuildDataShortcut(): PluginOption {
   }
 }
 
+// CSP is injected only into the production build, not the Vite dev server,
+// because dev needs HMR scripts/eval that prod doesn't. `frame-ancestors` is
+// intentionally absent — it's ignored when delivered via <meta>; for real
+// click-jacking protection set it as an HTTP header at the host instead.
+function injectProdCsp(): PluginOption {
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://esm.sh",
+    "style-src 'self' 'unsafe-inline' https://unpkg.com",
+    "img-src 'self' data: https:",
+    "connect-src 'self' https://esm.sh https://*.supabase.co",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+  ].join('; ')
+  return {
+    name: 'inject-prod-csp',
+    apply: 'build',
+    transformIndexHtml(html) {
+      const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`
+      return html.replace('<head>', `<head>\n    ${meta}`)
+    },
+  }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
     viteSingleFile(),
     rebuildDataShortcut(),
+    injectProdCsp(),
   ],
   resolve: {
     alias: {

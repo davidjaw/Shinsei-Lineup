@@ -4,10 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>信長之野望：新生 線上配將模擬器</title>
-    <!-- Element Plus CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
-    
-    <!-- Import Map for module resolution -->
+    <!-- Element Plus CSS (version-pinned + SRI). unpkg serves stable bytes per
+         version, so SRI here is reliable across browsers. -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/element-plus@2.3.14/dist/index.css"
+      integrity="sha384-sHGJ+PfIHwVhC24lX2hXoV3Td4yirFX6pS5YxGkfm/6xnD4kqKqA/g86J10PfKLF"
+      crossorigin="anonymous"
+    />
+
+    <!-- Import Map for module resolution. SRI is intentionally omitted because
+         esm.sh tailors response bytes per UA/encoding, making hashes brittle.
+         Versions are pinned, and CSP (injected at build time) restricts the
+         allowed origins. -->
     <script type="importmap">
       {
         "imports": {
