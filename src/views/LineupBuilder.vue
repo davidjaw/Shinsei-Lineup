@@ -90,13 +90,30 @@
               <el-icon class="opacity-70"><ArrowDown /></el-icon>
             </button>
             <template #dropdown>
-              <el-dropdown-menu class="min-w-[180px]">
-                <el-dropdown-item command="my-shares">
+              <el-dropdown-menu class="min-w-[220px]">
+                <!-- Profile section: single-line "角色: <name>" header (read-only)
+                     followed by the manage entry. No divider between them so
+                     the header reads as a label for the action below. Wrap in
+                     a flex+items-baseline so the label and value sit on the
+                     same baseline despite different font sizes. -->
+                <el-dropdown-item disabled class="!cursor-default !opacity-100">
+                  <div class="flex items-baseline gap-1 min-w-0">
+                    <span class="text-xs text-gray-500 flex-shrink-0">角色：</span>
+                    <span class="text-sm font-bold text-emerald-700 truncate">
+                      {{ activeProfileName ?? '預設' }}
+                    </span>
+                  </div>
+                </el-dropdown-item>
+                <el-dropdown-item command="my-profiles">
+                  <el-icon class="mr-1"><User /></el-icon> 管理角色配置
+                </el-dropdown-item>
+
+                <!-- Sharing -->
+                <el-dropdown-item command="my-shares" divided>
                   <el-icon class="mr-1"><Share /></el-icon> 我的分享
                 </el-dropdown-item>
-                <el-dropdown-item command="rename">
-                  <el-icon class="mr-1"><Edit /></el-icon> 編輯名稱
-                </el-dropdown-item>
+
+                <!-- Notifications -->
                 <el-dropdown-item command="changelog" divided>
                   <el-icon class="mr-1"><Bell /></el-icon>
                   <span>更新紀錄</span>
@@ -105,7 +122,12 @@
                     class="ml-auto pl-2 text-[10px] font-bold text-emerald-600"
                   >NEW</span>
                 </el-dropdown-item>
-                <el-dropdown-item command="signout" divided>
+
+                <!-- Account section at bottom -->
+                <el-dropdown-item command="rename" divided>
+                  <el-icon class="mr-1"><Edit /></el-icon> 編輯名稱
+                </el-dropdown-item>
+                <el-dropdown-item command="signout">
                   <el-icon class="mr-1"><Close /></el-icon> 登出
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -594,7 +616,7 @@
     <el-dialog v-model="renameDialogVisible" title="設定顯示名稱" width="340px" align-center>
       <div class="flex flex-col gap-3 pb-1">
         <p class="text-xs text-gray-500 -mt-1 mb-1">
-          這個名稱會顯示在你的分享、未來功能會用到。隨時可從右上角下拉選單再改。
+          目前無實際功能，只是修改電腦版能看到的自訂名稱，未來考慮選擇性的與分享綁定。
         </p>
         <el-input
           v-model="renameInput"
@@ -617,6 +639,9 @@
 
     <!-- Changelog Dialog -->
     <ChangelogDialog v-model="changelogDialogVisible" />
+
+    <!-- My Profiles Dialog -->
+    <MyProfilesDialog v-model="myProfilesDialogVisible" />
 
     <!-- Auth Dialog -->
     <el-dialog v-model="authDialogVisible" title="登入帳號" width="340px" align-center>
@@ -704,7 +729,8 @@ import SkillDescription from '../components/SkillDescription.vue'
 import HeroLibrary from '../components/HeroLibrary.vue'
 import SkillLibrary from '../components/SkillLibrary.vue'
 import MobileSlotDetail from '../components/MobileSlotDetail.vue'
-import ChangelogDialog from '../components/ChangelogDialog.vue'
+import ChangelogDialog from '../components/dialogs/ChangelogDialog.vue'
+import MyProfilesDialog from '../components/dialogs/MyProfilesDialog.vue'
 import { LATEST_VERSION } from '../constants/changelog'
 
 import { useData, Hero, Skill, Trait } from '../composables/useData'
@@ -719,6 +745,8 @@ import {
 } from '../lib/share'
 import { handleAuthCallback, type OAuthProvider } from '../lib/auth'
 import { useAuth } from '../composables/useAuth'
+import { useActiveProfile } from '../composables/useActiveProfile'
+import { listMyProfiles } from '../lib/profiles'
 import { consumeInitialHash } from '../lib/initial-hash'
 
 const router = useRouter()
@@ -1218,14 +1246,41 @@ const onSignIn = (provider: OAuthProvider) => {
   signIn(provider)  // full-page redirect — nothing after this runs
 }
 
+const myProfilesDialogVisible = ref(false)
+const { applyProfile, clearActiveProfile, activeProfileName } = useActiveProfile()
+
+// Auto-apply the user's default profile after initFromHash settles. Skips
+// when (a) the user isn't logged in, (b) inventory was already filled by a
+// share link / OAuth recovery, or (c) the user has no default profile —
+// keeping fresh-page-loads silent for users who haven't opted in.
+const tryAutoLoadDefaultProfile = async (): Promise<void> => {
+  if (!isLoggedIn.value) return
+  if (ownedHeroes.value.length > 0 || ownedSkills.value.length > 0) return
+  try {
+    const profiles = await listMyProfiles()
+    const def = profiles.find(p => p.is_default)
+    if (def) {
+      applyProfile(def)
+      ElMessage.info(`已載入預設角色配置：${def.name}`)
+    }
+  } catch (e) {
+    // Silent fail — first-time users without grants/profiles shouldn't get
+    // an error toast on page load. Surfaces in console for debugging.
+    console.warn('[profiles] auto-load default skipped:', e)
+  }
+}
+
 const onUserMenu = async (cmd: string) => {
   if (cmd === 'signout') {
     await signOut()
+    clearActiveProfile()
     ElMessage.success('已登出')
   } else if (cmd === 'rename') {
     openRenameDialog()
   } else if (cmd === 'my-shares') {
     openMySharesDialog()
+  } else if (cmd === 'my-profiles') {
+    myProfilesDialogVisible.value = true
   } else if (cmd === 'changelog') {
     openChangelogDialog()
   }
@@ -1415,6 +1470,11 @@ const initFromHash = async (): Promise<boolean> => {
 onMounted(async () => {
   checkUnseenChangelog()
   const consumedHash = await initFromHash()
+  // Fire-and-forget: the auto-load sequencing only depends on initFromHash
+  // (share/recovery should win if present). No reason to block the changelog
+  // open on a Supabase round-trip — they don't conflict, and `consumedHash`
+  // already gates the changelog independently.
+  void tryAutoLoadDefaultProfile()
   // Auto-open changelog only when nothing else is competing for the user's
   // attention. Triggers for both first-time visitors and returning users on
   // a release day (LATEST_VERSION mismatch).

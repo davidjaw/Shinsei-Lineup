@@ -76,7 +76,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Bell } from '@element-plus/icons-vue'
 import {
   CHANGELOG, LATEST_VERSION, TAG_LABELS, TAG_COLORS,
-} from '../constants/changelog'
+} from '../../constants/changelog'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
