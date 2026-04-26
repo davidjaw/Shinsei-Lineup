@@ -72,8 +72,12 @@ export const signInWithProvider = (provider: OAuthProvider): void => {
 
 // Returns true if the hash was an auth callback we consumed (and cleared).
 // Throws if the callback indicates a provider-side error (cancelled, denied).
-export const handleAuthCallback = (): boolean => {
-  const hash = location.hash.slice(1)
+//
+// `rawHash` lets the caller pass a hash captured before vue-router's hash
+// normalization (which would otherwise prepend a `/` and break URLSearchParams
+// parsing). Falls back to live location.hash for non-router callers.
+export const handleAuthCallback = (rawHash?: string): boolean => {
+  const hash = (rawHash ?? location.hash).replace(/^#/, '')
   if (!hash || (!hash.includes('access_token=') && !hash.includes('error='))) {
     return false
   }

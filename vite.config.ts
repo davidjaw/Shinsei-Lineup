@@ -67,11 +67,12 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       // Externalize Vue to use from CDN
-      external: ['vue', 'element-plus', '@element-plus/icons-vue'],
+      external: ['vue', 'vue-router', 'element-plus', '@element-plus/icons-vue'],
       output: {
         manualChunks: undefined,
         globals: {
           vue: 'Vue',
+          'vue-router': 'VueRouter',
           'element-plus': 'ElementPlus',
           '@element-plus/icons-vue': 'ElementPlusIconsVue'
         }
