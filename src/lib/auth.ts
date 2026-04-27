@@ -41,12 +41,35 @@ const decodeJwtPayload = (token: string): JwtPayload | null => {
   }
 }
 
-const persistSession = (session: Session): void => {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+// Session lifecycle events. 'expired' fires when refresh detected a revoked
+// token (involuntary); the UI should warn the user. 'signed-out' fires for
+// user-initiated logout (no warning needed). 'persisted' fires after a
+// successful sign-in or refresh so reactive consumers re-read storage.
+export type SessionEvent = 'persisted' | 'expired' | 'signed-out'
+type Listener = (e: SessionEvent) => void
+const sessionListeners = new Set<Listener>()
+
+export const onSessionEvent = (cb: Listener): (() => void) => {
+  sessionListeners.add(cb)
+  return () => sessionListeners.delete(cb)
 }
 
-const clearSession = (): void => {
+const fireSessionEvent = (e: SessionEvent): void => {
+  for (const cb of sessionListeners) {
+    try { cb(e) } catch { /* listener errors must not break auth flow */ }
+  }
+}
+
+const persistSession = (session: Session): void => {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  fireSessionEvent('persisted')
+}
+
+// Removes the session from storage. `reason` distinguishes user-initiated
+// logout from involuntary expiration so the UI can react appropriately.
+const clearSession = (reason: 'expired' | 'signed-out' = 'signed-out'): void => {
   localStorage.removeItem(SESSION_KEY)
+  fireSessionEvent(reason)
 }
 
 export const getSession = (): Session | null => {
@@ -120,13 +143,27 @@ export const handleAuthCallback = (rawHash?: string): boolean => {
   return true
 }
 
-// Exchange the refresh_token for a new access_token. Returns the refreshed
-// session, or null if refresh fails (refresh_token expired / revoked).
-const refreshSession = async (refresh_token: string): Promise<Session | null> => {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return null
+// Refresh outcome — distinguishes a transient failure (network blip, 5xx)
+// from a genuinely revoked token. Only the latter should clear the session;
+// the former should preserve it so the next call can retry.
+type RefreshResult =
+  | { kind: 'ok'; session: Session }
+  | { kind: 'transient' }
+  | { kind: 'invalid' }
 
+// Module-level inflight promise so concurrent callers share a single refresh
+// round-trip. Supabase rotates the refresh_token on every call and the old
+// one is immediately invalidated, so two parallel refreshes would race —
+// the second would 401 and (without this guard) clear the session that the
+// first just persisted. Symptom: user appears to get logged out at random.
+let inflightRefresh: Promise<RefreshResult> | null = null
+
+const doRefresh = async (refresh_token: string): Promise<RefreshResult> => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return { kind: 'invalid' }
+
+  let res: Response
   try {
-    const res = await fetchWithTimeout(
+    res = await fetchWithTimeout(
       `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
       {
         method: 'POST',
@@ -134,7 +171,16 @@ const refreshSession = async (refresh_token: string): Promise<Session | null> =>
         body: JSON.stringify({ refresh_token }),
       },
     )
-    if (!res.ok) return null
+  } catch {
+    return { kind: 'transient' }
+  }
+
+  if (res.status === 400 || res.status === 401 || res.status === 403) {
+    return { kind: 'invalid' }
+  }
+  if (!res.ok) return { kind: 'transient' }
+
+  try {
     const data = (await res.json()) as {
       access_token: string
       refresh_token: string
@@ -143,7 +189,7 @@ const refreshSession = async (refresh_token: string): Promise<Session | null> =>
     }
     const payload = decodeJwtPayload(data.access_token)
     const id = data.user?.id ?? payload?.sub
-    if (!id) return null
+    if (!id) return { kind: 'invalid' }
 
     const session: Session = {
       access_token: data.access_token,
@@ -158,14 +204,39 @@ const refreshSession = async (refresh_token: string): Promise<Session | null> =>
       },
     }
     persistSession(session)
-    return session
+    return { kind: 'ok', session }
   } catch {
-    return null
+    return { kind: 'transient' }
   }
 }
 
-// Returns a usable access token, refreshing if necessary. Returns null if
-// there's no session, or if refresh failed (in which case session is cleared).
+// Each new inflight reads the *current* refresh_token from storage just before
+// hitting Supabase. This closes a race where caller A's inflight resolves and
+// rotates X→Y, then caller C (who captured `session` with refresh_token=X
+// before A finished) starts a fresh refresh with the now-invalid X. The short-
+// circuit on a still-valid session also avoids a wasted network round-trip
+// when a previous refresh just landed.
+const refreshSessionShared = (): Promise<RefreshResult> => {
+  if (!inflightRefresh) {
+    inflightRefresh = (async (): Promise<RefreshResult> => {
+      const current = getSession()
+      if (!current) return { kind: 'invalid' }
+      const nowSec = Math.floor(Date.now() / 1000)
+      if (current.expires_at - nowSec > REFRESH_LEEWAY_SEC) {
+        return { kind: 'ok', session: current }
+      }
+      return doRefresh(current.refresh_token)
+    })().finally(() => {
+      inflightRefresh = null
+    })
+  }
+  return inflightRefresh
+}
+
+// Returns a usable access token, refreshing if necessary. Returns null only
+// when there is no session or the refresh token is genuinely invalid. On a
+// transient failure, returns the existing access_token so the caller's API
+// call still has a chance — and the session is preserved for the next retry.
 export const getValidAccessToken = async (): Promise<string | null> => {
   const session = getSession()
   if (!session) return null
@@ -175,12 +246,13 @@ export const getValidAccessToken = async (): Promise<string | null> => {
     return session.access_token
   }
 
-  const refreshed = await refreshSession(session.refresh_token)
-  if (!refreshed) {
-    clearSession()
+  const result = await refreshSessionShared()
+  if (result.kind === 'ok') return result.session.access_token
+  if (result.kind === 'invalid') {
+    clearSession('expired')
     return null
   }
-  return refreshed.access_token
+  return session.access_token
 }
 
 // PATCH the current user's display_name into auth.users.user_metadata.
@@ -229,6 +301,12 @@ export const signOut = async (): Promise<void> => {
     } catch {
       // network failure shouldn't block sign-out
     }
+  }
+  // Wait for any concurrent refresh to settle. Without this, doRefresh's
+  // persistSession could run AFTER our clearSession and silently restore the
+  // session we just dropped.
+  if (inflightRefresh) {
+    try { await inflightRefresh } catch { /* refresh outcome irrelevant — we're clearing */ }
   }
   clearSession()
 }
