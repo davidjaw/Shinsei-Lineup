@@ -33,6 +33,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.2.1',
+    date: '2026-04-27',
+    entries: [
+      { tag: 'fix', text: '登入更穩定：改善 token 自動續約邏輯，網路抖動或同時觸發多個操作時不再被誤登出' },
+      { tag: 'fix', text: '登入逾時不再重新整理頁面 — 自動切回未登入狀態並保留編輯中的隊伍與庫存，以提示告知重新登入即可' },
+    ],
+  },
+  {
     version: '0.2.0',
     date: '2026-04-26',
     entries: [

@@ -1234,6 +1234,7 @@ watch(changelogDialogVisible, (now, prev) => {
 const {
   user, isLoggedIn, displayName, needsDisplayName,
   signIn, signOut, updateDisplayName, refreshFromStorage,
+  sessionExpiredCount,
 } = useAuth()
 const authDialogVisible = ref(false)
 const renameDialogVisible = ref(false)
@@ -1293,6 +1294,20 @@ const myShares = ref<MyShare[]>([])
 // Inline rename: track which row (slug) is editing + the draft value.
 const editingSlug = ref<string | null>(null)
 const editingDraft = ref('')
+
+// React to involuntary session expiration (refresh token revoked). The user
+// did NOT click "sign out" — their token genuinely died (revoked elsewhere,
+// password changed, refresh window exceeded). Quietly transition the UI:
+// close auth-only dialogs, drop the active profile name, and show a single
+// warning toast. The lineup/inventory data is left intact so the user
+// doesn't lose work — they can keep building offline or share anonymously.
+watch(sessionExpiredCount, () => {
+  myProfilesDialogVisible.value = false
+  mySharesDialogVisible.value = false
+  renameDialogVisible.value = false
+  clearActiveProfile()
+  ElMessage.warning('登入已過期，請重新登入以同步雲端資料')
+})
 
 const openMySharesDialog = async () => {
   mySharesDialogVisible.value = true
