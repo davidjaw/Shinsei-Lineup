@@ -15,6 +15,10 @@ export function useActiveProfile() {
   const { ownedHeroes, ownedSkills, showOwnedOnly } = useInventory()
   const { heroes, skills } = useData()
 
+  // Accept either JP key (canonical, stable) or CHT name (fallback for
+  // override-added entities with name_jp = null). Legacy Supabase rows from
+  // before the pipeline emitted null may contain `""` keys — those naturally
+  // miss both clauses and get filtered out by the `.filter(Boolean)` below.
   const findHero = (key: string): Hero | undefined =>
     heroes.value.find(h => h.name_jp === key || h.name === key)
   const findSkill = (key: string): Skill | undefined =>

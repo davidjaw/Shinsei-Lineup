@@ -1132,8 +1132,11 @@ const { heroes, skills } = useData()
 const restoreFromBlob = (data: ShareableData) => {
   const findHeroByKey = (key: string) => heroes.value.find(h => h.name_jp === key || h.name === key)
   const findSkillByKey = (key: string) => skills.value.find(s => s.name_jp === key || s.name === key)
+  // Drop empty strings — legacy Supabase rows from before the pipeline
+  // emitted `name_jp = null` for override-added skills may contain `""` keys
+  // that find nothing and would otherwise survive via the `?? k` fallback.
   const toCht = <T extends { name: string }>(arr: string[], finder: (k: string) => T | undefined): string[] =>
-    arr.map(k => finder(k)?.name ?? k)
+    arr.map(k => finder(k)?.name ?? k).filter(Boolean)
 
   if (data.inventory) ownedHeroes.value = toCht(data.inventory, findHeroByKey)
   if (data.inv_h) ownedHeroes.value = toCht(data.inv_h, findHeroByKey)

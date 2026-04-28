@@ -67,7 +67,11 @@ def deep_merge(base: dict, override: dict) -> dict:
 
 def _skill_stub_defaults(clean: dict) -> dict:
     """Fill in default fields for an added/replaced skill entry."""
-    clean.setdefault("name_jp", "")
+    # name_jp = None for override-added skills means "no JP source key" — the
+    # frontend's CHT⇄JP fallback (`?? cht`, `s.name === key`) only fires on
+    # nullish, so emitting "" would defeat both legs and write empty keys to
+    # user profiles. None is the honest "absent" sentinel.
+    clean.setdefault("name_jp", None)
     clean.setdefault("vars", {})
     clean.setdefault("commander_description", "")
     clean.setdefault("source_hero", "")
