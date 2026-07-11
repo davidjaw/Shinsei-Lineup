@@ -650,8 +650,8 @@ def build_heroes(
         name = ht.get("name", jp)
         faction = ht.get("faction", h.get("faction", ""))
         clan = ht.get("clan", h.get("clan", ""))
-        cost = int(h.get("cost", 0))
-        rarity = int(h.get("rarity", 0))
+        cost = int(h.get("cost") or 0)
+        rarity = int(h.get("rarity") or 0)
 
         if CFG_AUTHORITATIVE and cfg:
             if cfg.get("name_zh_hant"):

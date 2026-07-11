@@ -37,12 +37,26 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 
 from paths import (
-    CRAWL_CACHE_DIR, HERO_INDEX_CACHE,
+    CRAWL_CACHE_DIR,
     HEROES_CRAWLED, SKILLS_CRAWLED, ASSEMBLY_CRAWLED, BINGXUE_CRAWLED,
     SKILLS_CANONICAL, TRAITS_CANONICAL, BINGXUE_CANONICAL,
+    STAGING_DIR, STAGING_CACHE_DIR,
+    STAGING_HEROES, STAGING_SKILLS, STAGING_ASSEMBLY, STAGING_BINGXUE,
 )
 
-DEFAULT_INDEX_URL = "https://game8.jp/nobunaga-shinsen/737773"
+# Active cache dir — crawl() repoints this to the staging cache in --staging
+# mode so a staging crawl never reads or writes the live cache. Index caches
+# are per-URL files inside it (like the detail cache).
+_cache_dir = CRAWL_CACHE_DIR
+
+# Hero index sources, in priority order. First = primary (武将一覧: all tiers +
+# ★-based rarity). The rest are supplementary ranking pages that contribute
+# only net-new heroes (see extract_ranking_list). Merged/deduped by detail id.
+DEFAULT_INDEX_URLS = [
+    "https://game8.jp/nobunaga-shinsen/737773",  # 武将一覧 (primary)
+    "https://game8.jp/nobunaga-shinsen/737771",  # 最強武将ランキング (supplementary, 5★-only)
+]
+DEFAULT_INDEX_URL = DEFAULT_INDEX_URLS[0]  # kept for back-compat
 DEFAULT_TIMEOUT = 15
 
 # JP skill type → normalized key
@@ -96,7 +110,7 @@ def crawl_delay():
 
 def _detail_cache_path(url: str) -> Path:
     slug = urlparse(url).path.strip("/").replace("/", "_")
-    return CRAWL_CACHE_DIR / f"{slug}.json"
+    return _cache_dir / f"{slug}.json"
 
 
 def load_detail_cache(url: str) -> dict | None:
@@ -107,20 +121,26 @@ def load_detail_cache(url: str) -> dict | None:
 
 
 def save_detail_cache(url: str, data: dict):
-    CRAWL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _cache_dir.mkdir(parents=True, exist_ok=True)
     path = _detail_cache_path(url)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
 
 
-def load_index() -> list[dict] | None:
-    if HERO_INDEX_CACHE.exists():
-        return json.loads(HERO_INDEX_CACHE.read_text("utf-8"))
+def _index_cache_path(url: str) -> Path:
+    slug = urlparse(url).path.strip("/").replace("/", "_")
+    return _cache_dir / f"_index_{slug}.json"
+
+
+def load_index(url: str) -> list[dict] | None:
+    path = _index_cache_path(url)
+    if path.exists():
+        return json.loads(path.read_text("utf-8"))
     return None
 
 
-def save_index(heroes: list[dict]):
-    CRAWL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    HERO_INDEX_CACHE.write_text(json.dumps(heroes, ensure_ascii=False, indent=2), "utf-8")
+def save_index(url: str, heroes: list[dict]):
+    _cache_dir.mkdir(parents=True, exist_ok=True)
+    _index_cache_path(url).write_text(json.dumps(heroes, ensure_ascii=False, indent=2), "utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +239,61 @@ def _parse_bracket_skills(text: str) -> dict:
     return data
 
 
+def extract_ranking_list(soup: BeautifulSoup, base_url: str) -> list[dict]:
+    """Extract heroes from a ranking page (最強武将ランキング).
+
+    The bracket-table parser (extract_hero_list) finds nothing here: tier tables
+    are portrait links only, and the おすすめ武将 tables have 3-td rows. Instead
+    we enumerate portrait links directly — a hero's <img> carries the CSS class
+    'img-shadow' and its alt is the hero name; article thumbnails lack that class
+    (their alt is a headline or 'アイコン'). Rarity is hard-set to 5: ranking
+    pages list SR/5★ heroes only and expose no ★ glyphs, and rarity is available
+    nowhere else for the net-new heroes this page contributes.
+    """
+    heroes: dict[str, dict] = {}
+    for a in soup.find_all("a", href=re.compile(r"/nobunaga-shinsen/\d+")):
+        img = a.find("img")
+        if not img or "img-shadow" not in (img.get("class") or []):
+            continue
+        name = (img.get("alt") or "").strip()
+        if not name or name == "アイコン":
+            continue
+        detail_url = urljoin(base_url, a["href"])
+        heroes.setdefault(detail_url, {
+            "name": name,
+            "detail_url": detail_url,
+            "portrait": img.get("data-src") or img.get("src"),
+            "rarity": 5,
+        })
+    return list(heroes.values())
+
+
+def extract_hero_index(soup: BeautifulSoup, base_url: str) -> list[dict]:
+    """Parse a hero index page, auto-detecting its format.
+
+    武将一覧 pages yield bracket-table rows (rich fields); ranking pages yield
+    nothing there, so we fall back to portrait-link enumeration.
+    """
+    heroes = extract_hero_list(soup, base_url)
+    return heroes if heroes else extract_ranking_list(soup, base_url)
+
+
+def _detail_id(url: str) -> str:
+    m = re.search(r"/nobunaga-shinsen/(\d+)", url or "")
+    return m.group(1) if m else (url or "")
+
+
+def merge_index(sources: list[list[dict]]) -> list[dict]:
+    """Union hero lists in priority order (primary first), deduped by detail-page
+    id. The earliest source wins on conflicts; later sources add net-new heroes.
+    """
+    merged: dict[str, dict] = {}
+    for heroes in sources:
+        for h in heroes:
+            merged.setdefault(_detail_id(h.get("detail_url", "")), h)
+    return list(merged.values())
+
+
 # ---------------------------------------------------------------------------
 # Stage 2: Detail page
 # ---------------------------------------------------------------------------
@@ -227,6 +302,37 @@ STAT_MAP = {
     "武勇": "val", "知略": "int", "統率": "lea",
     "速度": "spd", "政務": "pol", "魅力": "cha",
 }
+
+# Detail-page header table: label <th> rows alternate with value <td> rows.
+# Used to backfill cost/faction/clan/gender for ranking-page heroes that the
+# index gave no bracket fields for.
+INDEX_FIELD_MAP = {"コスト": "cost", "性別": "gender", "勢力": "faction", "家門": "clan"}
+
+
+def _extract_index_fields(soup: BeautifulSoup) -> dict:
+    """Pull cost/gender/faction/clan from the detail-page header table.
+
+    Layout: a <th>コスト</th> row of labels is immediately followed by a <td>
+    value row; labels and values align left-to-right (the hero-name <th> is not
+    a known label, so it is skipped). Returns only the fields it finds.
+    """
+    th = next((t for t in soup.find_all("th") if t.get_text(strip=True) == "コスト"), None)
+    table = th.find_parent("table") if th else None
+    if not table:
+        return {}
+
+    rows = table.find_all("tr")
+    fields: dict = {}
+    for i in range(len(rows) - 1):
+        labels = [c.get_text(strip=True) for c in rows[i].find_all("th")
+                  if c.get_text(strip=True) in INDEX_FIELD_MAP]
+        if not labels:
+            continue
+        values = [c.get_text(strip=True) for c in rows[i + 1].find_all("td")]
+        for label, value in zip(labels, values):
+            key = INDEX_FIELD_MAP[label]
+            fields[key] = int(value) if key == "cost" and value.isdigit() else value
+    return fields
 
 
 def extract_hero_detail(soup: BeautifulSoup, html: str, hero_name: str) -> dict:
@@ -264,6 +370,12 @@ def extract_hero_detail(soup: BeautifulSoup, html: str, hero_name: str) -> dict:
     bingxue = _extract_bingxue(html)
     if bingxue:
         detail["_raw_bingxue"] = bingxue
+
+    # Backfill index fields (cost/faction/clan/gender) for heroes whose index
+    # page carried none — merged fill-missing in crawl() so list values win.
+    index_fields = _extract_index_fields(soup)
+    if index_fields:
+        detail["_index_fields"] = index_fields
 
     return detail
 
@@ -656,9 +768,20 @@ def sync_canonical(hero_list: list[dict], skills_db: dict[str, dict], bingxue_db
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+def _apply_detail(hero: dict, detail: dict):
+    """Merge a detail dict into a hero. Detail fields (stats/traits/skills, plus
+    the intentional skill-name override) win, except _index_fields, which only
+    backfill cost/faction/clan/gender the index page left empty."""
+    index_fields = detail.get("_index_fields", {})
+    hero.update({k: v for k, v in detail.items() if k != "_index_fields"})
+    for key, value in index_fields.items():
+        if not hero.get(key):
+            hero[key] = value
+
+
 def crawl(
     *,
-    index_url: str = DEFAULT_INDEX_URL,
+    index_urls: list[str] | None = None,
     do_detail: bool = False,
     limit: int | None = None,
     name_filter: str | None = None,
@@ -669,23 +792,52 @@ def crawl(
     skills_path: str = str(SKILLS_CRAWLED),
     assembly_path: str = str(ASSEMBLY_CRAWLED),
     bingxue_path: str = str(BINGXUE_CRAWLED),
+    staging: bool = False,
 ):
-    index_url = validate_url(index_url)
+    global _cache_dir
 
-    # --- Stage 1: Index ---
+    index_urls = [validate_url(u) for u in (index_urls or DEFAULT_INDEX_URLS)]
+    _cache_dir = STAGING_CACHE_DIR if staging else CRAWL_CACHE_DIR
+
+    if staging:
+        # Isolated staging run: own cache + own outputs, no canonical sync.
+        # merge_crawl.py clears the staging cache after a successful merge,
+        # so each update cycle fetches fresh pages while interrupted staging
+        # runs can still resume from the staging cache.
+        heroes_path = str(STAGING_HEROES)
+        skills_path = str(STAGING_SKILLS)
+        assembly_path = str(STAGING_ASSEMBLY)
+        bingxue_path = str(STAGING_BINGXUE)
+        tqdm.write(f"[staging] outputs → {STAGING_DIR}/, cache → {STAGING_CACHE_DIR}/")
+
+    # --- Stage 1: Index (union of all sources, primary first) ---
+    # Primary source failure is fatal; supplementary sources are best-effort.
     use_cached_index = not force and not refresh_index
-    heroes = load_index() if use_cached_index else None
+    sources = []
+    for idx, url in enumerate(index_urls):
+        page_heroes = load_index(url) if use_cached_index else None
+        if page_heroes is not None:
+            tqdm.write(f"[index] {len(page_heroes)} heroes from cache: {url}")
+        else:
+            tqdm.write(f"[index] Fetching hero list: {url}")
+            try:
+                soup, _ = fetch_page(url, timeout=timeout)
+                page_heroes = extract_hero_index(soup, url)
+            except Exception as e:
+                if idx == 0:
+                    raise
+                tqdm.write(f"[warn] supplementary source failed: {url} — {e}")
+                continue
+            tqdm.write(f"[index] Found {len(page_heroes)} heroes")
+            if not page_heroes:
+                tqdm.write(f"[warn] 0 heroes from {url} — page format may have changed")
+            else:
+                save_index(url, page_heroes)
+        sources.append(page_heroes)
 
-    if heroes:
-        tqdm.write(f"[index] Loaded {len(heroes)} heroes from {HERO_INDEX_CACHE}")
-    else:
-        tqdm.write(f"[index] Fetching hero list: {index_url}")
-        soup, _ = fetch_page(index_url, timeout=timeout)
-        heroes = extract_hero_list(soup, index_url)
-        tqdm.write(f"[index] Found {len(heroes)} heroes")
-        if heroes:
-            save_index(heroes)
-            tqdm.write(f"[index] Saved → {HERO_INDEX_CACHE}")
+    heroes = merge_index(sources)
+    if len(index_urls) > 1:
+        tqdm.write(f"[index] Merged {len(heroes)} unique heroes from {len(index_urls)} sources")
 
     if not heroes:
         tqdm.write("[error] No heroes found. Page structure may have changed.")
@@ -717,14 +869,14 @@ def crawl(
             if not force:
                 cached = load_detail_cache(url)
                 if cached:
-                    hero.update(cached)
+                    _apply_detail(hero, cached)
                     skipped += 1
                     continue
 
             try:
                 detail_soup, detail_html = fetch_page(url, timeout=timeout)
                 detail = extract_hero_detail(detail_soup, detail_html, hero["name"])
-                hero.update(detail)
+                _apply_detail(hero, detail)
                 save_detail_cache(url, detail)
             except Exception as e:
                 failed.append((hero["name"], str(e)))
@@ -746,15 +898,23 @@ def crawl(
     tqdm.write(f"[done] {len(assembly_db)} assembly skills → {assembly_path}")
     tqdm.write(f"[done] {len(bingxue_db)} bingxue options → {bingxue_path}")
 
-    # Sync raw sections into canonical files
-    sync_canonical(hero_list, skills_db, bingxue_db)
+    # Sync raw sections into canonical files (skipped in staging mode —
+    # merge_crawl.py syncs only the approved subset after review)
+    if staging:
+        tqdm.write("[staging] canonical sync skipped — review with: uv run script/review_server.py")
+    else:
+        sync_canonical(hero_list, skills_db, bingxue_db)
 
     return hero_list, skills_db, assembly_db, bingxue_db
 
 
 def main():
     p = argparse.ArgumentParser(description="Crawl hero data from game8.jp")
-    p.add_argument("--url", default=DEFAULT_INDEX_URL, help="Hero list page URL")
+    p.add_argument(
+        "--url", nargs="+", default=DEFAULT_INDEX_URLS,
+        help="Hero index page URL(s), primary first. Extra pages (e.g. the "
+             "最強武将ランキング) are unioned in, contributing net-new heroes only.",
+    )
     p.add_argument("--heroes-out", default=str(HEROES_CRAWLED), help="Heroes YAML output path")
     p.add_argument("--skills-out", default=str(SKILLS_CRAWLED), help="Skills YAML output path")
     p.add_argument("--assembly-out", default=str(ASSEMBLY_CRAWLED), help="Assembly skills YAML output path")
@@ -764,11 +924,16 @@ def main():
     p.add_argument("--name", help="Filter heroes by name (substring match)")
     p.add_argument("--refresh-index", action="store_true", help="Re-fetch index page (keep detail cache)")
     p.add_argument("--force", action="store_true", help="Ignore all cache")
+    p.add_argument(
+        "--staging", action="store_true",
+        help="Crawl into data/staging/ with an isolated cache and skip canonical "
+             "sync; review with review_server.py before merging",
+    )
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, help="Request timeout in seconds")
     args = p.parse_args()
 
     crawl(
-        index_url=args.url,
+        index_urls=args.url,
         do_detail=args.detail,
         limit=args.limit,
         name_filter=args.name,
@@ -779,6 +944,7 @@ def main():
         skills_path=args.skills_out,
         assembly_path=args.assembly_out,
         bingxue_path=args.bingxue_out,
+        staging=args.staging,
     )
 
 

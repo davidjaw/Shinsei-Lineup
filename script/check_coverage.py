@@ -116,6 +116,91 @@ def check() -> list[str]:
                     f"in {scope}_crawled.yaml (typo? or crawl hasn't picked up this entry yet)"
                 )
 
+    # ---- Reconcile guards (P3) --------------------------------------------
+    errors.extend(_check_reconcile_guards(overrides, crawled_skills, crawled_hero_names))
+    return errors
+
+
+def _check_reconcile_guards(
+    overrides: dict, crawled_skills: set, crawled_hero_names: set,
+    cfg_lookups: tuple | None = None,
+) -> list[str]:
+    """Two invariants that keep the override↔crawl reconcile honest.
+
+    (a) No `_action: add` override may resolve to a JP name already in the
+        crawled file — an UN-reconciled duplicate that would ship a second
+        entry (caught here before the build's duplicate-name check). JP is
+        resolved three ways: identical key, `_name_jp`, and — for the
+        divergent-name case (CHT≠JP, the raison d'être of this subsystem) —
+        cfg's `name_ja`. Such an override should be re-keyed to `modify` (run
+        `merge_crawl.py backfill`).
+        KNOWN LIMIT: a pure-OCR-typo add whose name is neither identical to the
+        crawled JP nor present in cfg stays uncatchable here — nothing links it
+        to its crawled twin until a reviewer confirms the link in the UI.
+    (b) A `modify` override carrying `aliases` (lineup-key stability: old CHT
+        names preserved so existing lineups still resolve) must be internally
+        consistent — no alias may equal the entry's own `name` or its key, and
+        aliases must be distinct non-empty strings.
+    """
+    if cfg_lookups is None:
+        try:
+            from build_frontend_data import _load_cfg_lookups
+            cfg_lookups = _load_cfg_lookups()
+        except Exception:
+            cfg_lookups = ({}, {})
+    cfg = {"skills": cfg_lookups[0], "heroes": cfg_lookups[1]}
+
+    errors: list[str] = []
+    crawled = {"skills": crawled_skills, "heroes": crawled_hero_names}
+    for scope in ("skills", "heroes"):
+        section = overrides.get(scope, {}) or {}
+        if not isinstance(section, dict):
+            continue
+        base = crawled[scope]
+        for key, entry in section.items():
+            if not isinstance(entry, dict):
+                continue
+            # (a) un-reconciled duplicate
+            if entry.get("_action", "modify") == "add":
+                jp = entry.get("_name_jp") or key
+                cfg_ja = (cfg[scope].get(key) or {}).get("name_ja")
+                if jp in base:
+                    errors.append(
+                        f"Override [{scope}] '{key}' is _action:add but its JP name "
+                        f"'{jp}' is already in {scope}_crawled.yaml — un-reconciled "
+                        f"duplicate (re-key to modify, e.g. `merge_crawl.py backfill`)."
+                    )
+                elif cfg_ja and cfg_ja in base:
+                    errors.append(
+                        f"Override [{scope}] '{key}' is _action:add but cfg maps it to "
+                        f"JP '{cfg_ja}' which is already in {scope}_crawled.yaml — "
+                        f"un-reconciled duplicate (run `merge_crawl.py backfill`)."
+                    )
+            # (b) alias internal consistency
+            errors.extend(_check_alias_consistency(scope, key, entry))
+    return errors
+
+
+def _check_alias_consistency(scope: str, key: str, entry: dict) -> list[str]:
+    aliases = entry.get("aliases")
+    if not aliases:
+        return []
+    if isinstance(aliases, str):
+        aliases = [aliases]
+    errors: list[str] = []
+    name = entry.get("name")
+    seen: set[str] = set()
+    for a in aliases:
+        if not isinstance(a, str) or not a.strip():
+            errors.append(f"Override [{scope}] '{key}' has an empty/non-string alias")
+        elif a == name or a == key:
+            errors.append(
+                f"Override [{scope}] '{key}' aliases its own "
+                f"{'name' if a == name else 'key'} '{a}' (redundant/inconsistent)"
+            )
+        elif a in seen:
+            errors.append(f"Override [{scope}] '{key}' has duplicate alias '{a}'")
+        seen.add(a)
     return errors
 
 

@@ -35,6 +35,17 @@ TRAITS_CRAWLED = DATA_DIR / "traits_crawled.yaml"
 ASSEMBLY_CRAWLED = DATA_DIR / "assembly_skills_crawled.yaml"
 BINGXUE_CRAWLED = DATA_DIR / "bingxue_crawled.yaml"
 
+# Staging crawl (crawl --staging → diff_crawl → review_server → merge_crawl).
+# Isolated from live data: own output dir + own page cache. merge_crawl clears
+# both on success so the next update cycle starts from fresh pages.
+STAGING_DIR = DATA_DIR / "staging"
+STAGING_CACHE_DIR = DATA_DIR / ".crawl_cache_staging"
+STAGING_HEROES = STAGING_DIR / "heroes_crawled.yaml"
+STAGING_SKILLS = STAGING_DIR / "skills_crawled.yaml"
+STAGING_ASSEMBLY = STAGING_DIR / "assembly_skills_crawled.yaml"
+STAGING_BINGXUE = STAGING_DIR / "bingxue_crawled.yaml"
+CRAWL_DIFF_JSON = BUILD_DIR / "crawl_diff.json"
+
 # LLM outputs
 HEROES_TRANSLATED = DATA_DIR / "heroes_translated.yaml"
 
@@ -53,9 +64,6 @@ SKILLS_JSON = BUILD_DIR / "skills.json"
 STATUSES_JSON = BUILD_DIR / "statuses.json"
 BINGXUE_JSON = BUILD_DIR / "bingxue.json"
 TRANSLATION_FAILURES_JSON = BUILD_DIR / "translation_failures.json"
-
-# Crawl cache
-HERO_INDEX_CACHE = CRAWL_CACHE_DIR / "_hero_index.json"
 
 # ---------------------------------------------------------------------------
 # Bingxue (兵學) direction mapping — shared constant, NOT a path.

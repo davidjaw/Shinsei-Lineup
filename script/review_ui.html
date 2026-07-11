@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Crawl Diff Review</title>
+<style>
+:root {
+  --bg-0:#0A0D12; --bg-1:#10141B; --bg-2:#161B24; --bg-3:#1B2129;
+  --bg-4:#242C38; --bg-hover:#212836;
+  --border:#29313D; --border-strong:#3C4653; --border-subtle:#1E252F;
+  --text-1:#F2F5FA; --text-2:#C7CFDB; --text-3:#8B95A4; --text-4:#59626F;
+  --add:#42C08A;    --add-tint:rgba(66,192,138,.13);
+  --remove:#F16A6A; --remove-tint:rgba(241,106,106,.13);
+  --change:#E2B24C; --change-tint:rgba(226,178,76,.13);
+  --warn:#ED9A54;   --warn-tint:rgba(237,154,84,.15);
+  --ov:#A98CFA;     --ov-tint:rgba(169,140,250,.14);
+  --accent:#5C8DEF; --accent-tint:rgba(92,141,239,.15);
+  --accent-ring:rgba(92,141,239,.32); --shadow:0 6px 24px -10px rgba(0,0,0,.6);
+  --del-hl:rgba(241,106,106,.16); --del-text:#F4ADAD;
+  --ins-hl:rgba(66,192,138,.16); --ins-text:#8FE0B7;
+  --sans:-apple-system,"Segoe UI","PingFang TC","Hiragino Sans","Noto Sans CJK TC","Microsoft JhengHei","Yu Gothic",sans-serif;
+  --mono:"SF Mono","Cascadia Code","JetBrains Mono",ui-monospace,Consolas,"Noto Sans Mono CJK TC",monospace;
+}
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { margin:0; background:var(--bg-0); color:var(--text-2);
+       font:13.5px/1.4 var(--sans); }
+button { font:inherit; cursor:pointer; }
+
+/* ---------- frame ---------- */
+#topbar { position:fixed; top:0; left:0; right:0; height:56px; z-index:30;
+  background:var(--bg-2); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:16px; padding:0 24px; }
+#topbar .mark { width:22px; height:22px; border-radius:6px; flex:none;
+  background:linear-gradient(135deg,var(--accent),var(--ov)); }
+#topbar h1 { font-size:14px; font-weight:600; color:var(--text-1); margin:0; }
+#topbar .meta { font-size:12px; color:var(--text-3); }
+#topbar .tally { margin-left:auto; display:flex; gap:8px; }
+.chip { font:600 11px var(--mono); padding:3px 8px; border-radius:8px; }
+.chip.add { color:var(--add); background:var(--add-tint); }
+.chip.mod { color:var(--change); background:var(--change-tint); }
+.chip.del { color:var(--remove); background:var(--remove-tint); }
+.chip.col { color:var(--ov); background:var(--ov-tint); }
+
+#rail { position:fixed; top:56px; left:0; bottom:64px; width:220px; z-index:20;
+  padding:16px 12px; overflow-y:auto; background:var(--bg-0); }
+.rail-row { display:flex; align-items:center; gap:8px; width:100%;
+  height:40px; padding:0 12px; border:0; border-radius:8px; text-align:left;
+  background:none; color:var(--text-2); font-size:13px; position:relative; }
+.rail-row:hover { background:var(--bg-hover); }
+.rail-row.active { background:var(--bg-3); color:var(--text-1); }
+.rail-row.active::before { content:""; position:absolute; left:0; top:8px;
+  bottom:8px; width:2px; border-radius:2px; background:var(--accent); }
+.rail-row.ovrail.active::before { background:var(--ov); }
+.rail-row .micro { font:10px var(--mono); opacity:.6; margin-left:2px; }
+.rail-row .micro .a{color:var(--add)} .rail-row .micro .m{color:var(--change)}
+.rail-row .micro .r{color:var(--remove)}
+.badge { margin-left:auto; min-width:24px; text-align:center;
+  font:600 11px var(--mono); padding:2px 6px; border-radius:8px;
+  background:var(--bg-4); color:var(--text-2); }
+.badge.zero { background:none; color:var(--text-4); }
+.badge.ok { background:var(--add-tint); color:var(--add); }
+.rail-div { height:1px; background:var(--border-subtle); margin:12px 8px; }
+
+#content { margin:56px 0 64px 220px; padding:24px 32px 48px;
+  background:var(--bg-1); min-height:calc(100vh - 120px); }
+#col { max-width:1080px; margin:0 auto; }
+
+/* ---------- sections ---------- */
+section { margin-bottom:32px; scroll-margin-top:72px; }
+.sec-head { position:sticky; top:56px; z-index:10; background:var(--bg-1);
+  display:flex; align-items:center; gap:12px; padding:12px 0 8px;
+  border-bottom:1px solid var(--border-subtle); margin-bottom:12px; }
+.sec-head h2 { font-size:15px; font-weight:600; color:var(--text-1); margin:0; }
+.sec-head .pills { font:11px var(--mono); color:var(--text-3); }
+.sec-head .bulk { margin-left:auto; display:flex; gap:8px; }
+.ghost { background:none; border:1px solid var(--border); border-radius:8px;
+  color:var(--text-3); font-size:12px; padding:4px 10px; }
+.ghost:hover { border-color:var(--border-strong); color:var(--text-2); }
+.grp-head { display:flex; align-items:center; gap:8px; margin:16px 0 8px;
+  font:600 11px var(--mono); text-transform:uppercase; letter-spacing:.5px; }
+.grp-head.added { color:var(--add); } .grp-head.changed { color:var(--change); }
+.grp-head.removed { color:var(--warn); }
+.grp-head .exp { margin-left:auto; }
+.warn-banner { display:flex; gap:10px; align-items:flex-start;
+  background:var(--warn-tint); border:1px solid var(--warn); border-radius:10px;
+  padding:12px 16px; margin:8px 0 12px; color:var(--text-1); font-size:13px; }
+
+/* ---------- entry cards ---------- */
+.card { background:var(--bg-3); border:1px solid var(--border);
+  border-radius:10px; margin-bottom:12px; position:relative; overflow:hidden; }
+.card::before { content:""; position:absolute; left:0; top:0; bottom:0;
+  width:3px; background:var(--add); }
+.card.rejected::before { background:var(--remove); }
+.card.g-removed::before { width:4px; background:var(--warn); }
+.card.g-removed.approved::before { background:var(--remove); }
+.card:hover { border-color:var(--border-strong);
+  box-shadow:0 1px 0 rgba(0,0,0,.4), 0 4px 16px -6px rgba(0,0,0,.5); }
+.card-head { display:flex; align-items:center; gap:10px; height:48px;
+  padding:0 16px; cursor:pointer; }
+.dot { width:8px; height:8px; border-radius:50%; flex:none; }
+.g-added .dot { background:var(--add); } .g-changed .dot { background:var(--change); }
+.g-removed .dot { background:var(--warn); }
+.card-head .name { font-size:14px; font-weight:600; color:var(--text-1);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card-head .sub { font:12px var(--mono); color:var(--text-3); }
+.card.rejected .card-body { opacity:.55; filter:saturate(.5); }
+.seg { display:flex; margin-left:auto; flex:none; border:1px solid var(--border);
+  border-radius:8px; overflow:hidden; }
+.seg button { height:28px; padding:0 12px; border:0; background:none;
+  color:var(--text-3); font-size:12px; font-weight:600; }
+.seg button:hover { background:var(--bg-hover); }
+.seg button.on-approve { background:var(--add-tint); color:var(--add); }
+.seg button.on-reject { background:var(--remove-tint); color:var(--remove); }
+.chev { color:var(--text-4); flex:none; transition:transform .15s; font-size:11px; }
+.card.open .chev { transform:rotate(90deg); }
+.card-body { display:none; border-top:1px solid var(--border-subtle);
+  padding:16px; }
+.card.open .card-body { display:block; }
+
+/* ---------- value rendering ---------- */
+.kv { font-size:13px; }
+.kv-row { display:flex; gap:12px; padding:3px 0; }
+.kv-row .k { flex:none; width:140px; font:12px var(--mono); color:var(--text-3);
+  padding-top:2px; }
+.kv-row .v { min-width:0; color:var(--text-2); word-break:break-word; }
+.kv-nest { border-left:1px solid var(--border-subtle); margin-left:6px;
+  padding-left:16px; }
+.dim .kv-row .v { color:var(--text-3); }
+pre.raw { margin:0; font:12px/1.5 var(--mono); color:var(--text-2);
+  background:var(--bg-4); border-radius:10px; padding:12px;
+  white-space:pre-wrap; word-break:break-word; }
+
+.field-row { display:flex; gap:12px; padding:6px 0; align-items:flex-start; }
+.field-row .k { flex:none; width:140px; font:12px var(--mono);
+  color:var(--text-3); padding-top:3px; }
+.field-row .v { min-width:0; flex:1; }
+.inline-diff { font:13px var(--mono); }
+.inline-diff .oldv { background:var(--del-hl); color:var(--del-text);
+  padding:1px 7px; border-radius:6px; }
+.inline-diff .arr { color:var(--text-4); margin:0 8px; }
+.inline-diff .newv { background:var(--ins-hl); color:var(--ins-text);
+  padding:1px 7px; border-radius:6px; }
+.blk { background:var(--bg-4); border-radius:10px; padding:12px 12px 12px 16px;
+  position:relative; margin-bottom:8px; font-size:13.5px; line-height:1.7;
+  color:var(--text-2); word-break:break-word; }
+.blk::before { content:""; position:absolute; left:0; top:0; bottom:0;
+  width:3px; border-radius:3px 0 0 3px; }
+.blk.old::before { background:var(--remove); } .blk.new::before { background:var(--add); }
+.blk .tag { font:600 10px var(--mono); letter-spacing:.5px; margin-right:8px; }
+.blk.old .tag { color:var(--remove); } .blk.new .tag { color:var(--add); }
+.blk del { text-decoration:none; background:var(--del-hl); color:var(--del-text);
+  border-radius:3px; }
+.blk ins { text-decoration:none; background:var(--ins-hl); color:var(--ins-text);
+  border-radius:3px; }
+.tok { font:11.5px var(--mono); background:var(--bg-3); border:1px solid var(--border);
+  border-radius:6px; padding:0 5px; white-space:nowrap; }
+.tok-var { color:var(--accent); } .tok-status { color:var(--ov); }
+.tok-scale, .tok-dmg, .tok-stat { color:var(--change); }
+.mini { background:var(--bg-4); border-radius:10px; padding:10px 12px; }
+.mini .note { font:10px var(--mono); color:var(--text-4); margin-bottom:6px; }
+.mini .mrow { display:flex; gap:12px; font:12.5px var(--mono); padding:2px 0; }
+.mini .mrow .mk { width:110px; flex:none; color:var(--text-3); }
+.mini .mrow.same { color:var(--text-3); }
+
+/* ---------- override collisions ---------- */
+.ovcard { border-color:rgba(163,113,247,.35); }
+.ovcard::before { background:var(--ov); }
+.ovcard .card-head { cursor:default; }
+.ovnote { font-size:12.5px; color:var(--text-3); margin-bottom:12px; }
+.delbtn { background:none; border:1px solid var(--border); border-radius:8px;
+  color:var(--remove); font-size:12px; padding:4px 10px; margin-left:auto; flex:none; }
+.delbtn:hover { border-color:var(--remove); background:var(--remove-tint); }
+.delbtn.armed { background:var(--remove); color:#fff; border-color:var(--remove); }
+.ovdeleted { display:flex; align-items:center; gap:12px; padding:12px 16px;
+  color:var(--text-3); }
+.ovdeleted .line { text-decoration:line-through; }
+.ovdeleted a { color:var(--accent); cursor:pointer; }
+
+.ovfield { border:1px solid var(--border-subtle); border-radius:10px;
+  padding:12px; margin-bottom:12px; }
+.ovfield-head { display:flex; align-items:center; margin-bottom:10px; }
+.ovfield-head .k { font:600 12px var(--mono); color:var(--text-1); }
+.ovfield-head .custom-pill { font:600 10px var(--mono); color:var(--accent);
+  background:var(--accent-tint); border-radius:6px; padding:2px 8px;
+  margin-left:10px; display:none; }
+.ovfield.custom .custom-pill { display:inline; }
+.ovfield-head .actions { margin-left:auto; display:flex; gap:8px; }
+
+.vpair { display:flex; gap:12px; }
+.vcard { flex:1; min-width:0; min-height:64px; background:var(--bg-4);
+  border:1.5px solid var(--border); border-radius:10px; cursor:pointer;
+  overflow:hidden; position:relative; opacity:.6; transition:opacity .12s; }
+.vcard:hover { border-color:var(--border-strong); opacity:1; }
+.vcard.sel { opacity:1; }
+.vcard.v-ov.sel { border-color:var(--ov); background:var(--ov-tint); }
+.vcard.v-up.sel { border-color:var(--add); background:var(--add-tint); }
+.vcard.sel::after { content:""; position:absolute; left:0; right:0; top:0; height:2px; }
+.vcard.v-ov.sel::after { background:var(--ov); }
+.vcard.v-up.sel::after { background:var(--add); }
+.vhead { display:flex; align-items:center; height:28px; padding:0 10px;
+  font:600 10px var(--mono); letter-spacing:.6px; color:var(--text-3); }
+.vdot { width:10px; height:10px; border-radius:50%; margin-left:auto;
+  border:1.5px solid var(--text-4); position:relative; flex:none; }
+.vcard.sel .vdot { border:0; }
+.vcard.v-ov.sel .vdot { background:var(--ov); }
+.vcard.v-up.sel .vdot { background:var(--add); }
+.vcard.sel .vdot::after { content:"✓"; position:absolute; inset:0;
+  color:#fff; font-size:8px; line-height:10px; text-align:center; }
+.vbody { padding:0 10px 10px; font-size:13px; line-height:1.7;
+  word-break:break-word; max-height:180px; overflow-y:auto; }
+.vfoot { padding:0 10px 8px; text-align:right; }
+.copybtn { background:none; border:1px solid var(--border); border-radius:6px;
+  color:var(--accent); font-size:11px; padding:1px 8px; }
+.copybtn:hover { border-color:var(--accent); }
+
+.ovfield .custom-zone { display:none; margin-top:10px; }
+.ovfield.custom .vpair { display:none; }
+.ovfield.custom .custom-zone { display:block; }
+.refchips { display:flex; gap:8px; margin-bottom:8px; }
+.refchip { flex:1; min-width:0; display:flex; align-items:center; gap:8px;
+  height:28px; padding:0 10px; background:var(--bg-4); border:1px solid var(--border);
+  border-radius:8px; font:11px var(--mono); color:var(--text-3); cursor:pointer;
+  white-space:nowrap; overflow:hidden; }
+.refchip:hover { border-color:var(--border-strong); color:var(--text-2); }
+.refchip .lb { font-weight:600; flex:none; }
+.refchip .pv { overflow:hidden; text-overflow:ellipsis; }
+textarea { width:100%; min-height:96px; background:var(--bg-4);
+  border:1px solid var(--border); border-radius:10px; padding:12px;
+  color:var(--text-1); font:13px/1.6 var(--mono); resize:vertical; }
+textarea:focus { outline:none; border-color:var(--border-strong);
+  box-shadow:0 0 0 3px var(--accent-ring); }
+.cancel-custom { background:none; border:0; color:var(--text-3); font-size:12px; }
+.cancel-custom:hover { color:var(--text-1); }
+.flash { animation:flash-ring 1s ease-out; }
+@keyframes flash-ring {
+  0% { box-shadow:0 0 0 2px var(--accent); }
+  100% { box-shadow:0 0 0 2px transparent; }
+}
+
+/* ---------- override link bar (added skill/hero cards) ---------- */
+.linkbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  padding:8px 16px; border-top:1px solid var(--border-subtle);
+  background:var(--bg-2); font-size:12px; color:var(--text-3); }
+.linkbar.linked { background:var(--ov-tint); }
+.linkbar .lk-ico { flex:none; opacity:.8; }
+.linkbar .lk-txt { color:var(--text-2); }
+.linkbar .lk-txt.dim, .linkbar .lk-ico.dim { color:var(--text-4); opacity:.6; }
+.linkbar .lk-via { font:10px var(--mono); color:var(--ov);
+  background:var(--ov-tint); border:1px solid rgba(163,113,247,.3);
+  border-radius:6px; padding:1px 6px; }
+.lk-btn { background:none; border:1px solid var(--border); border-radius:7px;
+  color:var(--text-3); font-size:11px; padding:2px 9px; }
+.lk-btn:hover { border-color:var(--border-strong); color:var(--text-2); }
+.lk-btn.lk-x:hover { border-color:var(--remove); color:var(--remove); }
+.lk-sug { background:var(--ov-tint); border:1px solid rgba(163,113,247,.35);
+  border-radius:7px; color:var(--ov); font:600 11px var(--mono); padding:2px 9px; }
+.lk-sug:hover { background:rgba(163,113,247,.22); }
+.lk-new { margin-left:auto; color:var(--text-3); }
+.lk-searchrow { display:flex; gap:8px; width:100%; align-items:center; }
+.lk-input { flex:1; height:28px; background:var(--bg-4);
+  border:1px solid var(--border); border-radius:8px; padding:0 10px;
+  color:var(--text-1); font:13px var(--mono); }
+.lk-input:focus { outline:none; border-color:var(--border-strong);
+  box-shadow:0 0 0 3px var(--accent-ring); }
+.lk-list { display:flex; flex-direction:column; gap:2px; width:100%;
+  max-height:220px; overflow-y:auto; margin-top:2px; }
+.lk-opt { padding:5px 10px; border-radius:7px; cursor:pointer;
+  font:12px var(--mono); color:var(--text-2); background:var(--bg-4); }
+.lk-opt:hover { background:var(--bg-hover); color:var(--text-1); }
+.lk-opt.dim { color:var(--text-4); cursor:default; background:none; }
+/* link-bar layout split: a flex controls row + a full-width reconcile panel */
+.lk-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; width:100%; }
+.lk-reconcile { width:100%; margin-top:12px; padding-top:12px;
+  border-top:1px dashed var(--border-subtle); }
+.lk-rec-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.lk-rec-title { font:600 11.5px var(--mono); color:var(--text-2); }
+.lk-preset { margin-left:auto; background:var(--ov-tint);
+  border:1px solid rgba(163,113,247,.4); border-radius:7px; color:var(--ov);
+  font:600 11px var(--mono); padding:3px 10px; cursor:pointer; }
+.lk-preset:hover { background:rgba(163,113,247,.22); }
+.fld-tag { font:600 9.5px var(--mono); letter-spacing:.03em; text-transform:uppercase;
+  padding:1px 6px; border-radius:5px; margin-left:8px; }
+.fld-tag.t-translation { color:var(--ov); background:var(--ov-tint);
+  border:1px solid rgba(163,113,247,.3); }
+.fld-tag.t-crawl { color:var(--add); background:var(--add-tint);
+  border:1px solid rgba(63,185,80,.3); }
+.fld-tag.t-choice { color:var(--remove); background:var(--remove-tint);
+  border:1px solid rgba(248,81,73,.35); }
+.ovfield.needpick { border-color:var(--remove); }
+.ovfield.needpick .fld-tag.t-choice::after { content:" · 需選擇"; }
+/* reject nudge on a linked added card */
+.reject-nudge { display:none; padding:7px 16px; font-size:12px;
+  color:var(--remove); background:var(--remove-tint);
+  border-top:1px solid rgba(248,81,73,.3); }
+.card.warn-reject .reject-nudge { display:block; }
+
+/* ---------- per-card row controls ---------- */
+.card-check { width:17px; height:17px; flex:none; margin:0; appearance:none;
+  -webkit-appearance:none; border:1.5px solid var(--border-strong);
+  border-radius:5px; background:var(--bg-4); cursor:pointer; position:relative; }
+.card-check:hover { border-color:var(--accent); }
+.card-check:checked { background:var(--accent); border-color:var(--accent); }
+.card-check:checked::after { content:"✓"; position:absolute; inset:0; color:#fff;
+  font-size:11px; line-height:15px; text-align:center; }
+.row-apply { height:28px; padding:0 13px; border:0; border-radius:8px; flex:none;
+  background:var(--accent-tint); color:var(--accent); font-size:12px; font-weight:600; }
+.row-apply:hover:not(:disabled) { background:var(--accent); color:#fff; }
+.row-apply:disabled { background:none; color:var(--text-4); cursor:default; }
+.card.merged { opacity:0; transform:translateY(-6px);
+  transition:opacity .24s ease, transform .24s ease; pointer-events:none; }
+.card-foot { display:none; justify-content:flex-end; align-items:center; gap:8px;
+  padding:10px 16px; border-top:1px solid var(--border-subtle); background:var(--bg-2); }
+.card.open .card-foot { display:flex; }
+.card-foot .row-apply { height:30px; padding:0 16px; }
+
+/* ---------- apply bar ---------- */
+#applybar { position:fixed; bottom:0; left:0; right:0; height:64px; z-index:30;
+  background:var(--bg-2); border-top:1px solid var(--border);
+  box-shadow:0 -8px 24px -12px rgba(0,0,0,.6);
+  display:flex; align-items:center; gap:16px; padding:0 24px; }
+#summary { font:12px var(--mono); color:var(--text-3); }
+#summary b { font-weight:600; }
+#summary .sa { color:var(--add); } #summary .sr { color:var(--remove); }
+#summary .sc { color:var(--accent); } #summary .sd { color:var(--ov); }
+.bar-actions { margin-left:auto; display:flex; align-items:center; gap:10px; }
+.pbtn { height:36px; padding:0 18px; border:0; border-radius:8px;
+  font-size:13.5px; font-weight:600; background:var(--bg-4); color:var(--text-2); }
+.pbtn:hover:not(:disabled) { background:var(--border-strong); color:var(--text-1); }
+.pbtn.primary { background:var(--accent); color:#fff; }
+.pbtn.primary:hover:not(:disabled) { filter:brightness(1.08); }
+.pbtn:disabled { background:var(--bg-3); color:var(--text-4); cursor:default; }
+.ghost.danger { color:var(--remove); }
+.ghost.danger:hover { border-color:var(--remove); background:var(--remove-tint); color:var(--remove); }
+.ghost.danger.armed { background:var(--remove); border-color:var(--remove); color:#fff; }
+
+#resultPanel { position:fixed; bottom:64px; left:220px; right:0; z-index:29;
+  max-height:40vh; overflow-y:auto; background:var(--bg-2);
+  border-top:1px solid var(--border); display:none; }
+#resultPanel.show { display:block; }
+.res-head { padding:10px 24px; font-size:13px; font-weight:600; color:var(--text-1); }
+.res-head.ok { background:var(--add-tint); }
+.res-head.err { background:var(--remove-tint); }
+.res-body { padding:12px 24px 16px; }
+.cmd { display:flex; align-items:center; gap:10px; background:var(--bg-0);
+  border-radius:8px; padding:8px 12px; margin:6px 0;
+  font:12px var(--mono); color:var(--text-2); }
+.cmd span { flex:1; }
+.errrow { display:flex; gap:10px; padding:5px 0; font-size:12.5px;
+  color:var(--text-2); cursor:pointer; }
+.errrow:hover { color:var(--text-1); }
+.errrow .loc { font:12px var(--mono); color:var(--remove); flex:none; }
+
+/* ---------- empty states ---------- */
+.placeholder { display:flex; align-items:center; justify-content:center;
+  gap:8px; height:48px; color:var(--text-3); font-size:13px; }
+#emptyAll { text-align:center; padding:120px 0; }
+#emptyAll .t1 { font-size:15px; color:var(--text-2); margin:12px 0 4px; }
+#emptyAll .t2 { font-size:13px; color:var(--text-3); margin-bottom:16px; }
+#emptyAll code { font:12px var(--mono); background:var(--bg-3);
+  border:1px solid var(--border); border-radius:8px; padding:6px 12px;
+  color:var(--text-2); }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="mark"></div>
+  <h1>Crawl Diff Review</h1>
+  <span class="meta" id="meta"></span>
+  <div class="tally" id="tally"></div>
+</div>
+<nav id="rail"></nav>
+<div id="content"><div id="col"></div></div>
+<div id="resultPanel"></div>
+<div id="applybar">
+  <div id="summary"></div>
+  <div class="bar-actions">
+    <button class="ghost act-selall">Select all</button>
+    <button class="pbtn act-applysel" disabled>Apply selected</button>
+    <button class="pbtn primary act-applyall" disabled>Apply all approved</button>
+    <button class="ghost danger act-finish">Finish &amp; clear staging</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const KINDS = ["heroes", "skills", "traits", "assembly", "bingxue"];
+const KIND_LABELS = { heroes:"Heroes", skills:"Skills", traits:"Traits",
+                      assembly:"Assembly", bingxue:"Bingxue" };
+const GROUPS = ["removed", "added", "changed"];
+let DIFF = null;
+// entry decisions: "kind|group|key" → "approve" | "reject"
+const entryDec = new Map();
+// collision state lives on DOM nodes (getDecision), collected at apply time
+let collisionNodes = [];
+// added skill/hero link bars (getLink), collected at apply time
+let linkNodes = [];
+// per-card registry for incremental apply: {el, type, kind, group, buildPayload,
+// committable, cleanup}. `selected` holds checkbox-selected card elements.
+const cardReg = [];
+const selected = new Set();
+
+/* ---------------- helpers ---------------- */
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) if (c != null) e.append(c);
+  return e;
+}
+const esc = s => String(s).replace(/[&<>"]/g,
+  c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const isScalar = v => v === null || ["string","number","boolean"].includes(typeof v);
+const fmtScalar = v => v === null || v === undefined ? "∅" : String(v);
+function fmtRaw(v) {  // textarea / preview serialization (JSON is valid YAML)
+  if (v === null || v === undefined) return "";
+  return typeof v === "string" ? v : JSON.stringify(v, null, 2);
+}
+
+/* template tokens → pills */
+const TOK_RE = /\{(var|status|scale|dmg|stat):([^}]+)\}/g;
+function tokenize(text) {  // returns HTML string
+  return esc(text).replace(TOK_RE, (m, kind, body) =>
+    `<span class="tok tok-${kind}">{${kind}:${esc(body)}}</span>`);
+}
+
+/* char-level diff: common prefix/suffix, middle marked */
+function charDiff(a, b) {
+  let p = 0;
+  const max = Math.min(a.length, b.length);
+  while (p < max && a[p] === b[p]) p++;
+  let s = 0;
+  while (s < max - p && a[a.length-1-s] === b[b.length-1-s]) s++;
+  return {
+    oldHtml: tokenize(a.slice(0, p)) +
+      (a.length - p - s ? `<del>${tokenize(a.slice(p, a.length - s))}</del>` : "") +
+      tokenize(a.slice(a.length - s)),
+    newHtml: tokenize(b.slice(0, p)) +
+      (b.length - p - s ? `<ins>${tokenize(b.slice(p, b.length - s))}</ins>` : "") +
+      tokenize(b.slice(b.length - s)),
+  };
+}
+
+/* ---------------- value renderers ---------------- */
+function renderValue(v) {  // single value (added-entry fields, version cards)
+  if (isScalar(v)) {
+    const span = el("span");
+    span.innerHTML = tokenize(fmtScalar(v));
+    return span;
+  }
+  const pre = el("pre", { class: "raw" }, fmtRaw(v));
+  return pre;
+}
+function renderKVTable(obj, dim = false) {
+  const box = el("div", { class: "kv" + (dim ? " dim" : "") });
+  for (const [k, v] of Object.entries(obj)) {
+    if (isScalar(v) || v === undefined) {
+      const val = el("div", { class: "v" });
+      val.innerHTML = tokenize(fmtScalar(v));
+      box.append(el("div", { class: "kv-row" }, el("div", { class: "k" }, k), val));
+    } else {
+      box.append(el("div", { class: "kv-row" }, el("div", { class: "k" }, k)));
+      box.append(el("div", { class: "kv-nest" },
+        Array.isArray(v) ? el("pre", { class: "raw" }, fmtRaw(v)) : renderKVTable(v, dim)));
+    }
+  }
+  return box;
+}
+function renderFieldDiff(field, d) {  // one changed field, mode A/B/C
+  const val = el("div", { class: "v" });
+  const { old: o, new: n } = d;
+  if (isScalar(o) && isScalar(n) && fmtScalar(o).length <= 40 && fmtScalar(n).length <= 40) {
+    // Mode A — inline chips
+    const w = el("div", { class: "inline-diff" });
+    w.innerHTML = `<span class="oldv">${tokenize(fmtScalar(o))}</span>` +
+      `<span class="arr">→</span><span class="newv">${tokenize(fmtScalar(n))}</span>`;
+    val.append(w);
+  } else if (typeof o === "string" && typeof n === "string") {
+    // Mode B — stacked blocks with char diff
+    const { oldHtml, newHtml } = charDiff(o, n);
+    const ob = el("div", { class: "blk old" });
+    ob.innerHTML = `<span class="tag">OLD</span>` + oldHtml;
+    const nb = el("div", { class: "blk new" });
+    nb.innerHTML = `<span class="tag">NEW</span>` + newHtml;
+    val.append(ob, nb);
+  } else if (o && n && !Array.isArray(o) && !Array.isArray(n)
+             && typeof o === "object" && typeof n === "object") {
+    // Mode C — mini table, per-subkey
+    const keys = [...new Set([...Object.keys(o), ...Object.keys(n)])];
+    const changed = keys.filter(k => JSON.stringify(o[k]) !== JSON.stringify(n[k]));
+    const mini = el("div", { class: "mini" },
+      el("div", { class: "note" }, `${changed.length} of ${keys.length} fields changed`));
+    for (const k of keys) {
+      const same = !changed.includes(k);
+      const row = el("div", { class: "mrow" + (same ? " same" : "") },
+        el("div", { class: "mk" }, k));
+      const cell = el("div");
+      if (same) cell.textContent = fmtScalar(isScalar(o[k]) ? o[k] : JSON.stringify(o[k]));
+      else cell.innerHTML =
+        `<span class="inline-diff"><span class="oldv">${esc(fmtScalar(isScalar(o[k]) ? o[k] : JSON.stringify(o[k])))}</span>` +
+        `<span class="arr">→</span><span class="newv">${esc(fmtScalar(isScalar(n[k]) ? n[k] : JSON.stringify(n[k])))}</span></span>`;
+      row.append(cell);
+      mini.append(row);
+    }
+    val.append(mini);
+  } else {
+    // fallback — stacked raw blocks (arrays, mixed types)
+    const ob = el("div", { class: "blk old" });
+    ob.innerHTML = `<span class="tag">OLD</span>` + tokenize(fmtRaw(o) || "∅");
+    const nb = el("div", { class: "blk new" });
+    nb.innerHTML = `<span class="tag">NEW</span>` + tokenize(fmtRaw(n) || "∅");
+    val.append(ob, nb);
+  }
+  return el("div", { class: "field-row" }, el("div", { class: "k" }, field), val);
+}
+
+/* ---------------- entry cards ---------------- */
+function entryCard(kind, group, key, payload, startOpen) {
+  const id = `${kind}|${group}|${key}`;
+  entryDec.set(id, group === "removed" ? "reject" : "approve");
+  const committable = () => entryDec.get(id) === "approve";
+
+  const card = el("div", { class: `card g-${group}` + (startOpen ? " open" : "") });
+  card.dataset.entry = id;
+  const syncCls = () => {
+    const d = entryDec.get(id);
+    card.classList.toggle("rejected", d === "reject");
+    card.classList.toggle("approved", d === "approve");
+  };
+  let linkRef = null;  // set below for added skill/hero cards
+  // Rejecting a linked added card discards the only reconcile chance — the
+  // entry resurfaces as brand-new next crawl. Warn (non-blocking), reactively:
+  // re-evaluated on both reject-toggle and link/unlink.
+  const syncWarn = () => card.classList.toggle("warn-reject",
+    entryDec.get(id) === "reject" && !!(linkRef && linkRef.hasLink()));
+  const mk = (label, val) => el("button", { onclick: ev => {
+    ev.stopPropagation();
+    entryDec.set(id, val);
+    seg.querySelectorAll("button").forEach(b => b.className = "");
+    ev.target.className = val === "approve" ? "on-approve" : "on-reject";
+    syncWarn();
+    syncCls(); updateSummary();
+  }}, label);
+  const seg = el("div", { class: "seg" }, mk("Approve", "approve"), mk("Reject", "reject"));
+  seg.children[group === "removed" ? 1 : 0].className =
+    group === "removed" ? "on-reject" : "on-approve";
+  if (group === "removed")
+    seg.children[0].title = "Confirms deletion from live data";
+  syncCls();
+
+  const check = el("input", { type: "checkbox", class: "card-check",
+    title: "select for batch apply",
+    onclick: ev => { ev.stopPropagation(); toggleSelect(card, ev.target.checked); } });
+  const rowApply = el("button", { class: "row-apply", title: "merge this entry now",
+    onclick: ev => { ev.stopPropagation(); applyCards([card]); } }, "Apply ▸");
+
+  let body;
+  if (group === "changed") {
+    body = el("div", {}, ...Object.entries(payload).map(([f, d]) => renderFieldDiff(f, d)));
+  } else {
+    body = renderKVTable(payload, group === "removed");
+  }
+  const head = el("div", { class: "card-head",
+      onclick: () => card.classList.toggle("open") },
+    check,
+    el("span", { class: "dot" }),
+    el("span", { class: "name" }, key),
+    el("span", { class: "sub" }, group),
+    seg,
+    rowApply,
+    el("span", { class: "chev" }, "▶"));
+  card.append(head);
+  if (group === "added" && (kind === "skills" || kind === "heroes")) {
+    // A rejected card ships no link/reconcile decision (else merge_crawl's
+    // Phase-1 reconcile guard would hard-fail the whole apply).
+    const lb = linkBar(kind, key,
+      { isRejected: () => entryDec.get(id) === "reject", onChange: syncWarn });
+    linkRef = lb;
+    card.append(lb, el("div", { class: "reject-nudge" },
+      "⚠ 此卡已連結 override — 拒絕會丟棄唯一的 reconcile 機會，下次爬取會再次以全新條目出現。"));
+    linkNodes.push(lb);
+  }
+  card.append(el("div", { class: "card-body" }, body));
+  card.append(el("div", { class: "card-foot" },
+    el("button", { class: "row-apply", title: "merge this entry now",
+      onclick: ev => { ev.stopPropagation(); applyCards([card]); } }, "Apply ▸")));
+
+  cardReg.push({ el: card, type: "entry", kind, group, committable,
+    buildPayload: () => {
+      if (!committable()) return null;
+      const changes = emptyChanges();
+      changes[kind][group].push(key);
+      const overrides = [], links = [];
+      if (linkRef) {
+        const lk = linkRef.getLink(); if (lk) links.push(lk);
+        const ro = linkRef.getReconcileOverride(); if (ro) overrides.push(ro);
+      }
+      return { changes, overrides, links };
+    },
+    cleanup: () => {
+      entryDec.delete(id);
+      if (linkRef) { const i = linkNodes.indexOf(linkRef); if (i >= 0) linkNodes.splice(i, 1); }
+    },
+  });
+  return card;
+}
+
+/* ---------------- override link bar ----------------
+   Reconcile a newly-crawled skill/hero against an existing `_action: add`
+   override so it isn't reviewed as brand-new. A high-confidence match is
+   pre-selected; the reviewer can always re-search the full override list or
+   declare it genuinely new. Linking writes `name_jp` back into the override
+   (merge_crawl) so future crawls join on it directly. */
+function linkBar(kind, jpKey, opts = {}) {
+  const isRejected = opts.isRejected || (() => false);
+  const onChange = opts.onChange || (() => {});
+  const info = (DIFF.override_links || {})[kind] || {};
+  const meta = (info.added || {})[jpKey] || { match: null, via: null, suggestions: [] };
+  const allKeys = info.index || [];
+  let linked = meta.match || null;  // pre-selected high-confidence match
+
+  const bar = el("div", { class: "linkbar" });
+  const controls = el("div", { class: "lk-controls" });
+  const panel = buildReconcilePanel();  // null when the diff carries no fields
+  bar.append(controls);
+  if (panel) bar.append(panel.el);
+
+  // The inline field-block only applies to the AUTO-match (fields are computed
+  // for it in diff_crawl); a manual re-link elsewhere falls back to link-only
+  // reconcile (merge_crawl uses the default partition).
+  function panelActive() { return !!(panel && linked && linked === meta.match); }
+  function syncPanel() { if (panel) panel.el.style.display = panelActive() ? "" : "none"; }
+
+  function buildReconcilePanel() {
+    const fields = meta.fields;
+    if (!fields || !fields.length) return null;  // back-compat: pre-P2 diff JSON
+    const blocks = fields.map(f => {
+      const cls = fieldClass(f.field);
+      const opts = cls === "translation" ? { readOnly: true, tag: "curated" }
+        : cls === "choice" ? { defaultChoice: null, tag: "pick" }
+        : { defaultChoice: "adopt_new", tag: "adopt crawl" };
+      return ovFieldBlock({ section: kind, key: meta.match }, f, opts);
+    });
+    const preset = el("button", { class: "lk-preset", onclick: () => {
+      for (const b of blocks)
+        if (fieldClass(b.dataset.field) === "crawl") b.setChoice("adopt_new");
+      updateSummary();
+    }}, "採用 CHT，其餘採納爬取");
+    const wrap = el("div", { class: "lk-reconcile" },
+      el("div", { class: "lk-rec-head" },
+        el("span", { class: "lk-rec-title" }, "欄位對齊 · curated CHT ↔ 爬取"),
+        preset),
+      ...blocks);
+    return { el: wrap, blocks };
+  }
+
+  function render() {
+    controls.innerHTML = "";
+    bar.classList.toggle("linked", !!linked);
+    if (linked) {
+      controls.append(
+        el("span", { class: "lk-ico" }, "🔗"),
+        el("span", { class: "lk-txt" }, `已連結 override「${linked}」`),
+        (linked === meta.match && meta.via)
+          ? el("span", { class: "lk-via" }, "via " + meta.via) : null,
+        el("button", { class: "lk-btn lk-new", onclick: openSearch }, "改連結"),
+        el("button", { class: "lk-btn lk-x",
+          onclick: () => { linked = null; render(); updateSummary(); } }, "✕ 取消連結"));
+    } else {
+      const kids = [
+        el("span", { class: "lk-ico dim" }, "🔗"),
+        el("span", { class: "lk-txt dim" }, "未連結既有 override")];
+      for (const s of meta.suggestions || [])
+        kids.push(el("button", { class: "lk-sug",
+          onclick: () => { linked = s; render(); updateSummary(); } }, s + " ?"));
+      kids.push(el("button", { class: "lk-btn lk-new", onclick: openSearch }, "搜尋全部…"));
+      controls.append(...kids);
+    }
+    syncPanel();
+    onChange();  // keep the owning card's reject-nudge in sync with link state
+  }
+
+  function openSearch() {
+    controls.innerHTML = "";
+    bar.classList.remove("linked");
+    const input = el("input", { class: "lk-input", spellcheck: "false",
+      placeholder: "輸入 CHT 名搜尋 override…" });
+    const list = el("div", { class: "lk-list" });
+    const pick = k => { linked = k; render(); updateSummary(); };
+    function refresh() {
+      const q = input.value.trim();
+      const hits = (q ? allKeys.filter(k => k.includes(q)) : allKeys).slice(0, 50);
+      list.innerHTML = "";
+      if (!hits.length)
+        list.append(el("div", { class: "lk-opt dim" },
+          allKeys.length ? "無相符 override" : "（無 add-override 可連結）"));
+      for (const k of hits)
+        list.append(el("div", { class: "lk-opt", onclick: () => pick(k) }, k));
+    }
+    input.addEventListener("input", refresh);
+    controls.append(
+      el("div", { class: "lk-searchrow" }, input,
+        el("button", { class: "lk-btn", onclick: render }, "✕"),
+        el("button", { class: "lk-btn lk-new",
+          onclick: () => { linked = null; render(); updateSummary(); } },
+          "確實是全新，不連結")),
+      list);
+    syncPanel();  // hide the reconcile panel while re-searching
+    refresh();
+    input.focus();
+  }
+
+  render();
+  // A rejected card ships NO link/reconcile decision — otherwise merge_crawl's
+  // Phase-1 reconcile guard would reject the whole apply. `hasLink()` stays raw
+  // (drives the reject-nudge, which fires precisely when a linked card is rejected).
+  bar.getLink = () =>
+    (linked && !isRejected()) ? { section: kind, jp_key: jpKey, override_key: linked } : null;
+  bar.hasLink = () => !!linked;
+  // Per-field decisions for a confirmed auto-match, pushed into the SAME
+  // `overrides` decisions array collision cards use (keyed by override_key).
+  bar.getReconcileOverride = () => {
+    if (isRejected() || !panelActive()) return null;
+    const fields = {};
+    for (const b of panel.blocks) fields[b.dataset.field] = b.getFieldDecision();
+    return { section: kind, key: linked, fields };
+  };
+  return bar;
+}
+
+/* ---------------- override field partition ----------------
+   Mirror of diff_crawl.py's reconcile constants. Drives the per-field DEFAULT
+   choice when the shared field-block is rendered inline under a reconcile link
+   bar (P2). Collision cards ignore this (they always default to "keep"). */
+const TRANSLATION_OWNED_FIELDS = new Set(
+  ["name", "description", "commander_description", "brief_description",
+   "tags", "vars", "battle"]);
+const NEEDS_CHOICE_FIELDS = new Set(["is_unique", "unique_hero"]);
+// CRAWL_OWNED = type/rarity/target/activation_rate/source_hero + any other
+// field not classified above → crawl base wins, default "adopt".
+function fieldClass(field) {
+  if (TRANSLATION_OWNED_FIELDS.has(field)) return "translation";
+  if (NEEDS_CHOICE_FIELDS.has(field)) return "choice";
+  return "crawl";
+}
+
+/* ---------------- override collision cards ----------------
+   Shared field-block renderer used by BOTH collision cards and reconcile link
+   bars. `opts` (P2): {readOnly} renders a translation-owned field carried-over
+   (curated CHT, no adopt/custom); {defaultChoice} sets the initial pick, and
+   `null` forces an explicit pick (needs-choice); {tag} shows a partition pill.
+   With no opts it behaves exactly as the original collision block. */
+function ovFieldBlock(c, fld, opts = {}) {
+  const readOnly = !!opts.readOnly;
+  // Only an EXPLICIT `defaultChoice: null` forces a pick (needs-choice). An
+  // absent key (collision cards, translation-owned readOnly) defaults to keep,
+  // so those blocks always call select() and never report a phantom-resolved
+  // null choice (which would inflate the Apply-N count).
+  const hasDefault = ("defaultChoice" in opts) ? opts.defaultChoice !== null : true;
+  const defChoice = hasDefault ? (opts.defaultChoice ?? "keep") : "keep";
+
+  const block = el("div", { class: "ovfield" });
+  block.dataset.field = fld.field;
+  block.dataset.section = c.section;
+  block.dataset.key = c.key;
+  let choice = null;  // keep | adopt_new | custom (null until first select)
+  const ta = el("textarea", { spellcheck: "false",
+    placeholder: "custom value (YAML for structured fields)" });
+
+  const vcard = (cls, label, value, choiceVal) => {
+    const body = el("div", { class: "vbody" });
+    body.append(renderValue(value));
+    const copy = el("button", { class: "copybtn", onclick: ev => {
+      ev.stopPropagation(); enterCustom(value);
+    }}, "copy as draft ⧉");
+    const card = el("div", { class: `vcard ${cls}`, onclick: () => select(choiceVal) },
+      el("div", { class: "vhead" }, label, el("span", { class: "vdot" })),
+      body, el("div", { class: "vfoot" }, copy));
+    return card;
+  };
+  const cardOv = vcard("v-ov",
+    readOnly ? "CARRIED OVER · curated CHT" : "KEEP OVERRIDE", fld.override, "keep");
+  const cardUp = readOnly ? null
+    : vcard("v-up", "ADOPT UPSTREAM", fld.new, "adopt_new");
+
+  const refchip = (label, value) => el("div", { class: "refchip",
+      onclick: () => { ta.value = fmtRaw(value); ta.focus(); } },
+    el("span", { class: "lb" }, label),
+    el("span", { class: "pv" }, fmtRaw(value).slice(0, 60)));
+
+  const customZone = el("div", { class: "custom-zone" },
+    el("div", { class: "refchips" },
+      refchip("override ⧉", fld.override), refchip("upstream ⧉", fld.new)),
+    ta);
+
+  function select(v) {
+    if (readOnly) v = "keep";  // translation-owned is carried over, immutable
+    choice = v;
+    block.classList.remove("custom", "needpick");
+    cardOv.classList.toggle("sel", v === "keep");
+    if (cardUp) cardUp.classList.toggle("sel", v === "adopt_new");
+    updateSummary();
+  }
+  function enterCustom(seedValue) {
+    if (readOnly) return;
+    choice = "custom";
+    block.classList.add("custom");
+    block.classList.remove("needpick");
+    cardOv.classList.remove("sel");
+    if (cardUp) cardUp.classList.remove("sel");
+    if (seedValue !== undefined) ta.value = fmtRaw(seedValue);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    updateSummary();
+  }
+
+  const tag = opts.tag
+    ? el("span", { class: `fld-tag t-${fieldClass(fld.field)}` }, opts.tag) : null;
+  const actions = readOnly ? null
+    : el("div", { class: "actions" },
+        el("button", { class: "ghost", onclick: () => enterCustom() }, "✎ custom"),
+        el("button", { class: "cancel-custom", onclick: () => select("keep") }, "✕ cancel"));
+
+  block.append(
+    el("div", { class: "ovfield-head" },
+      el("span", { class: "k" }, fld.field),
+      tag,
+      el("span", { class: "custom-pill" }, "CUSTOM"),
+      actions),
+    el("div", { class: "vpair" }, cardOv, cardUp),
+    customZone);
+  if (hasDefault) select(defChoice);
+  else block.classList.add("needpick");  // choice stays null → unresolved
+
+  block.setChoice = select;
+  block.getFieldDecision = () =>
+    choice === "custom" ? { choice, value: ta.value } : { choice };
+  block.isResolved = () => choice !== null;
+  return block;
+}
+
+function collisionCard(c) {
+  let deleted = false;
+  const fieldBlocks = c.fields.map(f => ovFieldBlock(c, f));
+
+  const card = el("div", { class: "card ovcard open" });
+  card.dataset.section = c.section;
+  card.dataset.key = c.key;
+
+  const delBtn = el("button", { class: "delbtn" }, "Delete override entry");
+  let armTimer = null;
+  delBtn.addEventListener("click", () => {
+    if (!delBtn.classList.contains("armed")) {
+      delBtn.classList.add("armed");
+      delBtn.textContent = "Confirm delete override";
+      armTimer = setTimeout(() => {
+        delBtn.classList.remove("armed");
+        delBtn.textContent = "Delete override entry";
+      }, 3000);
+      return;
+    }
+    clearTimeout(armTimer);
+    deleted = true;
+    bodyWrap.style.display = "none";
+    delBtn.style.display = "none";
+    deletedRow.style.display = "flex";
+    updateSummary();
+  });
+  const deletedRow = el("div", { class: "ovdeleted", style: "display:none" },
+    el("span", { class: "line" }, `override 「${c.key}」 will be deleted`),
+    el("a", { onclick: () => {
+      deleted = false;
+      bodyWrap.style.display = "";
+      delBtn.style.display = "";
+      delBtn.classList.remove("armed");
+      delBtn.textContent = "Delete override entry";
+      deletedRow.style.display = "none";
+      updateSummary();
+    }}, "Undo"));
+
+  const note = c.reason === "now_upstream"
+    ? `override-added entry now exists upstream (${c.staging_key}) — once translated, this override may be removable`
+    : `upstream data changed under this override (${c.staging_key})`;
+  const extra = c.override_only_fields.length
+    ? ` · override-only fields kept unless entry deleted: ${c.override_only_fields.join(", ")}`
+    : "";
+
+  const bodyWrap = el("div", { class: "card-body" },
+    el("div", { class: "ovnote" }, note + extra),
+    ...fieldBlocks);
+  const check = el("input", { type: "checkbox", class: "card-check",
+    title: "select for batch apply",
+    onclick: ev => { ev.stopPropagation(); toggleSelect(card, ev.target.checked); } });
+  const rowApply = el("button", { class: "row-apply", title: "apply this resolution now",
+    onclick: ev => { ev.stopPropagation(); applyCards([card]); } }, "Apply ▸");
+
+  card.append(
+    el("div", { class: "card-head" },
+      check,
+      el("span", { class: "dot", style: "background:var(--ov)" }),
+      el("span", { class: "name" }, `[${c.section}] ${c.key}`),
+      el("span", { class: "sub" }, c.action + " · " + c.reason),
+      delBtn, rowApply),
+    deletedRow, bodyWrap,
+    el("div", { class: "card-foot" },
+      el("button", { class: "row-apply", title: "apply this resolution now",
+        onclick: ev => { ev.stopPropagation(); applyCards([card]); } }, "Apply ▸")));
+
+  card.getDecision = () => {
+    const d = { section: c.section, key: c.key,
+                entry_action: deleted ? "delete" : "keep", fields: {} };
+    if (!deleted)
+      for (const fb of fieldBlocks) d.fields[fb.dataset.field] = fb.getFieldDecision();
+    return d;
+  };
+  card.isResolved = () => deleted ||
+    fieldBlocks.some(fb => fb.getFieldDecision().choice !== "keep");
+
+  cardReg.push({ el: card, type: "collision", committable: () => card.isResolved(),
+    buildPayload: () => ({ changes: emptyChanges(), overrides: [card.getDecision()], links: [] }),
+    cleanup: () => { const i = collisionNodes.indexOf(card); if (i >= 0) collisionNodes.splice(i, 1); },
+  });
+  return card;
+}
+
+/* ---------------- payload helpers ---------------- */
+function emptyChanges() {
+  const c = {};
+  for (const kind of KINDS) c[kind] = { added: [], removed: [], changed: [] };
+  return c;
+}
+// Merge N per-card payloads into one apply body. Incremental applies always
+// send clear_staging:false — staging is only wiped by the explicit Finish step.
+function mergePayloads(list) {
+  const changes = emptyChanges(), overrides = [], links = [];
+  for (const p of list) {
+    for (const kind of KINDS)
+      for (const g of GROUPS) changes[kind][g].push(...p.changes[kind][g]);
+    overrides.push(...p.overrides);
+    links.push(...p.links);
+  }
+  return { changes, overrides, links, clear_staging: false };
+}
+
+/* ---------------- selection + live counts ---------------- */
+function toggleSelect(card, on) {
+  if (on) selected.add(card); else selected.delete(card);
+  updateSummary();
+}
+function syncRowApplies() {
+  for (const c of cardReg) {
+    const dis = !c.committable();
+    c.el.querySelectorAll(".row-apply").forEach(b => b.disabled = dis);
+  }
+}
+function currentStats() {
+  const s = {};
+  for (const kind of KINDS) s[kind] = { added: 0, removed: 0, changed: 0 };
+  let col = 0;
+  for (const c of cardReg)
+    if (c.type === "entry") s[c.kind][c.group]++; else col++;
+  return { s, col };
+}
+function counts() {
+  let approve = 0, reject = 0;
+  for (const d of entryDec.values()) d === "approve" ? approve++ : reject++;
+  let custom = 0, dels = 0;
+  for (const cn of collisionNodes) {
+    const d = cn.getDecision();
+    if (d.entry_action === "delete") { dels++; continue; }
+    for (const f of Object.values(d.fields))
+      if (f.choice === "custom") custom++;
+  }
+  let links = 0;
+  for (const ln of linkNodes) {
+    if (ln.getLink()) links++;
+    const ro = ln.getReconcileOverride && ln.getReconcileOverride();
+    if (ro) for (const f of Object.values(ro.fields))
+      if (f.choice === "custom") custom++;
+  }
+  return { approve, reject, custom, dels, links };
+}
+function updateSummary() {
+  syncRowApplies();
+  const { approve, reject, custom, dels, links } = counts();
+  document.getElementById("summary").innerHTML =
+    `<b class="sa">${approve} approve</b> · <b class="sr">${reject} reject</b>` +
+    (custom ? ` · <b class="sc">${custom} custom</b>` : "") +
+    (dels ? ` · <b class="sd">${dels} override-delete</b>` : "") +
+    (links ? ` · <b class="sd">${links} link</b>` : "");
+  const nSel = selected.size;
+  const ready = cardReg.filter(c => c.committable()).length;
+  for (const b of document.querySelectorAll(".act-applysel")) {
+    b.disabled = nSel === 0;
+    b.textContent = `Apply selected${nSel ? ` (${nSel})` : ""}`;
+  }
+  for (const b of document.querySelectorAll(".act-applyall")) {
+    b.disabled = ready === 0;
+    b.textContent = `Apply all approved${ready ? ` (${ready})` : ""}`;
+  }
+}
+// Re-render rail badges + top tally from the LIVE registry (cards are removed
+// as they merge, so counts shrink toward the "Staging clean" end state).
+function refreshCounts() {
+  const { s, col } = currentStats();
+  const rail = document.getElementById("rail");
+  for (const kind of KINDS) {
+    const row = rail.querySelector(`.rail-row[data-target="sec-${kind}"]`);
+    if (!row) continue;
+    const st = s[kind], total = st.added + st.removed + st.changed;
+    const micro = row.querySelector(".micro");
+    if (micro) micro.innerHTML =
+      `<span class="a">+${st.added}</span> <span class="m">~${st.changed}</span> <span class="r">−${st.removed}</span>`;
+    const badge = row.querySelector(".badge");
+    badge.textContent = String(total);
+    badge.classList.toggle("zero", !total);
+  }
+  const ovBadge = rail.querySelector(".ovrail .badge");
+  if (ovBadge) {
+    ovBadge.textContent = col ? String(col) : "✓";
+    ovBadge.classList.toggle("ok", !col);
+  }
+  const tally = document.getElementById("tally");
+  tally.innerHTML = "";
+  let add = 0, mod = 0, del = 0;
+  for (const kind of KINDS) { add += s[kind].added; mod += s[kind].changed; del += s[kind].removed; }
+  if (add) tally.append(el("span", { class: "chip add" }, `+${add} added`));
+  if (mod) tally.append(el("span", { class: "chip mod" }, `~${mod} changed`));
+  if (del) tally.append(el("span", { class: "chip del" }, `−${del} removed`));
+  if (col) tally.append(el("span", { class: "chip col" }, `${col} collisions`));
+  updateSummary();
+}
+
+/* ---------------- incremental apply + result panel ---------------- */
+async function postApply(payload) {
+  try {
+    const res = await fetch("/api/apply", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  } catch (e) {
+    return { ok: false, errors: ["request failed: " + e] };
+  }
+}
+function setBusy(on) {
+  for (const b of document.querySelectorAll(".bar-actions button, .row-apply"))
+    b.disabled = on;
+  if (!on) updateSummary();
+}
+// Apply a set of card elements as ONE commit. Non-committable / already-gone
+// cards contribute nothing (buildPayload → null). On success the applied cards
+// fade out and the rail/tally shrink; on error nothing changed (validate-then-
+// commit), so the cards stay and the error panel points at the offending field.
+async function applyCards(cardEls) {
+  const regs = cardEls
+    .map(cel => cardReg.find(r => r.el === cel))
+    .filter(r => r && r.committable());
+  const payloads = regs.map(r => r.buildPayload()).filter(Boolean);
+  if (!payloads.length) return;
+  setBusy(true);
+  const r = await postApply(mergePayloads(payloads));
+  setBusy(false);
+  if (!r.ok) { showResult(r); return; }
+  for (const rg of regs) removeCard(rg);
+  showResult(r);
+  checkDone();
+}
+function removeCard(rg) {
+  rg.el.classList.add("merged");
+  setTimeout(() => rg.el.remove(), 260);
+  rg.cleanup();
+  selected.delete(rg.el);
+  const i = cardReg.indexOf(rg);
+  if (i >= 0) cardReg.splice(i, 1);
+  refreshCounts();
+}
+function checkDone() {
+  if (cardReg.length) return;
+  const panel = document.getElementById("resultPanel");
+  if (!panel.querySelector(".all-done"))
+    panel.insertBefore(el("div", { class: "res-head ok all-done" },
+      "✓ All reviewed items merged — hit “Finish & clear staging” to wipe staging and get the follow-up commands."),
+      panel.firstChild);
+}
+let finishArmed = false;
+function setFinishBtns(armed) {
+  finishArmed = armed;
+  const label = armed
+    ? (cardReg.length ? `Discard ${cardReg.length} un-merged & clear — confirm`
+                      : "Clear staging — confirm")
+    : "Finish & clear staging";
+  for (const b of document.querySelectorAll(".act-finish")) {
+    b.classList.toggle("armed", armed);
+    b.textContent = label;
+  }
+}
+async function finishClearStaging() {
+  if (!finishArmed) {
+    setFinishBtns(true);
+    setTimeout(() => { if (finishArmed) setFinishBtns(false); }, 3500);
+    return;
+  }
+  setFinishBtns(false);
+  setBusy(true);
+  const r = await postApply(
+    { changes: emptyChanges(), overrides: [], links: [], clear_staging: true });
+  setBusy(false);
+  showResult(r);
+  if (r.ok) {
+    for (const rg of [...cardReg]) removeCard(rg);
+    document.getElementById("applybar").style.display = "none";
+    document.querySelectorAll(".bar-actions button").forEach(b => b.disabled = true);
+  }
+}
+function showResult(r) {
+  const panel = document.getElementById("resultPanel");
+  panel.innerHTML = "";
+  panel.classList.add("show");
+  if (r.ok) {
+    const parts = Object.entries(r.applied || {})
+      .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);
+    panel.append(el("div", { class: "res-head ok" }, "✓ Applied — " + parts.join(" · ")));
+    const body = el("div", { class: "res-body" },
+      el("div", { style: "font-size:12px;color:var(--text-3);margin-bottom:4px" },
+        "next steps:"));
+    for (const cmd of r.followup || []) {
+      body.append(el("div", { class: "cmd" }, el("span", {}, cmd),
+        el("button", { class: "copybtn",
+          onclick: ev => { navigator.clipboard.writeText(cmd);
+            ev.target.textContent = "copied ✓";
+            setTimeout(() => ev.target.textContent = "copy ⧉", 1200); } }, "copy ⧉")));
+    }
+    panel.append(body);
+  } else {
+    panel.append(el("div", { class: "res-head err" },
+      `✕ ${r.errors.length} error(s) — nothing applied`));
+    const body = el("div", { class: "res-body" });
+    for (const msg of r.errors) {
+      // "[skills] key.field: message" → jump link to the collision field block
+      const m = msg.match(/^\[(\w+)\] (.+?)\.(\w+): /);
+      const row = el("div", { class: "errrow" },
+        el("span", { class: "loc" }, m ? `${m[1]} · ${m[2]} · ${m[3]}` : "error"),
+        el("span", {}, m ? msg.slice(m[0].length) : msg));
+      if (m) row.addEventListener("click", () => {
+        const target = document.querySelector(
+          `.ovfield[data-section="${m[1]}"][data-key="${CSS.escape(m[2])}"][data-field="${m[3]}"]`);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          target.classList.remove("flash"); void target.offsetWidth;
+          target.classList.add("flash");
+        }
+      });
+      body.append(row);
+    }
+    panel.append(body);
+  }
+}
+
+/* ---------------- sections + rail ---------------- */
+function buildSection(kind) {
+  const data = DIFF.kinds[kind];
+  const total = GROUPS.reduce((n, g) => n + Object.keys(data[g]).length, 0);
+  const sec = el("section", { id: `sec-${kind}` });
+  const pills = GROUPS
+    .map(g => `${{removed:"−",added:"+",changed:"~"}[g]}${Object.keys(data[g]).length}`)
+    .join(" · ");
+  const bulk = el("div", { class: "bulk" },
+    el("button", { class: "ghost",
+      title: "Removals must be approved individually.",
+      onclick: () => bulkSet(kind, "approve") }, "Approve all"),
+    el("button", { class: "ghost", onclick: () => bulkSet(kind, "reject") }, "Reject all"));
+  sec.append(el("div", { class: "sec-head" },
+    el("h2", {}, KIND_LABELS[kind]),
+    el("span", { class: "pills" }, pills),
+    total ? bulk : null));
+  if (!total) {
+    sec.append(el("div", { class: "placeholder" }, `✓ No changes in ${KIND_LABELS[kind]}`));
+    return sec;
+  }
+  for (const group of GROUPS) {
+    const entries = Object.entries(data[group]);
+    if (!entries.length) continue;
+    const startOpen = entries.length <= 20;
+    const grpHead = el("div", { class: `grp-head ${group}` },
+      `${group} (${entries.length})`);
+    if (!startOpen) {
+      grpHead.append(el("button", { class: "ghost exp", onclick: ev => {
+        const expand = ev.target.textContent === "Expand all";
+        ev.target.textContent = expand ? "Collapse all" : "Expand all";
+        let n = grpHead.nextElementSibling;
+        while (n && n.classList.contains("card") && !n.classList.contains("grp-head")) {
+          n.classList.toggle("open", expand);
+          n = n.nextElementSibling;
+        }
+      }}, "Expand all"));
+    }
+    sec.append(grpHead);
+    if (group === "removed")
+      sec.append(el("div", { class: "warn-banner" }, "⚠",
+        el("span", {}, `${entries.length} entr${entries.length > 1 ? "ies" : "y"} disappeared upstream. ` +
+          "This is often a crawler parse failure — verify before approving removal.")));
+    for (const [key, payload] of entries)
+      sec.append(entryCard(kind, group, key, payload, startOpen));
+  }
+  return sec;
+}
+function bulkSet(kind, decision) {
+  document.querySelectorAll(`#sec-${kind} .card[data-entry]`).forEach(card => {
+    const id = card.dataset.entry;
+    const group = id.split("|")[1];
+    if (decision === "approve" && group === "removed") return;  // individual only
+    entryDec.set(id, decision);
+    const seg = card.querySelector(".seg");
+    seg.children[0].className = decision === "approve" ? "on-approve" : "";
+    seg.children[1].className = decision === "reject" ? "on-reject" : "";
+    card.classList.toggle("rejected", decision === "reject");
+  });
+  updateSummary();
+}
+
+function buildRail() {
+  const rail = document.getElementById("rail");
+  rail.innerHTML = "";
+  for (const kind of KINDS) {
+    const s = DIFF.stats[kind];
+    const total = s.added + s.removed + s.changed;
+    const micro = el("span", { class: "micro" });
+    micro.innerHTML = `<span class="a">+${s.added}</span> <span class="m">~${s.changed}</span> <span class="r">−${s.removed}</span>`;
+    rail.append(el("button", { class: "rail-row", "data-target": `sec-${kind}`,
+        onclick: () => document.getElementById(`sec-${kind}`)
+          .scrollIntoView({ behavior: "smooth", block: "start" }) },
+      el("span", {}, KIND_LABELS[kind]),
+      total ? micro : null,
+      el("span", { class: "badge" + (total ? "" : " zero") }, String(total))));
+  }
+  rail.append(el("div", { class: "rail-div" }));
+  const nCol = DIFF.override_collisions.length;
+  rail.append(el("button", { class: "rail-row ovrail", "data-target": "sec-overrides",
+      onclick: () => document.getElementById("sec-overrides")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+    el("span", {}, "Override Collisions"),
+    el("span", { class: "badge" + (nCol ? "" : " ok") }, nCol ? String(nCol) : "✓")));
+}
+function spy() {
+  const rows = document.querySelectorAll(".rail-row[data-target]");
+  let active = null;
+  for (const row of rows) {
+    const sec = document.getElementById(row.dataset.target);
+    if (sec && sec.getBoundingClientRect().top <= 100) active = row;
+  }
+  rows.forEach(r => r.classList.toggle("active", r === active));
+}
+
+/* ---------------- boot ---------------- */
+async function load() {
+  const col = document.getElementById("col");
+  const res = await fetch("/api/diff");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    col.append(el("div", { id: "emptyAll" },
+      el("div", { class: "t1" }, "Staging is clean"),
+      el("div", { class: "t2" }, err.error || "Run the crawler to populate a new diff."),
+      el("code", {}, "uv run script/crawl_heroes.py --detail --staging")));
+    document.getElementById("applybar").style.display = "none";
+    return;
+  }
+  DIFF = await res.json();
+
+  document.getElementById("meta").textContent =
+    `staging · ${DIFF.generated_at.replace("T", " ")}`;
+  const t = { add: 0, mod: 0, del: 0 };
+  for (const s of Object.values(DIFF.stats)) {
+    t.add += s.added; t.mod += s.changed; t.del += s.removed;
+  }
+  const tally = document.getElementById("tally");
+  if (t.add) tally.append(el("span", { class: "chip add" }, `+${t.add} added`));
+  if (t.mod) tally.append(el("span", { class: "chip mod" }, `~${t.mod} changed`));
+  if (t.del) tally.append(el("span", { class: "chip del" }, `−${t.del} removed`));
+  if (DIFF.override_collisions.length)
+    tally.append(el("span", { class: "chip col" },
+      `${DIFF.override_collisions.length} collisions`));
+
+  buildRail();
+
+  const anyChange = Object.values(DIFF.stats).some(s => s.added + s.removed + s.changed)
+    || DIFF.override_collisions.length;
+  if (!anyChange) {
+    col.append(el("div", { id: "emptyAll" },
+      el("div", { class: "t1" }, "Staging is clean"),
+      el("div", { class: "t2" }, "Staging matches current data — nothing to review."),
+      el("code", {}, "uv run script/crawl_heroes.py --detail --staging")));
+    document.getElementById("applybar").style.display = "none";
+    return;
+  }
+
+  for (const kind of KINDS) col.append(buildSection(kind));
+
+  const ovSec = el("section", { id: "sec-overrides" });
+  ovSec.append(el("div", { class: "sec-head" },
+    el("h2", {}, "Override Collisions"),
+    el("span", { class: "pills" }, String(DIFF.override_collisions.length))));
+  if (DIFF.override_collisions.length) {
+    for (const c of DIFF.override_collisions) {
+      const node = collisionCard(c);
+      collisionNodes.push(node);
+      ovSec.append(node);
+    }
+  } else {
+    ovSec.append(el("div", { class: "placeholder" },
+      "✓ No override collisions — upstream changes don't touch your overrides."));
+  }
+  col.append(ovSec);
+
+  refreshCounts();
+  document.getElementById("content").addEventListener("scroll", spy);
+  window.addEventListener("scroll", spy, { passive: true });
+  spy();
+}
+function selectAllToggle() {
+  const allOn = cardReg.length > 0 && selected.size >= cardReg.length;
+  for (const c of cardReg) {
+    const box = c.el.querySelector(".card-check");
+    if (box) box.checked = !allOn;
+    if (allOn) selected.delete(c.el); else selected.add(c.el);
+  }
+  updateSummary();
+}
+const onAll = (sel, fn) =>
+  document.querySelectorAll(sel).forEach(b => b.addEventListener("click", fn));
+onAll(".act-selall", selectAllToggle);
+onAll(".act-applysel", () => applyCards([...selected]));
+onAll(".act-applyall", () => applyCards(cardReg.filter(c => c.committable()).map(c => c.el)));
+onAll(".act-finish", finishClearStaging);
+load();
+</script>
+</body>
+</html>
