@@ -21,6 +21,7 @@ game8.jp → crawl_heroes.py → llm_translate.py → build_frontend_data.py →
 | `build_frontend_data.py` | Merge crawled+translated+overrides → JSON | `uv run script/build_frontend_data.py` |
 | `check_data_integrity.py` | Validate references, scan for untranslated JP kana, cross-check crawled vs translated keys | `uv run script/check_data_integrity.py` |
 | `override.py` | Interactive CLI for manual skill/hero additions | `uv run script/override.py` |
+| `apply_bingxue_override.py` | Apply per-hero 兵學 pools into `overrides.yaml` | See [doc/bingxue-override.md](doc/bingxue-override.md) |
 
 ### Data Flow
 
@@ -74,6 +75,10 @@ The `postprocess()` function runs after all merges and normalizes:
 Skill overrides may set `is_event_skill: true` to mark event-only skills; the frontend renders this as a small "事件戰法" label in the skill card title row.
 
 Applied as last step in `build_frontend_data.py`, highest priority.
+
+### Hero 兵學 (bingxue) overrides
+
+When the user pastes a hero's 兵學 table (often messy OCR/AI text): normalize → run `apply_bingxue_override.py` → on conflict/`ERROR`, ask before `--force`. Details: [doc/bingxue-override.md](doc/bingxue-override.md).
 
 ## LLM Prompts
 
