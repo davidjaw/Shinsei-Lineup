@@ -1,315 +1,6 @@
 skills:
   回山倒海:
     rarity: A
-  勇猛無前:
-    name: 勇猛無前
-    type: 主動
-    rarity: S
-    target: 敵軍單體
-    activation_rate: 40%
-    description: 使自身獲得{var:crit_rate_1:%}{status:會心}狀態，持續{var:duration}回合，並對敵軍單體造成兵刃傷害（傷害率{var:damage_1:%}），有{var:extra_trigger_chance:%}機率（{scale:spd}）再次使自身獲得{var:crit_rate_2:%}{status:會心}狀態（最多疊加{var:max_stacks}次），並對另一名敵軍造成兵刃傷害（傷害率{var:damage_2:%}）
-    vars:
-      crit_rate_1:
-        base: 0.125
-        max: 0.25
-      duration: 2
-      damage_1:
-        base: 0.58
-        max: 1.16
-      extra_trigger_chance:
-        base: 0.325
-        max: 0.65
-      crit_rate_2:
-        base: 0.075
-        max: 0.15
-      max_stacks: 2
-      damage_2:
-        base: 0.49
-        max: 0.98
-    _action: add
-    source_hero: 柿崎景家
-  越後二天:
-    name: 越後二天
-    type: 突擊
-    rarity: S
-    target: 敵軍單體
-    activation_rate: 45%→90%
-    description: 普通攻擊之後，對目標造成{var:dmg1}兵刃傷害，並有{var:silence_prob}幾率施加{status:無策}狀態，持續{var:duration}回合；若目標已處於{status:無策}狀態，則恢復自身兵力（治療率{var:heal}，受{scale:武勇}影響）；隨後有{var:extra_prob}幾率額外對敵軍單體造成一次兵刃傷害（傷害率{var:dmg2}）。該戰法每成功發動一次，使施加{status:無策}的幾率增加{var:prob_inc}，最多增加{var:max_stacks}次。
-    vars:
-      dmg1:
-        base: 0.58
-        max: 1.08
-      silence_prob: 0.4
-      duration: 1
-      heal:
-        base: 0.39
-        max: 0.78
-      extra_prob: 0.5
-      dmg2:
-        base: 0.54
-        max: 1.08
-      prob_inc: 0.1
-      max_stacks: 3
-    _action: add
-    unique_hero: 柿崎景家
-    is_unique: true
-  疾風迅雷:
-    name: 疾風迅雷
-    type: 指揮
-    rarity: S
-    activation_rate: 1.0
-    description: 戰鬥中，有 {var:trigger_chance}{scale:武勇}機率對敵方群體 ({var:target_count}人)
-      分別造成兵刃傷害 (傷害率 {var:damage_rate})，有 {var:status_chance}{scale:武勇}機率使其進入持續{var:status_duration}回合的{status:麻痺}狀態。若目標處於{status:麻痺}狀態，恢復我軍單體兵力
-      (恢復率 {var:heal_rate}{scale:武勇})。
-    commander_description: 若目標處於{status:麻痺}狀態，有 {var:extra_trigger_chance}{scale:武勇}機率額外對敵方單體發動{var:extra_trigger_count}次該戰法，不能重複觸發。
-    vars:
-      trigger_chance:
-        base: 0.225
-        max: 0.45
-      target_count: 2
-      damage_rate:
-        base: 0.38
-        max: 0.76
-      status_chance:
-        base: 0.25
-        max: 0.5
-      status_duration: 1
-      heal_rate:
-        base: 0.48
-        max: 0.96
-      extra_trigger_chance:
-        base: 0.08
-        max: 0.16
-      extra_trigger_count: 1
-    _action: add
-    unique_hero: 立花誾千代
-    is_unique: true
-  惠風和雨:
-    name: 惠風和雨
-    type: 指揮
-    rarity: S
-    activation_rate: 1.0
-    description: 戰鬥中，偶數回合，有{var:trigger_rate_even}機率治療我軍群體（{var:target_count}人）（治療率{var:heal_rate}，受{scale:智略}影響）；若自身為女性武將，則奇數回合也有{var:trigger_rate_odd}機率（受{scale:魅力}影響）治療我軍群體（{var:target_count}人）（治療率{var:heal_rate}，受{scale:智略}影響）。
-    vars:
-      trigger_rate_even:
-        base: 0.4
-        max: 0.8
-      heal_rate:
-        base: 0.61
-        max: 1.22
-      trigger_rate_odd:
-        base: 0.1
-        max: 0.2
-      target_count: 2
-    _action: add
-    source_hero: 立花誾千代
-  電光石火:
-    name: 電光石火
-    type: 主動
-    rarity: S
-    activation_rate: 0.4
-    description: 對敵軍群體（{var:target_count}人）造成兵刃傷害(傷害率{var:dmg})，隨後使隨機友軍單體統率增加{var:stat_inc}點並{status:援護}自身，持續{var:duration}回合
-    vars:
-      target_count: 2
-      dmg:
-        base: 0.48
-        max: 0.96
-      stat_inc:
-        base: 24
-        max: 48
-      duration: 2
-    _action: add
-    source_hero: 鈴木佐大夫
-  彈嵐雨霰:
-    name: 彈嵐雨霰
-    type: 主動
-    rarity: S
-    target: 敵軍單體
-    activation_rate: 0.45
-    description: 對敵軍單體造成 {var:hits_min}-{var:hits_max} 次兵刃傷害（傷害率 {var:damage_rate}），有
-      {var:status_chance} 機率對其施加 {status:無策} 或 {status:封擊} 狀態（優先施加未重複的狀態），持續 {var:duration}
-      回合，若目標處於持續性減益狀態中，機率增加 {var:extra_chance}。該戰法發動後進入 {var:cooldown} 回合冷卻時間。
-    commander_description: 造成 {var:commander_hits} 次傷害的機率增加至 {var:commander_hits_chance}。
-    vars:
-      hits_min: 2
-      hits_max: 3
-      damage_rate:
-        base: 0.63
-        max: 1.26
-      status_chance:
-        base: 0.375
-        max: 0.75
-      duration: 1
-      extra_chance:
-        base: 0.075
-        max: 0.15
-      cooldown: 1
-      commander_hits: 3
-      commander_hits_chance: 0.75
-    _action: add
-    unique_hero: 鈴木佐大夫
-    is_unique: true
-  剛毅木訥:
-    name: 剛毅木訥
-    type: 指揮
-    rarity: S
-    target: 敵軍單體
-    activation_rate: 1.0
-    description: 友軍群體（{var:target_count}人）每回合首次受到傷害時，自身有{var:proc_rate}機率對造成傷害的敵軍武將造成兵刃傷害（傷害率{var:dmg_rate}），並恢復受到傷害的友軍兵力（恢復率{var:heal_rate}，{scale:智略}）
-    commander_description: 使發動機率額外{scale:統率}
-    vars:
-      target_count: 2
-      proc_rate:
-        base: 0.225
-        max: 0.45
-      dmg_rate:
-        base: 0.43
-        max: 0.86
-      heal_rate:
-        base: 0.43
-        max: 0.86
-    _action: add
-    unique_hero: 加藤嘉明
-    is_unique: true
-  表裡比興:
-    name: 表裡比興
-    type: 主動
-    rarity: S
-    target: 敵軍單體
-    activation_rate: 0.55
-    description: 對敵軍單體造成謀略傷害（傷害率{var:damage_rate}{scale:int}）並施加{status:混亂}狀態，持續{var:duration}回合，其下回合首次普通攻擊目標若為我軍，自身恢復目標兵力（恢復率{var:heal_rate}{scale:int}）。若為敵軍，自身對目標造成謀略傷害（傷害率{var:counter_damage_rate}{scale:int}）。若此戰法發動時目標已{status:混亂}，自身再對敵軍單體造成謀略傷害（傷害率{var:extra_damage_rate}{scale:int}，優先選擇其友軍）。
-    commander_description: 使被施加{status:混亂}狀態的敵方武將為自身分擔{var:share_damage_rate}{scale:int}傷害，持續{var:duration}回合。
-    vars:
-      damage_rate:
-        base: 0.71
-        max: 1.42
-      duration: 1
-      heal_rate:
-        base: 0.45
-        max: 0.9
-      counter_damage_rate:
-        base: 0.45
-        max: 0.9
-      extra_damage_rate:
-        base: 0.81
-        max: 1.92
-      share_damage_rate:
-        base: 0.015
-        max: 0.03
-    _action: add
-    unique_hero: 真田昌幸
-    is_unique: true
-  瞬息萬變:
-    name: 瞬息萬變
-    type: 主動
-    rarity: S
-    target: 敵軍單體
-    activation_rate: 0.45
-    description: 對敵軍單體造成謀略傷害（傷害率{var:dmg1}，受{scale:智略}影響），並施加{status:混亂}狀態，持續{var:dur}回合，若其已{status:混亂}，則令另外{var:count}名敵軍武將對其造成傷害（傷害率{var:dmg2}，類型受該武將武勇或智略較高的一項影響）
-    vars:
-      dmg1:
-        base: 0.81
-        max: 1.62
-      dur: 1
-      count: 1
-      dmg2:
-        base: 0.79
-        max: 1.58
-    _action: add
-    source_hero: 真田昌幸
-  松柏之操:
-    name: 松柏之操
-    type: 指揮
-    rarity: S
-    activation_rate: 1.0
-    description: 使我軍大將除自帶戰法外的主動戰法發動機率增加{var:active_prob_inc}{scale:int}，每次獲得自身或友軍戰法的功能性狀態增益時，有{var:trigger_chance}{scale:int}幾率使自軍副將受到的傷害降低{var:dmg_red}{scale:int}，持續{var:duration}回合，最多疊加{var:max_stack}次
-    vars:
-      active_prob_inc:
-        base: 0.075
-        max: 0.15
-      trigger_chance:
-        base: 0.325
-        max: 0.65
-      dmg_red:
-        base: 0.025
-        max: 0.05
-      duration: 2
-      max_stack: 2
-    _action: add
-    unique_hero: 阿松
-    is_unique: true
-  奇策縱橫:
-    name: 奇策縱橫
-    type: 主動
-    rarity: S
-    activation_rate: 0.3
-    description: 準備{var:prep_turns}回合，對敵軍全體造成謀略傷害（傷害率{var:dmg_rate}，受{scale:智略}影響）
-    vars:
-      prep_turns: 1
-      dmg_rate:
-        base: 1.27
-        max: 2.54
-    _action: add
-    source_hero: 阿松
-  一舟軒:
-    name: 一舟軒
-    type: 主動
-    rarity: S
-    activation_rate: 0.4
-    description: 恢復友軍群體（{var:target_num}人）兵力（恢復率{var:heal_rate}{scale:智略}），並有{var:prob}{scale:智略}機率使其獲得{var:stacks}次鐵壁，持續{var:duration}回合
-    vars:
-      target_num: 2
-      heal_rate:
-        base: 0.76
-        max: 1.52
-      prob:
-        base: 0.26
-        max: 0.52
-      stacks: 1
-      duration: 2
-    _action: add
-    unique_hero: 安宅冬康
-    is_unique: true
-  金城湯池:
-    name: 金城湯池
-    type: 主動
-    rarity: S
-    activation_rate: 0.4
-    description: '{status:牽制}敵軍群體（{var:target_count}人），並使自身受到戰法傷害降低{var:dmg_reduce}%{scale:智略}，持續{var:duration}回合，下個回合行動前恢復自身兵力（恢復率{var:heal_rate}%{scale:智略}）'
-    vars:
-      target_count: 2-3
-      dmg_reduce:
-        base: 0.075
-        max: 0.15
-      duration: 1
-      heal_rate:
-        base: 0.39
-        max: 0.78
-    _action: add
-    source_hero: 安宅冬康
-  樽俎折衝:
-    name: 樽俎折衝
-    type: 指揮
-    rarity: S
-    target: 敵軍單體
-    activation_rate: 1
-    description: 行動前，有{var:prob}{scale:統率}機率對自身和敵軍單體施加{status:封擊}狀態，若自身處於{status:無策}狀態，改為施加{status:無策}狀態
-      (若同時處於{status:封擊}與{status:無策}狀態，施加兩種狀態)。除自身外若我軍仍有武將存活，使敵軍目標為自身分擔{var:share}{scale:統率}的傷害，持續{var:round}回合
-    commander_description: 分擔傷害的比例提升至{var:cmdr_share}{scale:統率}
-    vars:
-      prob:
-        base: 0.15
-        max: 0.3
-      share:
-        base: 0.02
-        max: 0.04
-      cmdr_share:
-        base: 0.035
-        max: 0.07
-      round: 2
-    _action: add
-    unique_hero: 伊達輝宗
-    is_unique: true
   同盟姻親:
     name: 同盟姻親
     type: 主動
@@ -2073,624 +1764,273 @@ skills:
     unique_hero: 浦上宗景
     is_unique: true
     _action: add
+  電光石火:
+    name: 電光石火
+    activation_rate: 0.4
+    description: 對敵軍群體（{var:target_count}人）造成兵刃傷害(傷害率{var:dmg})，隨後使隨機友軍單體統率增加{var:stat_inc}點並{status:援護}自身，持續{var:duration}回合
+    vars:
+      target_count: 2
+      dmg:
+        base: 0.48
+        max: 0.96
+      stat_inc:
+        base: 24
+        max: 48
+      duration: 2
+    _action: modify
+    _name_jp: 電光石火
+  金城湯池:
+    name: 金城湯池
+    activation_rate: 0.4
+    description: '{status:牽制}敵軍群體（{var:target_count}人），並使自身受到戰法傷害降低{var:dmg_reduce}%{scale:智略}，持續{var:duration}回合，下個回合行動前恢復自身兵力（恢復率{var:heal_rate}%{scale:智略}）'
+    vars:
+      target_count: 2-3
+      dmg_reduce:
+        base: 0.075
+        max: 0.15
+      duration: 1
+      heal_rate:
+        base: 0.39
+        max: 0.78
+    source_hero: 安宅冬康
+    _action: modify
+    _name_jp: 金城湯池
+  疾風迅雷:
+    name: 疾風迅雷
+    activation_rate: 1.0
+    description: 戰鬥中，有 {var:trigger_chance}{scale:武勇}機率對敵方群體 ({var:target_count}人)
+      分別造成兵刃傷害 (傷害率 {var:damage_rate})，有 {var:status_chance}{scale:武勇}機率使其進入持續{var:status_duration}回合的{status:麻痺}狀態。若目標處於{status:麻痺}狀態，恢復我軍單體兵力
+      (恢復率 {var:heal_rate}{scale:武勇})。
+    commander_description: 若目標處於{status:麻痺}狀態，有 {var:extra_trigger_chance}{scale:武勇}機率額外對敵方單體發動{var:extra_trigger_count}次該戰法，不能重複觸發。
+    vars:
+      trigger_chance:
+        base: 0.225
+        max: 0.45
+      target_count: 2
+      damage_rate:
+        base: 0.38
+        max: 0.76
+      status_chance:
+        base: 0.25
+        max: 0.5
+      status_duration: 1
+      heal_rate:
+        base: 0.48
+        max: 0.96
+      extra_trigger_chance:
+        base: 0.08
+        max: 0.16
+      extra_trigger_count: 1
+    unique_hero: 立花誾千代
+    is_unique: true
+    _action: modify
+    _name_jp: 疾風迅雷
+  表裏比興:
+    name: 表裡比興
+    description: 對敵軍單體造成謀略傷害（傷害率{var:damage_rate}{scale:int}）並施加{status:混亂}狀態，持續{var:duration}回合，其下回合首次普通攻擊目標若為我軍，自身恢復目標兵力（恢復率{var:heal_rate}{scale:int}）。若為敵軍，自身對目標造成謀略傷害（傷害率{var:counter_damage_rate}{scale:int}）。若此戰法發動時目標已{status:混亂}，自身再對敵軍單體造成謀略傷害（傷害率{var:extra_damage_rate}{scale:int}，優先選擇其友軍）。
+    commander_description: 使被施加{status:混亂}狀態的敵方武將為自身分擔{var:share_damage_rate}{scale:int}傷害，持續{var:duration}回合。
+    vars:
+      damage_rate:
+        base: 0.71
+        max: 1.42
+      duration: 1
+      heal_rate:
+        base: 0.45
+        max: 0.9
+      counter_damage_rate:
+        base: 0.45
+        max: 0.9
+      extra_damage_rate:
+        base: 0.81
+        max: 1.92
+      share_damage_rate:
+        base: 0.015
+        max: 0.03
+    unique_hero: 真田昌幸
+    is_unique: true
+    _action: modify
+  越後二天:
+    name: 越後二天
+    description: 普通攻擊之後，對目標造成{var:dmg1}兵刃傷害，並有{var:silence_prob}幾率施加{status:無策}狀態，持續{var:duration}回合；若目標已處於{status:無策}狀態，則恢復自身兵力（治療率{var:heal}，受{scale:武勇}影響）；隨後有{var:extra_prob}幾率額外對敵軍單體造成一次兵刃傷害（傷害率{var:dmg2}）。該戰法每成功發動一次，使施加{status:無策}的幾率增加{var:prob_inc}，最多增加{var:max_stacks}次。
+    vars:
+      dmg1:
+        base: 0.58
+        max: 1.08
+      silence_prob: 0.4
+      duration: 1
+      heal:
+        base: 0.39
+        max: 0.78
+      extra_prob: 0.5
+      dmg2:
+        base: 0.54
+        max: 1.08
+      prob_inc: 0.1
+      max_stacks: 3
+    unique_hero: 柿崎景家
+    is_unique: true
+    _action: modify
+    _name_jp: 越後二天
+  樽俎折衝:
+    name: 樽俎折衝
+    description: 行動前，有{var:prob}{scale:統率}機率對自身和敵軍單體施加{status:封擊}狀態，若自身處於{status:無策}狀態，改為施加{status:無策}狀態
+      (若同時處於{status:封擊}與{status:無策}狀態，施加兩種狀態)。除自身外若我軍仍有武將存活，使敵軍目標為自身分擔{var:share}{scale:統率}的傷害，持續{var:round}回合
+    commander_description: 分擔傷害的比例提升至{var:cmdr_share}{scale:統率}
+    vars:
+      prob:
+        base: 0.15
+        max: 0.3
+      share:
+        base: 0.02
+        max: 0.04
+      cmdr_share:
+        base: 0.035
+        max: 0.07
+      round: 2
+    unique_hero: 伊達輝宗
+    is_unique: true
+    _action: modify
+    _name_jp: 樽俎折衝
+  松柏之操:
+    name: 松柏之操
+    description: 使我軍大將除自帶戰法外的主動戰法發動機率增加{var:active_prob_inc}{scale:int}，每次獲得自身或友軍戰法的功能性狀態增益時，有{var:trigger_chance}{scale:int}幾率使自軍副將受到的傷害降低{var:dmg_red}{scale:int}，持續{var:duration}回合，最多疊加{var:max_stack}次
+    vars:
+      active_prob_inc:
+        base: 0.075
+        max: 0.15
+      trigger_chance:
+        base: 0.325
+        max: 0.65
+      dmg_red:
+        base: 0.025
+        max: 0.05
+      duration: 2
+      max_stack: 2
+    unique_hero: 阿松
+    is_unique: true
+    _action: modify
+    _name_jp: 松柏之操
+  瞬息万変:
+    name: 瞬息萬變
+    description: 對敵軍單體造成謀略傷害（傷害率{var:dmg1}，受{scale:智略}影響），並施加{status:混亂}狀態，持續{var:dur}回合，若其已{status:混亂}，則令另外{var:count}名敵軍武將對其造成傷害（傷害率{var:dmg2}，類型受該武將武勇或智略較高的一項影響）
+    vars:
+      dmg1:
+        base: 0.81
+        max: 1.62
+      dur: 1
+      count: 1
+      dmg2:
+        base: 0.79
+        max: 1.58
+    _action: modify
+  恵風和雨:
+    name: 惠風和雨
+    description: 戰鬥中，偶數回合，有{var:trigger_rate_even}機率治療我軍群體（{var:target_count}人）（治療率{var:heal_rate}，受{scale:智略}影響）；若自身為女性武將，則奇數回合也有{var:trigger_rate_odd}機率（受{scale:魅力}影響）治療我軍群體（{var:target_count}人）（治療率{var:heal_rate}，受{scale:智略}影響）。
+    vars:
+      trigger_rate_even:
+        base: 0.4
+        max: 0.8
+      heal_rate:
+        base: 0.61
+        max: 1.22
+      trigger_rate_odd:
+        base: 0.1
+        max: 0.2
+      target_count: 2
+    _action: modify
+  奇策縦横:
+    name: 奇策縱橫
+    description: 準備{var:prep_turns}回合，對敵軍全體造成謀略傷害（傷害率{var:dmg_rate}，受{scale:智略}影響）
+    vars:
+      prep_turns: 1
+      dmg_rate:
+        base: 1.27
+        max: 2.54
+    _action: modify
+  一舟軒:
+    name: 一舟軒
+    description: 恢復友軍群體（{var:target_num}人）兵力（恢復率{var:heal_rate}{scale:智略}），並有{var:prob}{scale:智略}機率使其獲得{var:stacks}次鐵壁，持續{var:duration}回合
+    vars:
+      target_num: 2
+      heal_rate:
+        base: 0.76
+        max: 1.52
+      prob:
+        base: 0.26
+        max: 0.52
+      stacks: 1
+      duration: 2
+    unique_hero: 安宅冬康
+    is_unique: true
+    _action: modify
+    _name_jp: 一舟軒
+  勇猛無比:
+    name: 勇猛無前
+    description: 使自身獲得{var:crit_rate_1:%}{status:會心}狀態，持續{var:duration}回合，並對敵軍單體造成兵刃傷害（傷害率{var:damage_1:%}），有{var:extra_trigger_chance:%}機率（{scale:spd}）再次使自身獲得{var:crit_rate_2:%}{status:會心}狀態（最多疊加{var:max_stacks}次），並對另一名敵軍造成兵刃傷害（傷害率{var:damage_2:%}）
+    vars:
+      crit_rate_1:
+        base: 0.125
+        max: 0.25
+      duration: 2
+      damage_1:
+        base: 0.58
+        max: 1.16
+      extra_trigger_chance:
+        base: 0.325
+        max: 0.65
+      crit_rate_2:
+        base: 0.075
+        max: 0.15
+      max_stacks: 2
+      damage_2:
+        base: 0.49
+        max: 0.98
+    _action: modify
+  剛毅木訥:
+    name: 剛毅木訥
+    description: 友軍群體（{var:target_count}人）每回合首次受到傷害時，自身有{var:proc_rate}機率對造成傷害的敵軍武將造成兵刃傷害（傷害率{var:dmg_rate}），並恢復受到傷害的友軍兵力（恢復率{var:heal_rate}，{scale:智略}）
+    commander_description: 使發動機率額外{scale:統率}
+    vars:
+      target_count: 2
+      proc_rate:
+        base: 0.225
+        max: 0.45
+      dmg_rate:
+        base: 0.43
+        max: 0.86
+      heal_rate:
+        base: 0.43
+        max: 0.86
+    unique_hero: 加藤嘉明
+    is_unique: true
+    _action: modify
+    _name_jp: 剛毅木訥
+  弾嵐雨霞:
+    name: 彈嵐雨霰
+    description: 對敵軍單體造成 {var:hits_min}-{var:hits_max} 次兵刃傷害（傷害率 {var:damage_rate}），有
+      {var:status_chance} 機率對其施加 {status:無策} 或 {status:封擊} 狀態（優先施加未重複的狀態），持續 {var:duration}
+      回合，若目標處於持續性減益狀態中，機率增加 {var:extra_chance}。該戰法發動後進入 {var:cooldown} 回合冷卻時間。
+    commander_description: 造成 {var:commander_hits} 次傷害的機率增加至 {var:commander_hits_chance}。
+    vars:
+      hits_min: 2
+      hits_max: 3
+      damage_rate:
+        base: 0.63
+        max: 1.26
+      status_chance:
+        base: 0.375
+        max: 0.75
+      duration: 1
+      extra_chance:
+        base: 0.075
+        max: 0.15
+      cooldown: 1
+      commander_hits: 3
+      commander_hits_chance: 0.75
+    unique_hero: 鈴木佐大夫
+    is_unique: true
+    _action: modify
 heroes:
-  柿崎景家:
-    _action: add
-    gender: 男
-    portrait: https://i.imgur.com/VYehA8W.png
-    detail_url: ''
-    teachable_skill: 勇猛無前
-    assembly_skill: 先銳突擊
-    stats:
-      lea: 158
-      val: 225
-      int: 138
-      pol: 111
-      cha: 106
-      spd: 136
-    traits:
-    - name: 騎兵大將
-      description: 部隊的騎兵等級上升3級,等級上限增加1級
-      active: true
-    - name: 先驅
-      description: 戰鬥前3回合,自身受到控制狀態時,有40%機率使其無效,最多生效2次
-      active: true
-    - name: 血氣II
-      description: 造成兵刃傷害增加2.2%
-      active: true
-    - name: 猛攻II
-      description: 我軍全體造成兵刃傷害增加1.8%
-      active: true
-    bingxue:
-      陣立:
-        major:
-        - 勇猛果敢
-        - 返り討ちの計
-        - 生々流転
-        minor:
-        - 乱戦
-        - 俊才
-        - 才気
-        - 不敵
-        - 逆境
-        - 恩顧
-      武略:
-        major:
-        - 当意即妙
-        - 冷静沈着
-        - 兵勢連鎖
-        minor:
-        - 剛力
-        - 豪勇
-        - 突貫
-        - 胆力
-        - 活路
-        - 警戒
-      臨戦:
-        major:
-        - 離間の計
-        - 軍律擾乱
-        - 破陣の勢い
-        minor:
-        - 神算
-        - 鬼気
-        - 大勇
-        - 早駆
-        - 神秘
-        - 強靭
-      機略:
-        major:
-        - 搦手の策
-        - 心頭滅却
-        - 達人大観
-        minor:
-        - 兵家
-        - 機動
-        - 協同
-        - 地利
-        - 明鏡
-        - 天時
-  立花誾千代:
-    _action: add
-    _replaces: 立花闇千代
-    gender: 女
-    portrait: https://i.imgur.com/uHjLFYR.png
-    detail_url: ''
-    teachable_skill: 惠風和雨
-    assembly_skill: 姬武者同心
-    stats:
-      lea: 164
-      val: 202
-      int: 137
-      pol: 110
-      cha: 139
-      spd: 112
-    traits:
-    - name: 近衛齊射
-      description: 普通攻擊之後，有 20% 機率使目標進入麻痹狀態，每回合有 30% 機率無法行動，持續 2 回合。
-      active: true
-    - name: 姬城督
-      description: 每造成 6 次兵刃傷害，恢復我軍兵力最低單體（恢復率 98%，受武勇影響），最多觸發 2 次。
-      active: true
-    - name: 槍炮術II
-      description: 部隊的足輕、鐵炮等級上升 2 級。
-      active: true
-    - name: 武威I
-      description: 武勇提升{var:rate}
-      vars:
-        rate: 0.02
-      active: true
-    bingxue:
-      陣立:
-        major:
-        - 右往左往
-        - 返り討ちの計
-        - 生々流転
-        minor:
-        - 俊才
-        - 才気
-        - 逆境
-        - 不敵
-        - 兵心
-        - 恩顧
-      武略:
-        major:
-        - 舟中敵国
-        - 当意即妙
-        - 兵勢連鎖
-        minor:
-        - 剛力
-        - 豪勇
-        - 妙策
-        - 突貫
-        - 胆力
-        - 活路
-      臨戦:
-        major:
-        - 離間の計
-        - 軍律擾乱
-        - 破陣の勢い
-        minor:
-        - 神算
-        - 鬼気
-        - 大勇
-        - 早駆
-        - 神秘
-        - 強靭
-      機略:
-        major:
-        - 手当の心得
-        - 鼓舞激励
-        - 搦手の策
-        minor:
-        - 協同
-        - 地利
-        - 仁愛
-        - 天時
-        - 内助
-        - 不惑
-  鈴木佐大夫:
-    _action: add
-    gender: 男
-    portrait: https://i.imgur.com/R8jV3D5.png
-    detail_url: ''
-    teachable_skill: 電光石火
-    assembly_skill: 調遣民夫・優
-    stats:
-      lea: 100
-      val: 100
-      int: 100
-      pol: 100
-      cha: 100
-      spd: 100
-    traits:
-    - name: 鐵炮大將
-      description: 部隊鐵炮等級增加{var:lv_up}，等級上限增加{var:cap_up}
-      vars:
-        lv_up: 3
-        cap_up: 1
-      active: true
-    - name: 牢固III
-      description: 受到傷害減少2%
-      active: true
-    - name: 破敵II
-      description: 造成傷害增加1.6%
-      active: true
-    - name: 靈巧II
-      description: 速度提高2.5%
-      active: true
-    bingxue:
-      陣立:
-        major:
-        - 右往左往
-        - 返り討ちの計
-        - 生々流転
-        minor:
-        - 俊才
-        - 才気
-        - 逆境
-        - 不敵
-        - 兵心
-        - 恩顧
-      武略:
-        major:
-        - 舟中敵国
-        - 当意即妙
-        - 兵勢連鎖
-        minor:
-        - 剛力
-        - 豪勇
-        - 妙策
-        - 突貫
-        - 胆力
-        - 活路
-      臨戦:
-        major:
-        - 離間の計
-        - 軍律擾乱
-        - 破陣の勢い
-        minor:
-        - 神算
-        - 鬼気
-        - 早駆
-        - 神秘
-        - 練磨
-        - 強靭
-      機略:
-        major:
-        - 搦手の策
-        - 心頭滅却
-        - 達人大観
-        minor:
-        - 果敢
-        - 機動
-        - 協同
-        - 地利
-        - 明鏡
-        - 天時
-  加藤嘉明:
-    _action: add
-    gender: 男
-    portrait: https://i.imgur.com/HJ1HKTU.png
-    detail_url: ''
-    teachable_skill: 電光石火
-    assembly_skill: 擴張石產・優
-    stats:
-      lea: 100
-      val: 100
-      int: 100
-      pol: 100
-      cha: 100
-      spd: 100
-    traits:
-    - name: 弓槍術II
-      description: 部隊的足輕、弓兵等級上升2級
-      active: true
-    - name: 武威II
-      description: 武勇提高2.5%
-      active: true
-    - name: 智慧II
-      description: 智略提高2.5%
-      active: true
-    - name: 牢固II
-      description: 受到傷害減少1.6%
-      active: true
-    bingxue:
-      陣立:
-        major:
-        - 勇猛果敢
-        - 返り討ちの計
-        - 生々流転
-        minor:
-        - 乱戦
-        - 俊才
-        - 才気
-        - 不敵
-        - 逆境
-        - 恩顧
-      武略:
-        major:
-        - 舟中敵国
-        - 当意即妙
-        - 智勇兼備
-        minor:
-        - 剛力
-        - 豪勇
-        - 妙策
-        - 突貫
-        - 胆力
-        - 活路
-      臨戦:
-        major:
-        - 臨機応変
-        - 軍律擾乱
-        - 離間の計
-        minor:
-        - 神算
-        - 鬼気
-        - 大勇
-        - 早駆
-        - 神秘
-        - 多謀
-      機略:
-        major:
-        - 手当の心得
-        - 達人大観
-        - 搦手の策
-        minor:
-        - 機動
-        - 協同
-        - 地利
-        - 天時
-        - 不惑
-        - 明鏡
-  真田昌幸:
-    _action: add
-    gender: 男
-    portrait: https://i.imgur.com/Bc0WPgD.png
-    detail_url: ''
-    teachable_skill: 瞬息萬變
-    assembly_skill: 六文錢之誓
-    stats:
-      lea: 177
-      val: 106
-      int: 234
-      pol: 145
-      cha: 230
-      spd: 76
-    traits:
-    - name: 老獪
-      description: 自身勢力將與大將保持一致，若勢力未發生改變時自身獲得8%攻心
-      active: true
-    - name: 虛實
-      description: 行動後，若有敵軍武將處於混亂狀態，自身受到的傷害減少3%，持續1回合，友方真田家武將獲得50%的效果
-      active: true
-    - name: 弓炮術II
-      description: 部隊的弓兵、鐵炮等級上升2級
-      active: true
-    - name: 智慧I
-      description: 智力提升{var:int_up}
-      vars:
-        int_up: 0.02
-      active: true
-    bingxue:
-      陣立:
-        major:
-        - 右往左往
-        - 返り討ちの計
-        - 生々流転
-        minor:
-        - 俊才
-        - 才気
-        - 逆境
-        - 不敵
-        - 兵心
-        - 恩顧
-      武略:
-        major:
-        - 表裏一体
-        - 当意即妙
-        - 冷静沈着
-        minor:
-        - 剛力
-        - 豪勇
-        - 妙策
-        - 奇謀
-        - 胆力
-        - 活路
-      臨戦:
-        major:
-        - 離間の計
-        - 軍律擾乱
-        - 破陣の勢い
-        minor:
-        - 神算
-        - 鬼気
-        - 早駆
-        - 神秘
-        - 練磨
-        - 多謀
-      機略:
-        major:
-        - 搦手の策
-        - 心頭滅却
-        - 達人大観
-        minor:
-        - 果敢
-        - 機動
-        - 協同
-        - 地利
-        - 明鏡
-        - 天時
-  阿松:
-    _action: add
-    gender: 女
-    portrait: https://i.imgur.com/D1WjMi8.png
-    detail_url: ''
-    teachable_skill: 奇策縱橫
-    assembly_skill: 姬武者同心
-    stats:
-      lea: 159
-      val: 71
-      int: 168
-      pol: 198
-      cha: 148
-      spd: 65
-    traits:
-    - name: 淑德
-      description: 戰鬥中，前2回合，我軍大將每回合首次被施加無策、封擊或者混亂狀態時，自身有80%幾率為其承擔。
-      active: true
-    - name: 馬槍術I
-      description: 部隊的騎兵、足輕等級上升1級
-      active: true
-    - name: 隱忍II
-      description: 使自身受到普通攻擊的機率降低
-      active: true
-    - name: 守勢III
-      description: 我軍全體受到傷害減少1.6%
-      active: true
-    bingxue:
-      陣立:
-        major:
-        - 陽動の策
-        - 気勢崩し
-        - 生々流転
-        minor:
-        - 俊才
-        - 才気
-        - 逆境
-        - 不敵
-        - 兵心
-        - 恩顧
-      武略:
-        major:
-        - 表裏一体
-        - 当意即妙
-        - 冷静沈着
-        minor:
-        - 剛力
-        - 豪勇
-        - 妙策
-        - 奇謀
-        - 胆力
-        - 活路
-      臨戦:
-        major:
-        - 臨機応変
-        - 軍律擾乱
-        - 離間の計
-        minor:
-        - 神算
-        - 鬼気
-        - 大勇
-        - 早駆
-        - 神秘
-        - 多謀
-      機略:
-        major:
-        - 手当の心得
-        - 達人大観
-        - 搦手の策
-        minor:
-        - 機動
-        - 協同
-        - 地利
-        - 天時
-        - 不惑
-        - 明鏡
-  安宅冬康:
-    _action: add
-    gender: 男
-    portrait: https://i.imgur.com/rBxWcTp.png
-    detail_url: ''
-    teachable_skill: 金城湯池
-    assembly_skill: 調遣民夫優
-    stats:
-      lea: 146
-      val: 72
-      int: 163
-      pol: 144
-      cha: 121
-      spd: 84
-    traits:
-    - name: 弓術III
-      description: 部隊的弓兵等級上升3級
-      active: true
-    - name: 固守III
-      description: 我軍全體受到兵刃傷害減少2.2%
-      active: true
-    - name: 堅固II
-      description: 我軍全體受到謀略傷害減少3%
-      active: true
-    - name: 隱忍I
-      description: 使自身受到普通攻擊的機率略微降低
-      active: true
-    bingxue:
-      陣立:
-        major:
-        - 陽動の策
-        - 気勢崩し
-        - 生々流転
-        minor:
-        - 俊才
-        - 才気
-        - 逆境
-        - 不敵
-        - 兵心
-        - 恩顧
-      武略:
-        major:
-        - 表裏一体
-        - 当意即妙
-        - 冷静沈着
-        minor:
-        - 剛力
-        - 豪勇
-        - 妙策
-        - 奇謀
-        - 胆力
-        - 活路
-      臨戦:
-        major:
-        - 臨機応変
-        - 軍律擾乱
-        - 破陣の勢い
-        minor:
-        - 神算
-        - 鬼気
-        - 早駆
-        - 神秘
-        - 練磨
-        - 強靭
-      機略:
-        major:
-        - 手当の心得
-        - 鼓舞激励
-        - 達人大観
-        minor:
-        - 果敢
-        - 機動
-        - 協同
-        - 仁愛
-        - 天時
-        - 内助
-  伊達輝宗:
-    _action: add
-    gender: 男
-    portrait: https://i.imgur.com/k5t29MK.png
-    detail_url: ''
-    teachable_skill: 金城湯池
-    assembly_skill: 擴張石產優
-    stats:
-      lea: 155
-      val: 81
-      int: 135
-      pol: 156
-      cha: 143
-      spd: 89
-    traits:
-    - name: 領兵III
-      description: 統率提高3%
-      active: true
-    - name: 馬炮術I
-      description: 部隊的騎兵、鐵炮等級上升1級
-      active: true
-    - name: 防護III
-      description: 受到兵刃傷害減少2.8%
-      active: true
-    - name: 剛猛I
-      description: 自身受到普通攻擊的機率小幅提高
-      vars: {}
-      active: true
-    bingxue:
-      陣立:
-        major:
-        - 右往左往
-        - 返り討ちの計
-        - 生々流転
-        minor:
-        - 俊才
-        - 才気
-        - 逆境
-        - 不敵
-        - 兵心
-        - 恩顧
-      武略:
-        major:
-        - 表裏一体
-        - 当意即妙
-        - 冷静沈着
-        minor:
-        - 剛力
-        - 豪勇
-        - 妙策
-        - 奇謀
-        - 胆力
-        - 活路
-      臨戦:
-        major:
-        - 臨機応変
-        - 軍律擾乱
-        - 破陣の勢い
-        minor:
-        - 神算
-        - 鬼気
-        - 早駆
-        - 神秘
-        - 練磨
-        - 強靭
-      機略:
-        major:
-        - 手当の心得
-        - 達人大観
-        - 搦手の策
-        minor:
-        - 機動
-        - 協同
-        - 地利
-        - 天時
-        - 不惑
-        - 明鏡
   お江:
     traits:
     - name: 花枝招展
@@ -2759,6 +2099,55 @@ heroes:
     - name: 高昂II
       description: 增加3.8%會心傷害率和奇謀傷害率
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 気勢崩し
+        - 返り討ちの計
+        - 生々流転
+        minor:
+        - 慧眼
+        - 俊才
+        - 兵心
+        - 乱戦
+        - 逆境
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 智勇兼備
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 詭計百出
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 多謀
+        - 強靭
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 協同
+        - 地利
+        - 天時
+        - 機動
+        - 明鏡
+        - 不惑
     _action: add
   藤林正保:
     name: 藤林正保
@@ -2791,6 +2180,55 @@ heroes:
     - name: 看破I
       description: 受到謀略傷害減少2.6%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 地利
+        - 明鏡
+        - 天時
     _action: add
   三好實休:
     portrait: https://i.imgur.com/4tS1C7F.png
@@ -2823,6 +2261,55 @@ heroes:
     - name: 智慧I
       description: 智略提高2%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 手当の心得
+        - 鼓舞激励
+        - 達人大観
+        minor:
+        - 協同
+        - 地利
+        - 仁愛
+        - 天時
+        - 明鏡
+        - 不惑
     _action: add
   大久保長安:
     name: 大久保長安
@@ -2855,6 +2342,55 @@ heroes:
     - name: 隱忍I
       description: 使自身受到普通攻擊的機率略微降低
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 達人大観
+        - 手当の心得
+        - 脱兎の如し
+        minor:
+        - 機動
+        - 協同
+        - 地利
+        - 仁愛
+        - 天時
+        - 内助
     _action: add
   長野業正:
     name: 長野業正
@@ -2887,6 +2423,55 @@ heroes:
     - name: 守勢I
       description: 我軍全體受到傷害減少1%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 右往左往
+        - 先陣誘導
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 達人大観
+        - 殿軍救護
+        - 搦手の策
+        minor:
+        - 機動
+        - 協同
+        - 仁愛
+        - 天時
+        - 内助
+        - 明鏡
     _action: add
   佐竹義重:
     name: 佐竹義重
@@ -2919,6 +2504,55 @@ heroes:
     - name: 盡力II
       description: 獲得4%會心狀態
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 勇猛果敢
+        - 返り討ちの計
+        - 生々流転
+        minor:
+        - 乱戦
+        - 俊才
+        - 才気
+        - 不敵
+        - 逆境
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 地利
+        - 明鏡
+        - 天時
     _action: add
   堀直政:
     name: 堀直政
@@ -2983,4 +2617,599 @@ heroes:
     - name: 攻勢II
       description: 我軍全體造成傷害增加1.3%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 離間の計
+        minor:
+        - 神算
+        - 鬼気
+        - 大勇
+        - 早駆
+        - 神秘
+        - 多謀
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 協同
+        - 地利
+        - 天時
+        - 機動
+        - 明鏡
+        - 不惑
     _action: add
+  鈴木佐大夫:
+    traits:
+    - name: 鐵炮大將
+      description: 部隊鐵炮等級增加{var:lv_up}，等級上限增加{var:cap_up}
+      vars:
+        lv_up: 3
+        cap_up: 1
+      active: true
+    - name: 牢固III
+      description: 受到傷害減少2%
+      active: true
+    - name: 破敵II
+      description: 造成傷害增加1.6%
+      active: true
+    - name: 靈巧II
+      description: 速度提高2.5%
+      active: true
+    bingxue:
+      陣立:
+        major:
+        - 右往左往
+        - 返り討ちの計
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 兵勢連鎖
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 地利
+        - 明鏡
+        - 天時
+    name: 鈴木佐大夫
+    _action: modify
+    _name_jp: 鈴木佐大夫
+  まつ:
+    assembly_skill: 姬武者同心
+    traits:
+    - name: 淑德
+      description: 戰鬥中，前2回合，我軍大將每回合首次被施加無策、封擊或者混亂狀態時，自身有80%幾率為其承擔。
+      active: true
+    - name: 馬槍術I
+      description: 部隊的騎兵、足輕等級上升1級
+      active: true
+    - name: 隱忍II
+      description: 使自身受到普通攻擊的機率降低
+      active: true
+    - name: 守勢III
+      description: 我軍全體受到傷害減少1.6%
+      active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 離間の計
+        minor:
+        - 神算
+        - 鬼気
+        - 大勇
+        - 早駆
+        - 神秘
+        - 多謀
+      機略:
+        major:
+        - 手当の心得
+        - 達人大観
+        - 搦手の策
+        minor:
+        - 機動
+        - 協同
+        - 地利
+        - 天時
+        - 不惑
+        - 明鏡
+    name: 阿松
+    _action: modify
+  安宅冬康:
+    assembly_skill: 調遣民夫優
+    traits:
+    - name: 弓術III
+      description: 部隊的弓兵等級上升3級
+      active: true
+    - name: 固守III
+      description: 我軍全體受到兵刃傷害減少2.2%
+      active: true
+    - name: 堅固II
+      description: 我軍全體受到謀略傷害減少3%
+      active: true
+    - name: 隱忍I
+      description: 使自身受到普通攻擊的機率略微降低
+      active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 手当の心得
+        - 鼓舞激励
+        - 達人大観
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 仁愛
+        - 天時
+        - 内助
+    name: 安宅冬康
+    _action: modify
+    _name_jp: 安宅冬康
+  加藤嘉明:
+    assembly_skill: 擴張石產・優
+    traits:
+    - name: 弓槍術II
+      description: 部隊的足輕、弓兵等級上升2級
+      active: true
+    - name: 武威II
+      description: 武勇提高2.5%
+      active: true
+    - name: 智慧II
+      description: 智略提高2.5%
+      active: true
+    - name: 牢固II
+      description: 受到傷害減少1.6%
+      active: true
+    bingxue:
+      陣立:
+        major:
+        - 勇猛果敢
+        - 返り討ちの計
+        - 生々流転
+        minor:
+        - 乱戦
+        - 俊才
+        - 才気
+        - 不敵
+        - 逆境
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 智勇兼備
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 離間の計
+        minor:
+        - 神算
+        - 鬼気
+        - 大勇
+        - 早駆
+        - 神秘
+        - 多謀
+      機略:
+        major:
+        - 手当の心得
+        - 達人大観
+        - 搦手の策
+        minor:
+        - 機動
+        - 協同
+        - 地利
+        - 天時
+        - 不惑
+        - 明鏡
+    name: 加藤嘉明
+    _action: modify
+    _name_jp: 加藤嘉明
+  立花誾千代:
+    assembly_skill: 姬武者同心
+    traits:
+    - name: 近衛齊射
+      description: 普通攻擊之後，有 20% 機率使目標進入麻痹狀態，每回合有 30% 機率無法行動，持續 2 回合。
+      active: true
+    - name: 姬城督
+      description: 每造成 6 次兵刃傷害，恢復我軍兵力最低單體（恢復率 98%，受武勇影響），最多觸發 2 次。
+      active: true
+    - name: 槍炮術II
+      description: 部隊的足輕、鐵炮等級上升 2 級。
+      active: true
+    - name: 武威I
+      description: 武勇提升{var:rate}
+      vars:
+        rate: 0.02
+      active: true
+    bingxue:
+      陣立:
+        major:
+        - 右往左往
+        - 返り討ちの計
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 兵勢連鎖
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 大勇
+        - 早駆
+        - 神秘
+        - 強靭
+      機略:
+        major:
+        - 手当の心得
+        - 鼓舞激励
+        - 搦手の策
+        minor:
+        - 協同
+        - 地利
+        - 仁愛
+        - 天時
+        - 内助
+        - 不惑
+    name: 立花誾千代
+    aliases:
+    - 立花闇千代
+    _action: modify
+    _name_jp: 立花誾千代
+  伊達輝宗:
+    assembly_skill: 擴張石產優
+    traits:
+    - name: 領兵III
+      description: 統率提高3%
+      active: true
+    - name: 馬炮術I
+      description: 部隊的騎兵、鐵炮等級上升1級
+      active: true
+    - name: 防護III
+      description: 受到兵刃傷害減少2.8%
+      active: true
+    - name: 剛猛I
+      description: 自身受到普通攻擊的機率小幅提高
+      vars: {}
+      active: true
+    bingxue:
+      陣立:
+        major:
+        - 右往左往
+        - 返り討ちの計
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 手当の心得
+        - 達人大観
+        - 搦手の策
+        minor:
+        - 機動
+        - 協同
+        - 地利
+        - 天時
+        - 不惑
+        - 明鏡
+    name: 伊達輝宗
+    _action: modify
+    _name_jp: 伊達輝宗
+  真田昌幸:
+    teachable_skill: 瞬息萬變
+    assembly_skill: 六文錢之誓
+    traits:
+    - name: 老獪
+      description: 自身勢力將與大將保持一致，若勢力未發生改變時自身獲得8%攻心
+      active: true
+    - name: 虛實
+      description: 行動後，若有敵軍武將處於混亂狀態，自身受到的傷害減少3%，持續1回合，友方真田家武將獲得50%的效果
+      active: true
+    - name: 弓炮術II
+      description: 部隊的弓兵、鐵炮等級上升2級
+      active: true
+    - name: 智慧I
+      description: 智力提升{var:int_up}
+      vars:
+        int_up: 0.02
+      active: true
+    bingxue:
+      陣立:
+        major:
+        - 右往左往
+        - 返り討ちの計
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 多謀
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 地利
+        - 明鏡
+        - 天時
+    name: 真田昌幸
+    _action: modify
+    _name_jp: 真田昌幸
+  柿崎景家:
+    teachable_skill: 勇猛無前
+    assembly_skill: 先銳突擊
+    traits:
+    - name: 騎兵大將
+      description: 部隊的騎兵等級上升3級,等級上限增加1級
+      active: true
+    - name: 先驅
+      description: 戰鬥前3回合,自身受到控制狀態時,有40%機率使其無效,最多生效2次
+      active: true
+    - name: 血氣II
+      description: 造成兵刃傷害增加2.2%
+      active: true
+    - name: 猛攻II
+      description: 我軍全體造成兵刃傷害增加1.8%
+      active: true
+    bingxue:
+      陣立:
+        major:
+        - 勇猛果敢
+        - 返り討ちの計
+        - 生々流転
+        minor:
+        - 乱戦
+        - 俊才
+        - 才気
+        - 不敵
+        - 逆境
+        - 恩顧
+      武略:
+        major:
+        - 当意即妙
+        - 冷静沈着
+        - 兵勢連鎖
+        minor:
+        - 剛力
+        - 豪勇
+        - 突貫
+        - 胆力
+        - 活路
+        - 警戒
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 大勇
+        - 早駆
+        - 神秘
+        - 強靭
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 兵家
+        - 機動
+        - 協同
+        - 地利
+        - 明鏡
+        - 天時
+    name: 柿崎景家
+    _action: modify
+    _name_jp: 柿崎景家

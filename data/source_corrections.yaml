@@ -40,6 +40,17 @@ game8_skill_renames:
     noted: 2026-05-07
     verified_by: user
 
+  弾嵐雨霞:
+    rename_to: 弾嵐雨霰
+    cht: 彈嵐雨霰
+    reason: |
+      game8 stale name 霞 (haze) vs cfg canonical 霰 (hail). game8 lists
+      鈴木佐大夫's unique_skill as 弾嵐雨霞, but cfg.hero[10210].born_skill_ja
+      = 弾嵐雨霰, zh-hant = 彈嵐雨霰 (curated translation lives on that
+      override). Renaming unifies the crawled entry with the cfg/override name.
+    noted: 2026-07-11
+    verified_by: cfg_diff_auto
+
 # When game8 mis-classifies a teachable as a hero's unique skill, or vice
 # versa. Removing from `unique` and adding to `teachable` are independent
 # operations — set whichever apply.

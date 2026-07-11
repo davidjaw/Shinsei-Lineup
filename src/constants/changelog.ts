@@ -35,6 +35,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.4.3',
+    date: '2026-07-11',
+    entries: [
+      { tag: 'data', text: '補充 PK 賽季武將兵學（伊達政宗、三好實休、佐竹義重、浦上宗景、大久保長安、藤林正保、長野業正 等）' },
+      { tag: 'data', text: '重新爬取 S1～S3 武將屬性資料' },
+    ],
+  },
+  {
     version: '0.4.2',
     date: '2026-06-24',
     entries: [
