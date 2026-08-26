@@ -2609,6 +2609,101 @@ skills:
           scale: 政務
     source_hero: 種子島時堯
     _action: add
+  誘敵深入:
+    name: 誘敵深入
+    type: 主動
+    rarity: S
+    target: 敵軍全體
+    activation_rate: 40%
+    description: 使敵軍全體速度降低{var:speed_debuff}點，持續{var:duration}回合；自身下回合開始時，使友軍群體分別對敵軍單體造成傷害（傷害率{var:dmg_rate}，類型由武勇或智略較高的一項決定）。
+    brief_description: 全體降速，次回合友軍分打
+    tags:
+    - 控制
+    - 降低屬性
+    - 兵刃傷害
+    - 謀略傷害
+    - 群體傷害
+    - 主動發動
+    - 武勇系
+    - 智略系
+    - 回合觸發
+    raw_text: 誘敵深入 (S) 種類： 主動 | 控制 發動機率： 40% 效果： 使敵軍全體速度降低60點，持續1回合；自身下回合開始時，使友軍群體分別對敵軍單體造成傷害（傷害率87%->174%，類型由武勇或智略較高的一項決定）
+    vars:
+      speed_debuff: 60
+      duration: 1
+      dmg_rate:
+        base: 0.87
+        max: 1.74
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.4
+      do:
+      - to: enemyAll
+        do:
+        - type: debuff
+          stat: 速度
+          value: $speed_debuff
+          duration: $duration
+      - delay: 1
+        trigger: turnStart
+        then:
+        - to: allyMultiple
+          do:
+          - type: damage
+            damage_type: 混合傷害
+            value: $dmg_rate
+            scale: 武勇或智略
+            target_type: enemySingle
+            target_selection: random
+    is_event_skill: true
+    _action: add
+  以逸待勞:
+    name: 以逸待勞
+    type: 主動
+    rarity: S
+    target: 敵軍群體（2人）
+    activation_rate: 35%
+    description: 準備{var:prep_turns}回合，使敵軍群體（2人）造成的傷害降低{var:damage_debuff}（{scale:統率}），持續{var:duration}回合，並恢復我軍群體（2-3人）兵力（恢復率{var:heal_rate}，{scale:統率}）。
+    brief_description: 準備後降低敵傷並恢復兵力
+    tags:
+    - 治療
+    - 減益
+    - 主動發動
+    - 統率系
+    raw_text: 以逸待勞 (S) 種類： 主動 | 治療 發動機率： 35% 效果： 準備1回合，使敵軍群體（2人）造成的傷害降低13%->26%（受統率影響），持續1回合，並恢復我軍群體（2-3人）兵力（恢復率94%->188%，受統率影響）
+    vars:
+      prep_turns: 1
+      damage_debuff:
+        base: 0.13
+        max: 0.26
+      duration: 1
+      heal_rate:
+        base: 0.94
+        max: 1.88
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.35
+      prepTurns: 1
+      do:
+      - to: enemyMultiple
+        count: 2
+        do:
+        - type: debuff
+          stat: damage_output
+          value: $damage_debuff
+          scale: 統率
+          duration: $duration
+      - to: allyMultiple
+        countMin: 2
+        countMax: 3
+        do:
+        - type: heal
+          value: $heal_rate
+          scale: 統率
+    is_event_skill: true
+    _action: add
 heroes:
   お江:
     traits:
