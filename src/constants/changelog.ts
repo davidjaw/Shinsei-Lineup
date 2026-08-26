@@ -35,6 +35,13 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.4.4',
+    date: '2026-08-26',
+    entries: [
+      { tag: 'data', text: '新增 PK2 賽季武將（島津義久、龍造寺隆信、石川數正、吉岡妙林、相良義陽、種子島時堯）' },
+    ],
+  },
+  {
     version: '0.4.3',
     date: '2026-07-11',
     entries: [

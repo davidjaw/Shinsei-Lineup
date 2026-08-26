@@ -2030,6 +2030,585 @@ skills:
     unique_hero: 鈴木佐大夫
     is_unique: true
     _action: modify
+  三州總大將:
+    name: 三州總大將
+    type: 主動
+    rarity: S
+    target: 我軍全體
+    activation_rate: 50%
+    description: 使我軍全體統率增加{var:lea_buff}點（{scale:智略}），並使友軍群體下{var:hit_count}次造成傷害後，有{var:heal_chance}機率（{scale:智略}）恢復我軍單體兵力（恢復率{var:heal_rate}，{scale:智略}），且有{var:extra_heal_chance}機率額外恢復1人，持續{var:duration}回合。該戰法發動後進入{var:cooldown}回合冷卻。
+    commander_description: 使額外恢復1人的機率（{scale:智略}）。
+    brief_description: 全體加統率，傷害後機率治療
+    tags:
+    - 治療
+    - 增益
+    - 提升屬性
+    - 主動發動
+    - 智略系
+    - 大將技
+    raw_text: 三州總大將 (S) 種類： 冷卻主動戰法 | 治療 發動機率： 50% 效果： 使我軍全體統率增加12->24點（受智略影響），並使友軍群體下2次造成傷害後，有35%->70%機率（受智略影響）恢復我軍單體兵力（恢復率53%->106%，受智略影響），且有50%機率額外恢復1人，持續2回合。該戰法發動後進入1回合冷卻 大將技： 額外恢復1人的機率受智略影響
+    vars:
+      lea_buff:
+        base: 12
+        max: 24
+        type: flat
+      hit_count: 2
+      heal_chance:
+        base: 0.35
+        max: 0.7
+      heal_rate:
+        base: 0.53
+        max: 1.06
+      extra_heal_chance: 0.5
+      duration: 2
+      cooldown: 1
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.5
+      cooldown: $cooldown
+      do:
+      - to: allyAll
+        do:
+        - type: buff
+          stat: 統率
+          value: $lea_buff
+          scale: 智略
+          duration: $duration
+      - to: allyMultiple
+        count: 2
+        do:
+        - type: buff
+          stat: on_damage_heal
+          hits: $hit_count
+          chance: $heal_chance
+          value: $heal_rate
+          extra_chance: $extra_heal_chance
+          extra_count: 1
+          scale: 智略
+          duration: $duration
+      bonus:
+        commander:
+          description: 使額外恢復1人的機率受智略影響
+          do:
+          - type: buff
+            stat: extra_heal_chance
+            value: $extra_heal_chance
+            scale: 智略
+    unique_hero: 島津義久
+    is_unique: true
+    _action: add
+  運籌決勝:
+    name: 運籌決勝
+    type: 主動
+    rarity: S
+    target: 敵軍群體（1-2人）
+    activation_rate: 45%
+    description: 對敵軍群體（1-2人）造成{var:dmg_rate}謀略傷害（{scale:智略}），並有{var:heal_chance}機率治療自身（治療率{var:heal_rate}）。該戰法每成功發動1次，機率增加{var:chance_gain}，最多增加{var:chance_gain_max}次。
+    brief_description: 謀略群體傷害並機率自療
+    tags:
+    - 謀略傷害
+    - 群體傷害
+    - 治療
+    - 主動發動
+    - 智略系
+    raw_text: 運籌決勝 (S) 種類： 主動戰法 | 謀略群體 發動機率： 45% 效果： 對敵軍群體（1-2人）造成謀略傷害（傷害率74%->148%，受智略影響），並有50%機率治療自身（治療率82%->164%），該戰法每成功發動1次，機率增加5%，最多增加3次
+    vars:
+      dmg_rate:
+        base: 0.74
+        max: 1.48
+      heal_chance: 0.5
+      heal_rate:
+        base: 0.82
+        max: 1.64
+      chance_gain: 0.05
+      chance_gain_max: 3
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.45
+      do:
+      - to: enemyMultiple
+        countMin: 1
+        countMax: 2
+        do:
+        - type: damage
+          damage_type: 謀略傷害
+          value: $dmg_rate
+          scale: 智略
+        - type: roll
+          chance: $heal_chance
+          on_success:
+          - to: self
+            do:
+            - type: heal
+              value: $heal_rate
+      - type: addStack
+        stack_name: 運籌決勝
+        value: 1
+        max: $chance_gain_max
+    source_hero: 島津義久
+    _action: add
+  肥前之熊:
+    name: 肥前之熊
+    type: 被動
+    rarity: S
+    target: 自身
+    activation_rate: 100%
+    description: 戰鬥前{var:front_turns}回合，使自身受到的傷害降低{var:dmg_reduction}（{scale:統率}）。自身每次受到兵刃傷害，有{var:counter_chance}機率（{scale:統率}，隨我軍武將陣亡數增加而降低）對敵軍群體（2人）造成兵刃傷害（傷害率{var:dmg_rate}，額外{scale:統率}）。
+    commander_description: 傷害率增加{var:commander_dmg_bonus}。
+    brief_description: 前三回合減傷，受傷機率反打
+    tags:
+    - 兵刃傷害
+    - 群體傷害
+    - 增益
+    - 被動觸發
+    - 條件觸發
+    - 統率系
+    - 大將技
+    raw_text: 肥前之熊 (S) 種類： 被動 | 兵刃群體 發動機率：-- 效果： 戰鬥前3回合，使自身受到的傷害降低12%->24%（受統率影響）。自身每次受到兵刃傷害，有15%->30%機率（受統率影響，隨我軍武將陣亡數增加而降低）對敵軍群體（2人）造成兵刃傷害（傷害率35%->70%，額外受統率影響） 大將技： 傷害率增加7%->14%
+    vars:
+      front_turns: 3
+      dmg_reduction:
+        base: 0.12
+        max: 0.24
+      counter_chance:
+        base: 0.15
+        max: 0.3
+      dmg_rate:
+        base: 0.35
+        max: 0.7
+      commander_dmg_bonus:
+        base: 0.07
+        max: 0.14
+    battle:
+      type: 被動
+      trigger: battleStart
+      do:
+      - to: self
+        do:
+        - type: buff
+          stat: damage_taken
+          value: $dmg_reduction
+          scale: 統率
+          duration: $front_turns
+      - trigger: onDamaged
+        when: damage_type == 兵刃傷害
+        to: self
+        do:
+        - type: roll
+          chance: $counter_chance
+          scale: 統率
+          on_success:
+          - to: enemyMultiple
+            count: 2
+            do:
+            - type: damage
+              damage_type: 兵刃傷害
+              value: $dmg_rate
+              scale: 統率
+      bonus:
+        commander:
+          description: 傷害率增加$commander_dmg_bonus
+          do:
+          - type: buff
+            stat: damage_rate
+            value: $commander_dmg_bonus
+    unique_hero: 龍造寺隆信
+    is_unique: true
+    _action: add
+  堅忍不拔:
+    name: 堅忍不拔
+    type: 被動
+    rarity: S
+    target: 自身
+    activation_rate: 100%
+    description: 戰鬥中使自身獲得{status:反擊}（傷害率{var:counter_rate}）。若自身不為大將，則使傷害率增加至{var:counter_rate_sub}，且每累計受到{var:attack_count}次普通攻擊，使自身統率增加{var:lea_buff}，最多疊加{var:max_stacks}次。
+    brief_description: 獲得反擊，非大將疊加統率
+    tags:
+    - 兵刃傷害
+    - 增益
+    - 提升屬性
+    - 被動觸發
+    - 條件觸發
+    - 統率系
+    raw_text: 堅忍不拔 (S) 種類： 被動 | 增益 發動機率：-- 效果： 戰鬥中使自身獲得反擊狀態（傷害率36%->72%），若自身不為大將，則使傷害率增加至46%->92%，且每累計受到4次普通攻擊，使自身統率增加8%->16%，最多疊加3次
+    vars:
+      counter_rate:
+        base: 0.36
+        max: 0.72
+      counter_rate_sub:
+        base: 0.46
+        max: 0.92
+      attack_count: 4
+      lea_buff:
+        base: 0.08
+        max: 0.16
+      max_stacks: 3
+    battle:
+      type: 被動
+      trigger: battleStart
+      do:
+      - to: self
+        do:
+        - type: buff
+          stat: 反擊
+          value: $counter_rate
+      - trigger: onDamaged
+        when: damage_source == normal_attack && self.role != commander
+        to: self
+        do:
+        - type: buff
+          stat: 反擊
+          value: $counter_rate_sub
+        - type: addStack
+          stack_name: 堅忍不拔
+          value: 1
+        - type: conditional
+          condition: stack_堅忍不拔 % $attack_count == 0 && stack_堅忍不拔_lea < $max_stacks
+          on_true:
+          - type: buff
+            stat: 統率
+            value: $lea_buff
+            duration: 999
+          - type: addStack
+            stack_name: 堅忍不拔_lea
+            value: 1
+    source_hero: 龍造寺隆信
+    _action: add
+  懷刀謀臣:
+    name: 懷刀謀臣
+    type: 指揮
+    rarity: S
+    target: 友軍單體
+    activation_rate: 100%
+    description: 戰鬥中，每回合有{var:trigger_rate}機率（{scale:智略}）使統率或智略任一單項屬性最高的友軍單體{status:牽制}敵軍群體（2-3人）。若其智略高於統率，使其受到的兵刃傷害降低{var:dmg_reduction}（{scale:智略}），否則使其受到的謀略傷害降低{var:dmg_reduction}（{scale:智略}），持續{var:duration}回合；隨後依次為我軍恢復兵力，優先恢復該友軍單體（恢復率{var:heal_rate}，{scale:智略}）。
+    brief_description: 機率牽制高屬性友軍並治療
+    tags:
+    - 治療
+    - 控制
+    - 增益
+    - 指揮效果
+    - 回合觸發
+    - 智略系
+    raw_text: 懷刀謀臣 (S) 種類： 指揮 | 控制 發動機率：18%->36%（受智略影響） 效果： 戰鬥中，每回合有18%->36%機率（受智略影響）使統率或智略任一單項屬性最高的友軍單體牽制敵軍群體（2-3人），若其智略高於統率，使其受到的兵刃傷害降低13%->26%（受智略影響），否則使其受到的謀略傷害降低13%->26%（受智略影響），持續1回合；隨後依次為我軍恢復兵力，優先恢復該友軍單體（恢復率69%->138%，受智略影響）。
+    vars:
+      trigger_rate:
+        base: 0.18
+        max: 0.36
+      dmg_reduction:
+        base: 0.13
+        max: 0.26
+      duration: 1
+      heal_rate:
+        base: 0.69
+        max: 1.38
+    battle:
+      type: 指揮
+      trigger: always
+      rate: 1.0
+      do:
+      - trigger: turnStart
+        do:
+        - type: roll
+          chance: $trigger_rate
+          scale: 智略
+          on_success:
+          - to: allySingle
+            filter: highest_lea_or_int
+            do:
+            - type: applyStatus
+              status: 牽制
+              target: enemyMultiple
+              countMin: 2
+              countMax: 3
+              duration: $duration
+            - type: conditional
+              condition: target.int > target.lea
+              on_true:
+              - type: buff
+                stat: physical_damage_taken
+                value: $dmg_reduction
+                scale: 智略
+                duration: $duration
+              on_false:
+              - type: buff
+                stat: tactic_damage_taken
+                value: $dmg_reduction
+                scale: 智略
+                duration: $duration
+            - type: heal
+              to: allyAll
+              prioritize: self
+              value: $heal_rate
+              scale: 智略
+    unique_hero: 石川數正
+    is_unique: true
+    _action: add
+  騙討:
+    name: 騙討
+    type: 指揮
+    rarity: S
+    target: 敵軍群體（2人）
+    activation_rate: 100%
+    description: 首回合，恢復敵軍群體（2人）兵力（恢復率{var:heal_rate}，{scale:智略}），並使其造成的兵刃傷害降低{var:phys_debuff}（{scale:智略}），持續{var:debuff_duration}回合。第{var:start_turn}回合起，每回合有{var:betray_chance}機率（{scale:智略}）使敵軍單體進入{status:叛逃}狀態（傷害率{var:betray_rate}，受武勇或智略較高一項影響，無視防禦），持續{var:betray_duration}回合。
+    brief_description: 先治療敵軍，再施加叛逃
+    tags:
+    - 治療
+    - 減益
+    - 施加狀態
+    - 控制
+    - 指揮效果
+    - 回合觸發
+    - 智略系
+    raw_text: 騙討 (S) 種類： 指揮 | 控制 發動機率： 100% 效果： 首回合，恢復敵軍群體（2人）兵力（恢復率48%->96%，受智略影響），並使其造成的兵刃傷害降低16%->32%（受智略影響），持續2回合；第2回合起，每回合有35%->70%（受智略影響）機率使敵軍單體進入叛逃狀態（傷害率62%->124%，受武勇或智略較高一項影響，無視防禦），持續1回合
+    vars:
+      heal_rate:
+        base: 0.48
+        max: 0.96
+      phys_debuff:
+        base: 0.16
+        max: 0.32
+      debuff_duration: 2
+      start_turn: 2
+      betray_chance:
+        base: 0.35
+        max: 0.7
+      betray_rate:
+        base: 0.62
+        max: 1.24
+      betray_duration: 1
+    battle:
+      type: 指揮
+      trigger: battleStart
+      do:
+      - trigger: turnStart
+        when: turn == 1
+        to: enemyMultiple
+        count: 2
+        do:
+        - type: heal
+          value: $heal_rate
+          scale: 智略
+        - type: debuff
+          stat: physical_damage
+          value: $phys_debuff
+          scale: 智略
+          duration: $debuff_duration
+      - trigger: turnStart
+        when: turn >= $start_turn
+        do:
+        - type: roll
+          chance: $betray_chance
+          scale: 智略
+          on_success:
+          - to: enemySingle
+            do:
+            - type: applyStatus
+              status: 叛逃
+              value: $betray_rate
+              scale: 武勇或智略
+              ignore_defense: true
+              duration: $betray_duration
+    unique_hero: 吉岡妙林
+    is_unique: true
+    _action: add
+  乘敵不虞:
+    name: 乘敵不虞
+    type: 主動
+    rarity: S
+    target: 敵軍群體（2人）
+    activation_rate: 35%
+    description: 選擇敵軍群體（2人）。目標首次對自身造成傷害時，使目標全屬性減少{var:stat_debuff}點，持續{var:debuff_duration}回合。若目標直到下回合行動結束時未對自身造成過傷害，則對目標造成兵刃傷害（傷害率{var:dmg_rate}）。
+    brief_description: 未受擊則追加兵刃傷害
+    tags:
+    - 兵刃傷害
+    - 群體傷害
+    - 減益
+    - 降低屬性
+    - 主動發動
+    - 條件觸發
+    raw_text: 乘敵不虞 (S) 種類： 主動 | 兵刃群體 發動機率： 35% 效果： 自身選擇敵軍群體（2人），目標首次對自身造成傷害時，使目標全屬性減少19->38點，持續2回合。若目標直到下回合行動結束時未對自身造成過傷害，則對目標造成兵刃傷害（傷害率92%->184%）
+    vars:
+      stat_debuff:
+        base: 19
+        max: 38
+        type: flat
+      debuff_duration: 2
+      dmg_rate:
+        base: 0.92
+        max: 1.84
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.35
+      do:
+      - to: enemyMultiple
+        count: 2
+        do:
+        - type: mark
+          name: 乘敵不虞
+          on_damaged_by_target:
+          - type: debuff
+            stat: all
+            value: $stat_debuff
+            duration: $debuff_duration
+          on_target_action_end_if_no_damage:
+          - type: damage
+            damage_type: 兵刃傷害
+            value: $dmg_rate
+    source_hero: 吉岡妙林
+    _action: add
+  義無反顧:
+    name: 義無反顧
+    type: 主動
+    rarity: S
+    target: 敵軍群體（2人）
+    activation_rate: 40%
+    description: 使自身受到的下{var:hit_count}次傷害提高{var:self_taken_up}，同時使敵軍群體（2人）受到的下{var:hit_count}次傷害提高{var:enemy_taken_up}（受武勇或智略較高的一項影響），持續{var:duration}回合；並對其造成傷害（傷害率{var:dmg_rate}，類型受武勇或智略較高的一項影響）。
+    commander_description: 目標有{var:aoe_chance}機率變為敵軍全體。
+    brief_description: 雙方易傷並造成混合傷害
+    tags:
+    - 兵刃傷害
+    - 謀略傷害
+    - 群體傷害
+    - 減益
+    - 主動發動
+    - 武勇系
+    - 智略系
+    - 大將技
+    raw_text: 義無反顧 (S) 種類： 主動 | 兵刃群體 發動機率： 40% 效果： 使自身受到的下2次傷害提高12%->24%，同時使敵軍群體（2人）受到的下2次傷害提高12%->24%（受武勇或智略較高的一項影響），持續1回合；並對其造成傷害（傷害率78%->156%，類型受武勇或智略較高的一項影響） 大將技： 目標有12%->24%機率變為敵軍全體
+    vars:
+      hit_count: 2
+      self_taken_up:
+        base: 0.12
+        max: 0.24
+      enemy_taken_up:
+        base: 0.12
+        max: 0.24
+      duration: 1
+      dmg_rate:
+        base: 0.78
+        max: 1.56
+      aoe_chance:
+        base: 0.12
+        max: 0.24
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.4
+      do:
+      - to: self
+        do:
+        - type: debuff
+          stat: next_damage_taken
+          hits: $hit_count
+          value: $self_taken_up
+          duration: $duration
+      - to: enemyMultiple
+        count: 2
+        do:
+        - type: debuff
+          stat: next_damage_taken
+          hits: $hit_count
+          value: $enemy_taken_up
+          scale: 武勇或智略
+          duration: $duration
+        - type: damage
+          damage_type: 混合傷害
+          value: $dmg_rate
+          scale: 武勇或智略
+      bonus:
+        commander:
+          description: 目標有$aoe_chance機率變為敵軍全體
+          do:
+          - type: roll
+            chance: $aoe_chance
+            on_success:
+            - type: retarget
+              to: enemyAll
+    unique_hero: 相良義陽
+    is_unique: true
+    _action: add
+  種子島銃:
+    name: 種子島銃
+    type: 主動
+    rarity: S
+    target: 我軍大將
+    activation_rate: 60%
+    description: 使我軍大將有冷卻時間的自帶戰法發動機率提升{var:rate_buff}（{scale:智略}），提升效果持續至其下次發動。其發動時，自身對敵軍群體（2人）造成謀略傷害（傷害率{var:dmg_rate}，{scale:智略}）。該戰法發動後進入{var:cooldown}回合冷卻。
+    brief_description: 提升大將冷卻戰法發動率
+    tags:
+    - 謀略傷害
+    - 群體傷害
+    - 增益
+    - 主動發動
+    - 智略系
+    raw_text: 種子島銃 (S) 種類： 冷卻主動戰法 | 增益 發動機率： 60% 效果： 發動後使我軍大將有冷卻時間的自帶戰法發動機率提升7.5%->15%（受智略影響），提升效果持續至其下次發動，其發動時，自身對敵軍群體（2人）造成謀略傷害（傷害率76%->152%，受智略影響）。該戰法發動後進入1回合冷卻
+    vars:
+      rate_buff:
+        base: 0.075
+        max: 0.15
+      dmg_rate:
+        base: 0.76
+        max: 1.52
+      cooldown: 1
+    battle:
+      type: 主動
+      trigger: beforeAction
+      rate: 0.6
+      cooldown: $cooldown
+      do:
+      - to: allySingle
+        targetRole: commander
+        do:
+        - type: buff
+          stat: cooldown_unique_skill_rate
+          value: $rate_buff
+          scale: 智略
+          until: next_cast
+          on_cast:
+          - to: enemyMultiple
+            count: 2
+            source: self
+            do:
+            - type: damage
+              damage_type: 謀略傷害
+              value: $dmg_rate
+              scale: 智略
+    unique_hero: 種子島時堯
+    is_unique: true
+    _action: add
+  糧米召上:
+    name: 糧米召上
+    type: 指揮
+    rarity: S
+    target: 自身
+    activation_rate: 100%
+    description: 自身作為評定衆時，使自身擴張農場正面效果增加{var:production_buff}（{scale:政務}）。
+    brief_description: 評定衆時增加農場擴張效果
+    tags:
+    - 增益
+    - 指揮效果
+    - 政務系
+    raw_text: 糧米召上 (S) 種類： 內政 | 增益 發動機率： 效果： 自身作為評定眾時，使自身擴張農場正面效果增加0.5%->1%（受政務影響）
+    vars:
+      production_buff:
+        base: 0.005
+        max: 0.01
+    battle:
+      type: 指揮
+      trigger: always
+      when: is_assembly_member
+      do:
+      - to: self
+        do:
+        - type: buff
+          stat: 擴張農場
+          value: $production_buff
+          scale: 政務
+    source_hero: 種子島時堯
+    _action: add
 heroes:
   お江:
     traits:
@@ -3213,3 +3792,195 @@ heroes:
     name: 柿崎景家
     _action: modify
     _name_jp: 柿崎景家
+  島津義久:
+    name: 島津義久
+    portrait: https://i.imgur.com/dNDYOG0.png
+    rarity: 5
+    cost: 6
+    faction: 群雄
+    clan: 島津家
+    gender: 男
+    stats:
+      lea: 160
+      val: 122
+      int: 202.5
+      pol: 171.5
+      cha: 224
+      spd: 109
+    unique_skill: 三州總大將
+    teachable_skill: 運籌決勝
+    assembly_skill: ''
+    traits:
+    - name: 鐵炮大將
+      description: 部隊的鐵炮等級+3，等級上限+1
+      active: true
+    - name: 才德兼備
+      description: 使友軍群體每回合開始時，40%機率自身下次造成傷害提高28%（受智略影響），每人最多觸發2次
+      active: true
+    - name: 牢固II
+      description: 受到傷害減少1.6%
+      active: true
+    - name: 智慧II
+      description: 智略提高2.5%
+      active: true
+    _action: add
+  龍造寺隆信:
+    name: 龍造寺隆信
+    portrait: https://i.imgur.com/VtA8NQT.png
+    rarity: 5
+    cost: 7
+    faction: 群雄
+    clan: 龍造寺家
+    gender: 男
+    stats:
+      lea: 200.5
+      val: 182
+      int: 126
+      pol: 56.5
+      cha: 79
+      spd: 78
+    unique_skill: 肥前之熊
+    teachable_skill: 堅忍不拔
+    assembly_skill: ''
+    traits:
+    - name: 紅爐點雪
+      description: 每累計受到最大兵力10%的傷害，獲得3%{status:離反}狀態，最多疊加3次
+      active: true
+    - name: 威迫II
+      description: 使自身被敵方戰法選中的機率提高
+      active: true
+    - name: 剛猛II
+      description: 使自身受到普通攻擊的機率提高
+      active: true
+    - name: 馬弓術I
+      description: 部隊的騎兵、弓兵等級+1
+      active: true
+    _action: add
+  石川數正:
+    name: 石川數正
+    portrait: https://i.imgur.com/0mfpfGT.png
+    rarity: 5
+    cost: 6
+    faction: 德川
+    clan: 德川家
+    gender: 男
+    stats:
+      lea: 145.5
+      val: 97.5
+      int: 200.5
+      pol: 168
+      cha: 142
+      spd: 115
+    unique_skill: 懷刀謀臣
+    teachable_skill: 運籌決勝
+    assembly_skill: ''
+    traits:
+    - name: 心腹之智
+      description: 友軍累計受到3次戰法傷害後，使其主屬性提升6點，最多疊加2次
+      active: true
+    - name: 馬弓術II
+      description: 部隊的騎兵、弓兵等級+2
+      active: true
+    - name: 堅固III
+      description: 我軍全體受到謀略傷害減少3.7%
+      active: true
+    - name: 攻勢I
+      description: 我軍全體造成傷害增加1%
+      active: true
+    _action: add
+  吉岡妙林:
+    name: 吉岡妙林
+    portrait: https://i.imgur.com/LV7GaKO.png
+    rarity: 5
+    cost: 3
+    faction: 群雄
+    clan: 大友家
+    gender: 女
+    stats:
+      lea: 117
+      val: 69
+      int: 168.5
+      pol: 91.5
+      cha: 114
+      spd: 115.5
+    unique_skill: 騙討
+    teachable_skill: 乘敵不虞
+    assembly_skill: ''
+    traits:
+    - name: 智慧III
+      description: 智略提高3%
+      active: true
+    - name: 炮術II
+      description: 部隊的鐵炮等級+2
+      active: true
+    - name: 固守II
+      description: 我軍全體受到兵刃傷害減少1.8%
+      active: true
+    - name: 破敵II
+      description: 造成傷害增加1.6%
+      active: true
+    _action: add
+  相良義陽:
+    name: 相良義陽
+    portrait: https://i.imgur.com/GVNQXNU.png
+    rarity: 5
+    cost: 5
+    faction: 群雄
+    clan: 相良家
+    gender: 男
+    stats:
+      lea: 130
+      val: 168
+      int: 151.5
+      pol: 114
+      cha: 174
+      spd: 97
+    unique_skill: 義無反顧
+    teachable_skill: 乘敵不虞
+    assembly_skill: ''
+    traits:
+    - name: 弓術III
+      description: 部隊的弓兵等級+3
+      active: true
+    - name: 器術II
+      description: 部隊的器械等級+2
+      active: true
+    - name: 攻勢II
+      description: 我軍全體造成傷害增加1.3%
+      active: true
+    - name: 武威II
+      description: 武勇提高2.5%
+      active: true
+    _action: add
+  種子島時堯:
+    name: 種子島時堯
+    portrait: https://i.imgur.com/u0c3lIM.png
+    rarity: 5
+    cost: 4
+    faction: 群雄
+    clan: 島津家
+    gender: 男
+    stats:
+      lea: 99
+      val: 105.5
+      int: 154
+      pol: 131
+      cha: 135
+      spd: 122.5
+    unique_skill: 種子島銃
+    teachable_skill: 糧米召上
+    assembly_skill: ''
+    traits:
+    - name: 防護II
+      description: 受到兵刃傷害減少2.2%
+      active: true
+    - name: 炮術III
+      description: 部隊的鐵炮等級+3
+      active: true
+    - name: 守勢II
+      description: 我軍全體受到傷害減少1.3%
+      active: true
+    - name: 奮戰II
+      description: 本回合未受到普通攻擊時，非自帶主動戰法的發動機率+2.5%
+      active: true
+    _action: add

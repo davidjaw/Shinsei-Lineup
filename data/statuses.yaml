@@ -89,6 +89,12 @@
   category: combat_enhancement
   description: 普通攻擊執行兩次
 
+反擊:
+  id: counter
+  name: 反擊
+  category: combat_enhancement
+  description: 受到普通攻擊時，對攻擊者造成兵刃傷害
+
 破陣:
   id: formation_break
   name: 破陣
@@ -182,6 +188,12 @@
   name: 消沉
   category: dot
   description: 每回合行動前受到謀略傷害（智略）
+
+叛逃:
+  id: desert
+  name: 叛逃
+  category: dot
+  description: 每回合行動前受到傷害（取武勇或智略較高一項，無視防禦）
 
 # === Immunity (免疫) ===
 洞察:
