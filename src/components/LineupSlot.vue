@@ -222,9 +222,7 @@
         >
           <template #reference>
             <div class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-highlight rounded border border-divider opacity-90">
-              <div class="w-5 h-5 md:w-8 md:h-8 bg-yellow-100 rounded flex items-center justify-center text-[9px] md:text-xs font-bold text-yellow-700 flex-shrink-0">
-                主
-              </div>
+              <SkillTypeMark :type="uniqueSkillData?.type" size="slot" own />
               <div class="flex-1 min-w-0">
                 <div class="text-[9px] md:text-sm text-ink-soft truncate mb-0.5">{{ hero?.unique_skill || '---' }}</div>
                 <BriefDescription v-if="uniqueSkillData?.brief_description" :text="uniqueSkillData.brief_description" :vars="uniqueSkillData.vars" class="hidden md:block text-[7px] md:text-[11px] italic text-ink-soft" />
@@ -293,7 +291,7 @@
               @dragleave="(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragOverSlot = null }"
               @drop="(e) => { dragOverSlot = null; handleDrop(e, 1) }"
             >
-              <img v-if="skill1" :src="skill1.icon" class="w-5 h-5 md:w-8 md:h-8 rounded bg-gray-200 object-cover flex-shrink-0" />
+              <SkillTypeMark v-if="skill1" :type="skill1.type" size="slot" />
               <div v-else class="w-5 h-5 md:w-8 md:h-8 bg-surface-muted rounded flex items-center justify-center text-ink-mute flex-shrink-0">
                 <el-icon class="text-[10px] md:text-base"><Plus /></el-icon>
               </div>
@@ -367,7 +365,7 @@
               @dragleave="(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragOverSlot = null }"
               @drop="(e) => { dragOverSlot = null; handleDrop(e, 2) }"
             >
-              <img v-if="skill2" :src="skill2.icon" class="w-5 h-5 md:w-8 md:h-8 rounded bg-gray-200 object-cover flex-shrink-0" />
+              <SkillTypeMark v-if="skill2" :type="skill2.type" size="slot" />
               <div v-else class="w-5 h-5 md:w-8 md:h-8 bg-surface-muted rounded flex items-center justify-center text-ink-mute flex-shrink-0">
                 <el-icon class="text-[10px] md:text-base"><Plus /></el-icon>
               </div>
@@ -457,6 +455,7 @@ import { Plus, Close, InfoFilled, Sort } from '@element-plus/icons-vue'
 import HeroCard from './HeroCard.vue'
 import SkillDescription from './SkillDescription.vue'
 import BriefDescription from './BriefDescription.vue'
+import SkillTypeMark from './SkillTypeMark.vue'
 import BingxueSection from './BingxueSection.vue'
 import type { BingxueActive } from '../composables/useLineups'
 import { Hero, Skill, Trait, useData } from '../composables/useData'

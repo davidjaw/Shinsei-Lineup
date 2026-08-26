@@ -181,22 +181,8 @@ import skillsData from '../../.build/skills.json'
 import statusesData from '../../.build/statuses.json'
 import bingxueData from '../../.build/bingxue.json'
 
-const DEFAULT_ICONS: Record<string, string> = {
-  '指揮': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_zh_kongzhi.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
-  '能動': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_zd_bingren_single.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
-  '主動': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_zd_bingren_single.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
-  '突撃': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_tj_bingren_single.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
-  '突擊': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_tj_bingren_single.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
-  '受動': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_bd_zengyi.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
-  '被動': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_bd_zengyi.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
-  '兵種': 'https://p11386-media-cdn.sialiagames.com.tw/meta_10000270/1765785439101/res/ui/icon/skill/icon_skill_tsbz_chibeidui.png?x-oss-process=image/format,webp/interlace,1/quality,Q_80/resize,w_164&t=1',
-};
-
 const heroes = ref<Hero[]>(heroesData && Array.isArray(heroesData) ? (heroesData as unknown as Hero[]) : [])
-const skills = ref<Skill[]>(skillsData && Array.isArray(skillsData) ? (skillsData as unknown as Skill[]).map(s => ({
-  ...s,
-  icon: s.icon || DEFAULT_ICONS[s.type] || ''
-})) : [])
+const skills = ref<Skill[]>(skillsData && Array.isArray(skillsData) ? (skillsData as unknown as Skill[]) : [])
 const statuses = ref<Record<string, any>>(statusesData || {})
 const bingxue = ref<Record<string, BingxueOption>>(
   (bingxueData as Record<string, BingxueOption>) || {}

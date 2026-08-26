@@ -6,7 +6,7 @@
     >
       <div class="bg-white rounded-xl shadow-2xl border-2 border-indigo-400 p-3 w-64 max-h-72 overflow-hidden">
         <div class="flex items-center gap-2 mb-2">
-          <img :src="skill.icon" class="w-10 h-10 rounded-lg bg-gray-100 object-cover flex-shrink-0" />
+          <SkillTypeMark :type="skill.type" size="drag" />
           <div class="min-w-0">
             <div class="font-bold text-sm text-gray-800 truncate">{{ skill.name }}</div>
             <div class="flex items-center gap-1 mt-0.5">
@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import SkillDescription from '../SkillDescription.vue'
+import SkillTypeMark from '../SkillTypeMark.vue'
 import type { Skill } from '../../composables/useData'
 
 defineProps<{

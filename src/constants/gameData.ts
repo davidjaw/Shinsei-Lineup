@@ -19,6 +19,46 @@ export const getTraitColor = (rank: string): string => {
   }
 }
 
+/** Single-character seal for a skill type (主動→主, 被動→被, …). */
+const SKILL_TYPE_MARKS: Record<string, string> = {
+  '主動': '主',
+  '能動': '主',
+  '被動': '被',
+  '受動': '被',
+  '兵種': '兵',
+  '陣法': '陣',
+  '指揮': '指',
+  '突擊': '突',
+  '突撃': '突',
+}
+
+export function skillTypeMark(type?: string | null): string {
+  if (!type) return ''
+  return SKILL_TYPE_MARKS[type] ?? type.charAt(0)
+}
+
+/** Visual family for the type seal — gold action, muted passive, brown meta. */
+export type SkillTypeTone = 'action' | 'passive' | 'meta' | 'unknown'
+
+export function skillTypeTone(type?: string | null): SkillTypeTone {
+  switch (type) {
+    case '主動':
+    case '能動':
+    case '突擊':
+    case '突撃':
+    case '指揮':
+      return 'action'
+    case '被動':
+    case '受動':
+      return 'passive'
+    case '兵種':
+    case '陣法':
+      return 'meta'
+    default:
+      return 'unknown'
+  }
+}
+
 // Compact bingxue payload — `d` = CHT direction, `m` = major JP name,
 // `n` = array of { n: minor JP name, l: level 1|2 }.
 export interface ShareableBingxue {

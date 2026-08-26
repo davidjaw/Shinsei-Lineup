@@ -85,7 +85,11 @@
               @dragend="emit('skill-drag-end')"
               @click="handleSelect(skill)"
             >
-              <img :src="skill.icon" class="w-7 h-7 md:w-10 md:h-10 rounded-md md:rounded-lg bg-gray-200 object-cover flex-shrink-0" :class="{ 'grayscale': isUsed(skill) || isFixed(skill) }" />
+              <SkillTypeMark
+                :type="skill.type"
+                size="list"
+                :muted="isUsed(skill) || isFixed(skill)"
+              />
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-1 md:gap-2 flex-wrap">
                   <span class="font-bold text-gray-800 text-xs md:text-base">{{ skill.name }}</span>
@@ -154,6 +158,7 @@ import { useData } from '../composables/useData'
 import { TRANSPARENT_GIF, formatRate as _formatRate } from '../constants/gameData'
 import SkillDescription from './SkillDescription.vue'
 import BriefDescription from './BriefDescription.vue'
+import SkillTypeMark from './SkillTypeMark.vue'
 
 const props = defineProps({
   mode: { type: String as PropType<'browse' | 'select' | 'manage'>, default: 'browse' }, // 'browse' | 'select' | 'manage'
