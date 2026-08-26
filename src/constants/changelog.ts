@@ -35,6 +35,13 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.4.5',
+    date: '2026-08-26',
+    entries: [
+      { tag: 'ui', text: '戰法圖示改為類型文字標（主／被／兵／陣／指），側欄版本號對齊更新紀錄' },
+    ],
+  },
+  {
     version: '0.4.4',
     date: '2026-08-26',
     entries: [
