@@ -3,8 +3,15 @@
   <el-container v-else direction="vertical" class="w-full bg-slate-50 flex-1 min-h-0">
     <el-main class="app-main p-0 overflow-hidden">
 
+      <LineupCompactView
+        v-if="isCompactView"
+        :lineups="lineups"
+        :group-name="currentGroup.name"
+        @select="onCompactSelect"
+      />
+
       <!-- View 1: Lineup Builder (Default) -->
-      <div v-if="!isEditingInventory" class="flex flex-col md:flex-row h-full">
+      <div v-else-if="!isEditingInventory" class="flex flex-col md:flex-row h-full">
         <TeamListPanel
           :lineups="lineups"
           :current-team-index="currentTeamIndex"
@@ -14,24 +21,13 @@
           @save-as-proposal="onSaveAsProposal"
           @export-to-group="onExportTeamToOtherGroup"
           @remove-team="onRemoveTeam"
-        />
-
-        <MobileTeamDrawer
-          v-model="mobileSidebarVisible"
-          :lineups="lineups"
-          :current-team-index="currentTeamIndex"
-          @select="(idx: number) => { currentTeamIndex = idx; mobileSidebarVisible = false }"
-          @remove-team="onRemoveTeam"
-          @add-team="onAddTeam"
-          @share="dialogs.open('share')"
-          @export-to-group="onExportTeamToOtherGroup"
-          @import-from-link="dialogs.open('import-from-link')"
+          @compact="enterCompactView"
         />
 
         <LineupWorkspace
           v-model:active-tab="activeTab"
-          v-model:show-owned-only="showOwnedOnly"
           v-model:lineup-shake-active="lineupShakeActive"
+          :show-owned-only="showOwnedOnly"
           :current-lineup="currentLineup"
           :owned-heroes="ownedHeroes"
           :owned-skills="ownedSkills"
@@ -57,11 +53,26 @@
           @hero-drop="handleHeroDrop"
           @select-hero-from-library="selectHeroFromLibrary"
           @select-skill-from-library="selectSkillFromDialog"
+          @edit-inventory="startEditingInventory"
         />
       </div>
 
+      <MobileTeamDrawer
+        v-if="!isEditingInventory"
+        v-model="mobileSidebarVisible"
+        :lineups="lineups"
+        :current-team-index="currentTeamIndex"
+        @select="onSelectTeam"
+        @remove-team="onRemoveTeam"
+        @add-team="onAddTeam"
+        @share="dialogs.open('share')"
+        @export-to-group="onExportTeamToOtherGroup"
+        @import-from-link="dialogs.open('import-from-link')"
+        @compact="enterCompactView"
+      />
+
       <InventoryEditor
-        v-else
+        v-if="isEditingInventory"
         v-model:active-tab="inventoryActiveTab"
         :owned-heroes="tempOwnedHeroes"
         :owned-skills="tempOwnedSkills"
@@ -122,7 +133,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import ResetDialog from '../components/dialogs/ResetDialog.vue'
 import SkillSelectDialog from '../components/dialogs/SkillSelectDialog.vue'
 import ShareDialog from '../components/dialogs/ShareDialog.vue'
@@ -137,12 +148,13 @@ import LineupWorkspace, { type Role } from '../components/lineup-builder/LineupW
 import type { ResetTarget } from '../components/dialogs/ResetDialog.vue'
 import type { ShareScope, ShareEventPayload } from '../components/dialogs/ShareDialog.vue'
 import TeamListPanel from '../components/lineup-builder/TeamListPanel.vue'
+import LineupCompactView from '../components/lineup-builder/LineupCompactView.vue'
 import GachaSpectatorView from '../components/GachaSpectatorView.vue'
 
 import { useData, Hero, Skill } from '../composables/useData'
 
 import { ShareableData, ShareableLineup } from '../constants/gameData'
-import { useLineups, defaultStats, type Lineup } from '../composables/useLineups'
+import { useLineups, defaultStats, isEmptyTeam, type Lineup } from '../composables/useLineups'
 import { useGroups } from '../composables/useGroups'
 import { MAX_TEAMS_PER_GROUP } from '../types/group'
 import { useGroupPersistence } from '../composables/useGroupPersistence'
@@ -200,9 +212,11 @@ const {
   ownedSkills,
   showOwnedOnly,
   isEditingInventory,
+  isCompactView,
   tempOwnedHeroes,
   tempOwnedSkills,
   clearInventory,
+  startEditingInventory,
 } = useInventory()
 
 const dialogs = useDialogs()
@@ -579,13 +593,21 @@ const restoreFromBlob = (data: ShareableData) => {
     skills: skills.value,
     ownedHeroes,
     ownedSkills,
-    showOwnedOnly,
     lineups,
     ensureTeamCount,
     replaceGroups,
   })
   if (report.activeIndex != null && report.activeIndex >= 0 && report.activeIndex < groups.length) {
     setCurrentGroup(report.activeIndex)
+  }
+  // Share-link restore: if the blob carried inventory, enter 庫存 mode.
+  // Autosave restore goes through applyBlobToState only and must not force this.
+  if (
+    (data.inv_h && data.inv_h.length > 0) ||
+    (data.inv_s && data.inv_s.length > 0) ||
+    (data.inventory && data.inventory.length > 0)
+  ) {
+    showOwnedOnly.value = true
   }
   if (report.healed.length > 0) {
     ElMessage.warning(
@@ -605,6 +627,28 @@ const {
   refreshFromStorage,
   sessionExpiredCount,
 } = useAuth()
+
+const enterCompactView = () => {
+  if (!lineups.some((team) => !isEmptyTeam(team))) {
+    void ElMessageBox.alert(
+      '尚未配置任何隊伍，先把武將放上陣。',
+      '截圖模式',
+      { confirmButtonText: '知道了', type: 'info' },
+    ).catch(() => {})
+    return
+  }
+  isCompactView.value = true
+  mobileSidebarVisible.value = false
+}
+const onCompactSelect = (idx: number) => {
+  currentTeamIndex.value = idx
+  isCompactView.value = false
+}
+const onSelectTeam = (idx: number) => {
+  currentTeamIndex.value = idx
+  mobileSidebarVisible.value = false
+  isCompactView.value = false
+}
 
 // TeamListPanel actions
 const onAddTeam = () => {

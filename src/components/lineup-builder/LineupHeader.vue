@@ -1,7 +1,7 @@
 <template>
   <el-header class="app-header bg-white border-b border-divider flex items-center justify-between px-0 md:px-4 sticky top-0 z-50">
-    <div class="flex items-center gap-1 md:gap-3">
-      <el-button class="md:hidden !px-1 !mr-0" text @click="$emit('open-mobile-sidebar')">
+    <div class="flex items-center gap-1 md:gap-3 min-w-0 flex-1 overflow-hidden">
+      <el-button class="md:hidden !px-1 !mr-0 flex-shrink-0" text @click="$emit('open-mobile-sidebar')">
         <el-icon :size="20"><Menu /></el-icon>
       </el-button>
 
@@ -10,7 +10,7 @@
            and edit inventory directly via the right-side button.
            Mobile hides this; the MobileTeamDrawer renders an equivalent. -->
       <el-dropdown
-        v-if="!isEditingInventory && isLoggedIn"
+        v-if="!isEditingInventory && !isCompactView && isLoggedIn"
         trigger="click"
         @command="onProfileCommand"
         @visible-change="onProfileVisibleChange"
@@ -99,30 +99,28 @@
         </template>
       </el-dropdown>
 
-      <div class="flex items-center gap-2">
-        <div v-if="!isEditingInventory" class="flex items-center gap-2">
-          <el-input
-            :model-value="teamName"
-            @update:model-value="(v: string) => $emit('update:teamName', v)"
-            placeholder="輸入隊伍名稱"
-            class="w-32 sm:w-48 font-bold"
-            size="default"
-          >
-            <template #suffix>
-              <el-icon class="el-input__icon"><Edit /></el-icon>
-            </template>
-          </el-input>
-        </div>
-        <div v-else class="font-bold text-gray-800 text-lg">
-          庫存編輯模式
-        </div>
+      <div v-if="!isEditingInventory && !isCompactView" class="min-w-0 flex-1 sm:flex-none sm:w-48 flex items-center">
+        <el-input
+          :model-value="teamName"
+          @update:model-value="(v: string) => $emit('update:teamName', v)"
+          placeholder="輸入隊伍名稱"
+          class="w-full min-w-0 font-bold"
+          size="default"
+        >
+          <template #suffix>
+            <el-icon class="el-input__icon"><Edit /></el-icon>
+          </template>
+        </el-input>
+      </div>
+      <div v-else-if="isEditingInventory" class="font-bold text-gray-800 text-lg">
+        庫存編輯模式
       </div>
 
-      <div v-if="!isEditingInventory" class="text-xs font-bold bg-gray-100 px-3 py-1.5 rounded-sm border border-gray-200 flex items-center hidden sm:flex">
+      <div v-if="!isEditingInventory && !isCompactView" class="text-xs font-bold bg-gray-100 px-3 py-1.5 rounded-sm border border-gray-200 flex items-center hidden sm:flex">
         <span class="text-gray-500 mr-1">Cost:</span>
         <span :class="{ 'text-red-500': totalCost > 20, 'text-gray-800': totalCost <= 20 }" class="text-sm">{{ totalCost }}/20</span>
       </div>
-      <div v-if="!isEditingInventory" class="text-xs font-bold bg-gray-100 px-2 py-1 rounded-sm border border-gray-200 items-center gap-1 hidden sm:flex">
+      <div v-if="!isEditingInventory && !isCompactView" class="text-xs font-bold bg-gray-100 px-2 py-1 rounded-sm border border-gray-200 items-center gap-1 hidden sm:flex">
         <span class="text-gray-500 mr-0.5">兵:</span>
         <span
           v-for="tt in TROOP_TYPES"
@@ -133,17 +131,26 @@
       </div>
     </div>
 
-    <div class="flex items-center gap-1 md:gap-1 pr-1 md:pr-0">
+    <div class="flex items-center gap-1 md:gap-1 pr-1 md:pr-0 flex-shrink-0">
       <template v-if="!isEditingInventory">
         <!-- Anonymous fallback: no profile pill exists for them, so keep an
              explicit 編輯庫存 button. Logged-in users access editing via the
-             profile dropdown's 編輯目前庫存…項. -->
-        <template v-if="!isLoggedIn">
+             profile dropdown's 編輯目前庫存…項. Hidden in compact view. -->
+        <template v-if="!isLoggedIn && !isCompactView">
           <el-button type="info" plain @click="$emit('start-editing-inventory')" class="hidden sm:inline-flex !rounded-sm">
             <el-icon class="mr-1"><Edit /></el-icon> 編輯庫存
           </el-button>
           <el-button type="info" plain @click="$emit('start-editing-inventory')" class="sm:hidden !rounded-sm !w-9 !h-9 !p-0">
             <el-icon><Edit /></el-icon>
+          </el-button>
+        </template>
+
+        <template v-if="isCompactView">
+          <el-button type="primary" plain @click="exitCompactView" class="hidden sm:inline-flex !rounded-sm">
+            <el-icon class="mr-1"><Back /></el-icon> 返回編輯
+          </el-button>
+          <el-button type="primary" plain @click="exitCompactView" class="sm:hidden !rounded-sm !w-9 !h-9 !p-0" title="返回編輯">
+            <el-icon><Back /></el-icon>
           </el-button>
         </template>
 
@@ -154,12 +161,14 @@
           <el-icon><Share /></el-icon>
         </el-button>
 
-        <el-button type="danger" plain @click="$emit('open-reset')" class="hidden sm:inline-flex !rounded-sm">
-          <el-icon class="mr-1"><Delete /></el-icon> 重置
-        </el-button>
-        <el-button type="danger" plain @click="$emit('open-reset')" class="sm:hidden !rounded-sm !w-9 !h-9 !p-0">
-          <el-icon><Delete /></el-icon>
-        </el-button>
+        <template v-if="!isCompactView">
+          <el-button type="danger" plain @click="$emit('open-reset')" class="hidden sm:inline-flex !rounded-sm">
+            <el-icon class="mr-1"><Delete /></el-icon> 重置
+          </el-button>
+          <el-button type="danger" plain @click="$emit('open-reset')" class="sm:hidden !rounded-sm !w-9 !h-9 !p-0">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </template>
 
         <UserControls
           :is-logged-in="isLoggedIn"
@@ -227,13 +236,14 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { Edit, Share, Delete, Menu, User, ArrowDown, Close, Check, Plus, CircleClose, StarFilled, Avatar, Setting, Link } from '@element-plus/icons-vue'
+import { Edit, Share, Delete, Menu, User, ArrowDown, Close, Check, Plus, CircleClose, StarFilled, Avatar, Setting, Link, Back } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { TROOP_TYPES, TROOP_LABELS } from '../../constants/traits'
 import type { TroopType } from '../../constants/traits'
 import { useGroups } from '../../composables/useGroups'
 import { useProfiles } from '../../composables/useProfiles'
 import { useActiveProfile } from '../../composables/useActiveProfile'
+import { useInventory } from '../../composables/useInventory'
 import UserControls, { type UserMenuCmd } from '../layout/UserControls.vue'
 
 const props = defineProps<{
@@ -268,6 +278,9 @@ const emit = defineEmits<{
 const { groups, currentGroup, currentGroupIndex, setCurrentGroup, addGroup, renameGroup } = useGroups()
 const { profiles, refresh: refreshProfiles } = useProfiles()
 const { activeProfileId } = useActiveProfile()
+const { isCompactView } = useInventory()
+
+const exitCompactView = () => { isCompactView.value = false }
 
 // Inline new-profile-name input shown alongside the save buttons during
 // inventory editing. Reset each time the mode toggles so a stale draft from

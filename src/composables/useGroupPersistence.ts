@@ -317,13 +317,12 @@ const buildApplyDeps = (): ApplyBlobDeps => {
   const { heroes, skills } = useData()
   const { lineups, ensureTeamCount } = useLineups()
   const { replaceGroups } = useGroups()
-  const { ownedHeroes, ownedSkills, showOwnedOnly } = useInventory()
+  const { ownedHeroes, ownedSkills } = useInventory()
   return {
     heroes: heroes.value,
     skills: skills.value,
     ownedHeroes,
     ownedSkills,
-    showOwnedOnly,
     lineups,
     ensureTeamCount,
     replaceGroups,

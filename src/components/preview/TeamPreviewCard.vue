@@ -31,11 +31,12 @@
           <span class="role-tag" :class="`role-tag--${role.key}`">{{ role.label }}</span>
           <template v-if="role.data.hero">
             <span class="cost-pill">{{ role.data.hero.cost }}C</span>
-            <span class="rarity">{{ rarityStars(role.data.hero.rarity) }}</span>
+            <span v-if="!hideHeroArt" class="rarity">{{ rarityStars(role.data.hero.rarity) }}</span>
             <span v-if="role.data.breakthrough > 0" class="break-tag">突{{ role.data.breakthrough }}</span>
           </template>
         </div>
         <PreviewPortrait
+          v-if="!hideHeroArt"
           :src="role.data.hero?.portrait ?? null"
           :alt="role.data.hero?.name"
           :render="portraitSize"
@@ -148,11 +149,14 @@ const props = withDefaults(defineProps<{
   showHeader?: boolean
   showWatermark?: boolean
   bordered?: boolean
+  /** Hide portrait + rarity stars together (screenshot density toggle). */
+  hideHeroArt?: boolean
 }>(), {
   density: 'regular',
   showHeader: true,
   showWatermark: true,
   bordered: true,
+  hideHeroArt: false,
 })
 
 const portraitSize = computed(() => props.density === 'compact' ? 104 : 166)

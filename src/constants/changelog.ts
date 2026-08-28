@@ -35,6 +35,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.4.7',
+    date: '2026-08-27',
+    entries: [
+      { tag: 'feat', text: '配將模擬在側欄分為「自由模式」與「庫存模式」；自由模式可使用全部武將／戰法' },
+      { tag: 'feat', text: '配將模擬新增截圖模式，方便一次截圖分享整個編組' },
+    ],
+  },
+  {
     version: '0.4.6',
     date: '2026-08-26',
     entries: [

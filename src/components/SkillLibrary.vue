@@ -24,15 +24,7 @@
         >
           {{ allFilteredOwned ? '取消全選' : '全選' }}
         </button>
-        <el-switch
-          v-if="mode !== 'manage'"
-          :model-value="filterOwned"
-          @update:model-value="val => $emit('update:filterOwned', val)"
-          inline-prompt
-          active-text="已擁有"
-          inactive-text="全部"
-        />
-        <div v-else class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
+        <div v-if="mode === 'manage'" class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
            庫存編輯模式
         </div>
       </div>
@@ -57,8 +49,14 @@
 
     <!-- List -->
     <div class="flex-1 overflow-y-auto p-0 md:p-2">
-       <div v-if="filteredSkills.length === 0" class="text-center py-10 text-gray-400">
-        無符合條件的戰法
+       <div v-if="filteredSkills.length === 0" class="text-center py-10">
+        <template v-if="mode === 'select' && filterOwned && ownedSkills.length === 0">
+          <p class="text-gray-400">庫存沒有戰法</p>
+          <el-button type="primary" plain class="!mt-3 !rounded-sm" @click="emit('edit-inventory')">
+            編輯庫存
+          </el-button>
+        </template>
+        <p v-else class="text-gray-400">無符合條件的戰法</p>
       </div>
       <div
         :class="mode === 'manage' ? 'grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2' : 'flex flex-col'"
@@ -167,7 +165,7 @@ const props = defineProps({
   filterOwned: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['select', 'update:ownedSkills', 'update:filterOwned', 'skill-drag-start', 'skill-drag-end'])
+const emit = defineEmits(['select', 'update:ownedSkills', 'skill-drag-start', 'skill-drag-end', 'edit-inventory'])
 
 const { skills, heroes } = useData()
 

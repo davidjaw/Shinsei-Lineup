@@ -1,20 +1,40 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useProfiles } from './useProfiles'
+
+const CATALOG_MODE_KEY = 'nobunaga.catalogMode'
+
+const readStoredCatalogMode = (): boolean => {
+  try {
+    return localStorage.getItem(CATALOG_MODE_KEY) === 'inventory'
+  } catch {
+    return false
+  }
+}
 
 // State
 const ownedHeroes = ref<string[]>([])
 const ownedSkills = ref<string[]>([])
-const showOwnedOnly = ref(false)
+const showOwnedOnly = ref(readStoredCatalogMode())
 
 const isEditingInventory = ref(false)
+const isCompactView = ref(false)
 const tempOwnedHeroes = ref<string[]>([])
 const tempOwnedSkills = ref<string[]>([])
+
+watch(showOwnedOnly, (ownedOnly) => {
+  try {
+    localStorage.setItem(CATALOG_MODE_KEY, ownedOnly ? 'inventory' : 'free')
+  } catch {
+    // localStorage may be unavailable (private mode / quota).
+  }
+})
 
 // Actions
 const startEditingInventory = () => {
   tempOwnedHeroes.value = [...ownedHeroes.value]
   tempOwnedSkills.value = [...ownedSkills.value]
   isEditingInventory.value = true
+  isCompactView.value = false
 }
 
 const saveInventory = () => {
@@ -41,6 +61,7 @@ export function useInventory() {
     ownedSkills,
     showOwnedOnly,
     isEditingInventory,
+    isCompactView,
     tempOwnedHeroes,
     tempOwnedSkills,
     startEditingInventory,

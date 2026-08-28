@@ -61,8 +61,8 @@
             :used-heroes="allUsedHeroNames"
             :owned-heroes="ownedHeroes"
             :filter-owned="showOwnedOnly"
-            @update:filterOwned="(val: boolean) => $emit('update:showOwnedOnly', val)"
             @select="(hero: Hero) => $emit('select-hero-from-library', hero)"
+            @edit-inventory="$emit('edit-inventory')"
           />
         </el-tab-pane>
         <el-tab-pane label="戰法庫" name="skills" class="h-full flex flex-col overflow-hidden">
@@ -71,10 +71,10 @@
             :used-skills="allUsedSkillNames"
             :owned-skills="ownedSkills"
             :filter-owned="showOwnedOnly"
-            @update:filterOwned="(val: boolean) => $emit('update:showOwnedOnly', val)"
             @select="(skill: Skill) => $emit('select-skill-from-library', skill)"
             @skill-drag-start="(skill: Skill) => $emit('skill-drag-start', skill)"
             @skill-drag-end="$emit('skill-drag-end')"
+            @edit-inventory="$emit('edit-inventory')"
           />
         </el-tab-pane>
       </el-tabs>
@@ -117,7 +117,6 @@ defineProps<{
 
 defineEmits<{
   (e: 'update:activeTab', v: LibraryTab): void
-  (e: 'update:showOwnedOnly', v: boolean): void
   (e: 'update:lineupShakeActive', v: boolean): void
   (e: 'clear-skill-focus'): void
   (e: 'open-hero-select', role: Role): void
@@ -133,5 +132,6 @@ defineEmits<{
   (e: 'hero-drop', role: Role): void
   (e: 'select-hero-from-library', hero: Hero): void
   (e: 'select-skill-from-library', skill: Skill): void
+  (e: 'edit-inventory'): void
 }>()
 </script>

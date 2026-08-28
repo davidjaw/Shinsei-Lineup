@@ -134,12 +134,18 @@ const { currentLineup, currentTeamName, totalCost } = useLineups()
 const troopLevels = useTroopLevels(currentLineup)
 const {
   isEditingInventory,
+  isCompactView,
   startEditingInventory,
   cancelEditingInventory,
   saveInventory,
   ownedHeroes,
   ownedSkills,
 } = useInventory()
+
+watch(() => route.name, (name) => {
+  if (name !== 'lineup') isCompactView.value = false
+})
+
 const { isLoggedIn, displayName, signIn, signOut, updateDisplayName } = useAuth()
 const {
   activeProfile, activeProfileName, applyProfile, unloadProfile, syncActiveProfile, clearActiveProfile,

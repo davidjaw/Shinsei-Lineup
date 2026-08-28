@@ -37,15 +37,7 @@
         >
           {{ allFilteredOwned ? '取消全選' : '全選' }}
         </button>
-        <el-switch
-          :model-value="filterOwned"
-          @update:model-value="val => $emit('update:filterOwned', val)"
-          inline-prompt
-          active-text="已擁有"
-          inactive-text="全部"
-          v-if="mode === 'select'"
-        />
-         <div v-else class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
+        <div v-if="mode === 'manage'" class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
            庫存編輯模式
          </div>
       </div>
@@ -117,8 +109,14 @@
 
     <!-- Grid -->
     <div class="flex-1 overflow-y-auto p-0 md:p-2">
-      <div v-if="filteredHeroes.length === 0" class="text-center py-10 text-gray-400">
-        無符合條件的武將
+      <div v-if="filteredHeroes.length === 0" class="text-center py-10">
+        <template v-if="mode === 'select' && filterOwned && ownedHeroes.length === 0">
+          <p class="text-gray-400">庫存沒有武將</p>
+          <el-button type="primary" plain class="!mt-3 !rounded-sm" @click="emit('edit-inventory')">
+            編輯庫存
+          </el-button>
+        </template>
+        <p v-else class="text-gray-400">無符合條件的武將</p>
       </div>
       <div
         class="grid gap-1 md:gap-2"
@@ -130,7 +128,6 @@
           class="relative transition-all"
           :class="{ 
             'opacity-50 grayscale cursor-not-allowed': mode === 'select' && isUsed(hero.name),
-            'opacity-40': mode === 'select' && filterOwned && !props.ownedHeroes.includes(hero.name),
             'grayscale opacity-60': mode === 'manage' && !props.ownedHeroes.includes(hero.name),
             'cursor-pointer hover:scale-105': (mode === 'manage') || (mode === 'select' && !isUsed(hero.name))
           }"
@@ -163,7 +160,7 @@ import { TROOP_TYPES } from '../constants/traits'
 import HeroCard from './HeroCard.vue'
 
 const { heroes } = useData()
-const emit = defineEmits(['select', 'update:ownedHeroes', 'update:filterOwned'])
+const emit = defineEmits(['select', 'update:ownedHeroes', 'edit-inventory'])
 
 const props = defineProps({
   usedHeroes: { type: Object as PropType<Set<string> | string[]>, default: () => [] },
@@ -301,13 +298,7 @@ const handleClick = (hero: Hero) => {
   if (props.mode === 'manage') {
     toggleOwned(hero.name)
   } else {
-    // Select mode
-    // Check if used
     if (isUsed(hero.name)) return
-    // Check if owned (if we enforce ownership, strictly speaking yes, but usually just visual warning)
-    // Let's assume user can only select what they own if filter is on, otherwise allow ghosting? 
-    // Usually "Inventory" implies you can only use what you have. 
-    // But for a builder, maybe allow all? Let's assume allow all unless filtered.
     emit('select', hero)
   }
 }

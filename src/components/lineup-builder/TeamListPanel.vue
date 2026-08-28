@@ -81,6 +81,10 @@
     </div>
 
     <div class="border-t border-divider px-3 py-3 flex flex-col gap-1.5">
+      <button class="action-row" @click="$emit('compact')">
+        <el-icon :size="14"><FullScreen /></el-icon>
+        <span>截圖模式</span>
+      </button>
       <button class="action-row" @click="$emit('share')">
         <el-icon :size="14"><Share /></el-icon>
         <span>分享</span>
@@ -98,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { Share, Document, Plus, Delete, Position } from '@element-plus/icons-vue'
+import { Share, Document, Plus, Delete, Position, FullScreen } from '@element-plus/icons-vue'
 import { type Lineup, isEmptyTeam, computeTeamCost } from '../../composables/useLineups'
 import { MAX_TEAMS_PER_GROUP } from '../../types/group'
 
@@ -114,6 +118,7 @@ defineEmits<{
   (e: 'save-as-proposal'): void
   (e: 'export-to-group'): void
   (e: 'remove-team', idx: number): void
+  (e: 'compact'): void
 }>()
 
 const teamCost = computeTeamCost

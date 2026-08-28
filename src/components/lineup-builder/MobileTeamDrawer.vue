@@ -97,6 +97,33 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+
+        <div
+          class="mode-pills"
+          role="group"
+          aria-label="配將模式"
+        >
+          <button
+            type="button"
+            class="mode-pill"
+            :class="{ 'is-active': !showOwnedOnly }"
+            :aria-pressed="!showOwnedOnly"
+            @click="setCatalogMode(false)"
+          >
+            <el-icon :size="13"><Grid /></el-icon>
+            自由模式
+          </button>
+          <button
+            type="button"
+            class="mode-pill"
+            :class="{ 'is-active': showOwnedOnly }"
+            :aria-pressed="showOwnedOnly"
+            @click="setCatalogMode(true)"
+          >
+            <el-icon :size="13"><Box /></el-icon>
+            庫存模式
+          </button>
+        </div>
       </div>
 
       <div class="flex-1 min-h-0 overflow-y-auto py-1">
@@ -172,6 +199,10 @@
       </div>
 
       <div class="border-t border-divider px-3 py-3 flex flex-col gap-1.5">
+        <button class="action-row" @click="$emit('compact')">
+          <el-icon :size="14"><FullScreen /></el-icon>
+          <span>截圖模式</span>
+        </button>
         <button class="action-row" @click="$emit('share')">
           <el-icon :size="14"><Share /></el-icon>
           <span>分享</span>
@@ -190,7 +221,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Delete, Plus, Share, Position, User, ArrowDown, CircleClose,
-  StarFilled, Avatar, Edit, Setting, Link,
+  StarFilled, Avatar, Edit, Setting, Link, Grid, Box, FullScreen,
 } from '@element-plus/icons-vue'
 import { type Lineup, isEmptyTeam, computeTeamCost } from '../../composables/useLineups'
 import { MAX_TEAMS_PER_GROUP } from '../../types/group'
@@ -213,6 +244,7 @@ const emit = defineEmits<{
   (e: 'share'): void
   (e: 'export-to-group'): void
   (e: 'import-from-link'): void
+  (e: 'compact'): void
 }>()
 
 const router = useRouter()
@@ -220,9 +252,17 @@ const { groups, currentGroup, currentGroupIndex, setCurrentGroup, addGroup, rena
 const { profiles, refresh: refreshProfiles } = useProfiles()
 const { activeProfileId, activeProfileName, applyProfile, unloadProfile } = useActiveProfile()
 const { isLoggedIn } = useAuth()
-const { isEditingInventory, startEditingInventory } = useInventory()
+const { isEditingInventory, startEditingInventory, showOwnedOnly, ownedHeroes, ownedSkills } = useInventory()
 
 const teamCost = computeTeamCost
+
+const setCatalogMode = (inventory: boolean) => {
+  if (inventory === showOwnedOnly.value) return
+  showOwnedOnly.value = inventory
+  if (inventory && ownedHeroes.value.length === 0 && ownedSkills.value.length === 0) {
+    ElMessage.info('庫存是空的，目前沒有可配置的武將／戰法')
+  }
+}
 
 const onProfileVisibleChange = (visible: boolean) => {
   if (visible) void refreshProfiles().catch(() => { /* swallow */ })
@@ -311,6 +351,47 @@ const onGroupCommand = async (cmd: string) => {
   border-color: rgb(var(--color-focus));
 }
 .drawer-pill:focus-visible {
+  outline: 2px solid rgb(var(--color-focus));
+  outline-offset: 2px;
+}
+
+.mode-pills {
+  display: inline-flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 2px;
+  border-radius: 2px;
+  background: rgb(var(--color-surface-muted));
+  border: 1px solid rgb(var(--color-divider));
+  box-sizing: border-box;
+}
+.mode-pill {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: #6B7280;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+.mode-pill.is-active {
+  background: rgb(var(--color-highlight));
+  color: rgb(var(--color-focus));
+}
+.mode-pill:focus-visible {
   outline: 2px solid rgb(var(--color-focus));
   outline-offset: 2px;
 }

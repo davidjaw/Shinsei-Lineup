@@ -265,7 +265,6 @@ const toChtArray = <T extends { name: string }>(
 export interface ApplyBlobDeps extends SerializeDeps {
   ownedHeroes: { value: string[] }
   ownedSkills: { value: string[] }
-  showOwnedOnly: { value: boolean }
   lineups: Lineup[]
   ensureTeamCount: (target: number) => void
   replaceGroups: (groups: { id?: string; name: string; teams: Lineup[] }[]) => void
@@ -294,14 +293,6 @@ export const applyBlobToState = (
     deps.ownedSkills.value = toChtArray(data.inv_s, (k) =>
       findSkillByKey(deps.skills, k),
     )
-  }
-
-  if (
-    (data.inv_h && data.inv_h.length > 0) ||
-    (data.inv_s && data.inv_s.length > 0) ||
-    (data.inventory && data.inventory.length > 0)
-  ) {
-    deps.showOwnedOnly.value = true
   }
 
   // v3/v4 — groups envelope, wipe-and-replace.

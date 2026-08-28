@@ -18,14 +18,14 @@
       <SidebarSection v-if="!collapsed" label="主要功能" />
       <SidebarLink
         v-for="item in primaryNav"
-        :key="item.name"
+        :key="item.catalogMode ?? item.name"
         :to="item.to"
         :icon="item.icon"
         :label="item.label"
         :badge="item.badge"
         :collapsed="collapsed"
-        :active="activeRoute === item.name"
-        @click="$emit('nav')"
+        :active="isNavActive(item)"
+        @click="onNavClick(item)"
       />
 
       <SidebarSection v-if="!collapsed" label="即將推出" class="mt-4" />
@@ -103,21 +103,24 @@
 import type { Component } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 import {
-  Grid, Flag, Document, Aim, Reading, Setting, Fold, Expand,
+  Grid, Box, Flag, Document, Aim, Reading, Setting, Fold, Expand,
   Message, ChatDotRound, EditPen, User, Share, MagicStick,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { LATEST_VERSION } from '../../constants/changelog'
+import { useInventory } from '../../composables/useInventory'
 import SidebarLink from './SidebarLink.vue'
 import SidebarSection from './SidebarSection.vue'
 
 const latestVersion = LATEST_VERSION
 
-defineProps<{ collapsed: boolean; activeRoute?: string }>()
-defineEmits<{
+const props = defineProps<{ collapsed: boolean; activeRoute?: string }>()
+const emit = defineEmits<{
   (e: 'nav'): void
   (e: 'toggle-collapse'): void
 }>()
+
+const { showOwnedOnly, ownedHeroes, ownedSkills } = useInventory()
 
 const copyDiscord = async () => {
   try {
@@ -134,10 +137,31 @@ type NavItem = {
   icon: Component
   label: string
   badge?: string
+  catalogMode?: 'free' | 'inventory'
+}
+
+const isNavActive = (item: NavItem): boolean => {
+  if (item.catalogMode === 'free') return props.activeRoute === 'lineup' && !showOwnedOnly.value
+  if (item.catalogMode === 'inventory') return props.activeRoute === 'lineup' && !!showOwnedOnly.value
+  return props.activeRoute === item.name
+}
+
+const onNavClick = (item: NavItem) => {
+  if (item.catalogMode === 'free' || item.catalogMode === 'inventory') {
+    const inventory = item.catalogMode === 'inventory'
+    if (inventory !== showOwnedOnly.value) {
+      showOwnedOnly.value = inventory
+      if (inventory && ownedHeroes.value.length === 0 && ownedSkills.value.length === 0) {
+        ElMessage.info('庫存是空的，目前沒有可配置的武將／戰法')
+      }
+    }
+  }
+  emit('nav')
 }
 
 const primaryNav: readonly NavItem[] = [
-  { name: 'lineup', to: { name: 'lineup' }, icon: Grid, label: '配將模擬', badge: '工作台' },
+  { name: 'lineup', to: { name: 'lineup' }, icon: Grid, label: '自由模式', catalogMode: 'free' },
+  { name: 'lineup', to: { name: 'lineup' }, icon: Box, label: '庫存模式', catalogMode: 'inventory' },
   { name: 'profiles', to: { name: 'profiles' }, icon: User, label: '角色管理' },
   { name: 'groups', to: { name: 'groups' }, icon: Flag, label: '我的編組' },
   { name: 'shares', to: { name: 'shares' }, icon: Share, label: '我的分享' },
