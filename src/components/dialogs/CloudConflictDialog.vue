@@ -63,7 +63,7 @@ const {
   resolveConflictForceOverwrite,
   resolveConflictDefer,
 } = useGroupPersistence()
-const { groups } = useGroups()
+const { findGroupById } = useGroups()
 
 const busy = ref(false)
 const ctx = computed(() => cloudConflict.value)
@@ -78,7 +78,7 @@ const visible = computed({
 })
 
 const localGroup = computed(() =>
-  ctx.value ? groups.find((g) => g.id === ctx.value!.localGroupId) ?? null : null,
+  ctx.value ? findGroupById(ctx.value.localGroupId) ?? null : null,
 )
 
 // Counts exclude empty teams (no hero in any role) — same definition the

@@ -16,11 +16,15 @@ import {
   type BingxueActive,
 } from '../composables/useLineups'
 import { MAX_TEAMS_PER_GROUP } from '../types/group'
-import type {
-  ShareableBingxue,
-  ShareableData,
-  ShareableGroup,
-  ShareableLineup,
+import type { IncomingGroup, WorkspaceIncoming } from '../composables/useGroups'
+import {
+  CATALOG_MODES,
+  type CatalogMode,
+  type ShareableBingxue,
+  type ShareableData,
+  type ShareableGroup,
+  type ShareableLineup,
+  type ShareableWorkspace,
 } from '../constants/gameData'
 
 export interface SerializeDeps {
@@ -89,6 +93,47 @@ export interface RestoreReport {
   activeIndex: number | null
 }
 
+const mintWorkspaceGroupId = (mode: CatalogMode): string =>
+  `${mode === 'free' ? 'f_' : 'i_'}g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
+export const blobHasTeams = (data: ShareableData): boolean => {
+  if (data.workspaces) {
+    return CATALOG_MODES.some((m) => (data.workspaces?.[m]?.groups?.length ?? 0) > 0)
+  }
+  return !!(data.groups && data.groups.length > 0) || !!(data.lineups && data.lineups.length > 0)
+}
+
+export const blobHasInventory = (data: ShareableData): boolean =>
+  !!(data.inv_h && data.inv_h.length > 0)
+  || !!(data.inv_s && data.inv_s.length > 0)
+  || !!(data.inventory && data.inventory.length > 0)
+
+// Flatten v5 workspaces (or legacy top-level groups) into one list. Used by
+// cloud push, merge-dialog previews, and any caller that wants "all groups
+// in this blob" without caring which mode they belong to.
+export const shareableGroupsInBlob = (data: ShareableData): ShareableGroup[] => {
+  if (data.workspaces) {
+    return CATALOG_MODES.flatMap((m) => data.workspaces?.[m]?.groups ?? [])
+  }
+  return data.groups ?? []
+}
+
+// Groups a user-facing import should apply to the *current* mode. Prefers
+// the matching v5 workspace, then legacy `groups` / `lineups`. Never falls
+// back to the other workspace — empty current mode stays empty.
+export const shareableGroupsForMode = (
+  data: ShareableData,
+  mode: CatalogMode,
+): ShareableGroup[] => {
+  const own = data.workspaces?.[mode]?.groups
+  if (own && own.length > 0) return own
+  if (data.groups && data.groups.length > 0) return data.groups
+  if (data.lineups && data.lineups.length > 0) {
+    return [{ name: '匯入的編組', teams: data.lineups }]
+  }
+  return []
+}
+
 // Lookup maps memoized by the input array. Restore visits ~36 keys per group
 // (4 teams × 3 roles × 3 fields); building a Map once is O(1) per lookup vs
 // O(n) Array.find each time. WeakMap keeps the cache alive only as long as
@@ -140,8 +185,8 @@ const findSkillByKey = (skills: Skill[], key: string): Skill | undefined =>
 //     previous occupant's skills/stats/breakthrough/bingxue, which then
 //     surfaced as "ghost data" in the UI.
 //   - skill JP key fails → null that skill slot only, record the JP key.
-//   - everything else (stats / breakthrough / bingxue) is copied as-is
-//     when present.
+//   - stats is shallow-copied so dual hydrate never shares the same object.
+//   - breakthrough / bingxue are copied as-is when present.
 const restoreRoleInto = (
   prefix: string,
   role: RoleData,
@@ -185,7 +230,7 @@ const restoreRoleInto = (
   }
 
   const st = safeL[`${prefix}_st`]
-  if (st) role.stats = st as RoleData['stats']
+  if (st) role.stats = { ...(st as RoleData['stats']) }
 
   const bt = safeL[`${prefix}_bt`]
   if (typeof bt === 'number') role.breakthrough = Math.max(0, Math.min(5, bt))
@@ -260,6 +305,47 @@ const toChtArray = <T extends { name: string }>(
   finder: (k: string) => T | undefined,
 ): string[] => arr.map((k) => finder(k)?.name ?? k).filter(Boolean)
 
+export const hydrateShareableGroups = (
+  groups: ShareableGroup[],
+  deps: SerializeDeps,
+  report: string[],
+): IncomingGroup[] =>
+  groups.map((g) => {
+    const teams = (g.teams || [])
+      .slice(0, MAX_TEAMS_PER_GROUP)
+      .map((l, i) => buildTeamFromShareable(l, i, deps, report))
+    if (teams.length === 0) teams.push(makeTeam(0))
+    return { id: g.id, name: g.name || '預設', teams }
+  })
+
+// v4→v5: copy the single group list into BOTH workspaces. Inventory keeps
+// the original ids so existing cloud (user_id, client_id) rows keep
+// PATCHing; free gets freshly minted `f_` ids so the unique index does
+// not collide. Users currently see the same board in both filters —
+// copy-then-diverge is less surprising than emptying one side.
+export const wrapV4AsV5 = (data: ShareableData): ShareableData => {
+  if (data.workspaces) return { ...data, v: 5 }
+  const groups = data.groups ?? []
+  const idx = typeof data.active_group_index === 'number' ? data.active_group_index : 0
+  const cloneGroup = (g: ShareableGroup, mintFreeId: boolean): ShareableGroup => {
+    const cloned = structuredClone(g)
+    cloned.id = mintFreeId ? mintWorkspaceGroupId('free') : g.id
+    cloned.teams = cloned.teams ?? []
+    return cloned
+  }
+  const workspaces: Record<CatalogMode, ShareableWorkspace> = {
+    inventory: {
+      active_group_index: idx,
+      groups: groups.map((g) => cloneGroup(g, false)),
+    },
+    free: {
+      active_group_index: idx,
+      groups: groups.map((g) => cloneGroup(g, true)),
+    },
+  }
+  return { ...data, v: 5, workspaces }
+}
+
 // State refs that applyBlobToState mutates. Passing them as deps keeps this
 // module pure — no module-level singletons, no useX() calls inside.
 export interface ApplyBlobDeps extends SerializeDeps {
@@ -267,18 +353,14 @@ export interface ApplyBlobDeps extends SerializeDeps {
   ownedSkills: { value: string[] }
   lineups: Lineup[]
   ensureTeamCount: (target: number) => void
-  replaceGroups: (groups: { id?: string; name: string; teams: Lineup[] }[]) => void
+  replaceGroups: (groups: IncomingGroup[]) => void
+  replaceAllWorkspaces?: (incoming: Record<CatalogMode, WorkspaceIncoming>) => void
+  activeMode?: CatalogMode
 }
 
-// Top-level restore: takes a ShareableData blob and mutates the supplied
-// state refs. Returns a healing report + the active_group_index hint (caller
-// is responsible for applying it AFTER replaceGroups has run).
-export const applyBlobToState = (
-  data: ShareableData,
-  deps: ApplyBlobDeps,
-): RestoreReport => {
-  const report: string[] = []
+export type ApplyBlobScope = 'active' | 'all'
 
+const applyInventory = (data: ShareableData, deps: ApplyBlobDeps): void => {
   if (data.inventory) {
     deps.ownedHeroes.value = toChtArray(data.inventory, (k) =>
       findHeroByKey(deps.heroes, k),
@@ -294,18 +376,56 @@ export const applyBlobToState = (
       findSkillByKey(deps.skills, k),
     )
   }
+}
 
-  // v3/v4 — groups envelope, wipe-and-replace.
-  if (data.groups && data.groups.length > 0) {
-    const incoming = data.groups.map((g: ShareableGroup) => {
-      const teams = (g.teams || [])
-        .slice(0, MAX_TEAMS_PER_GROUP)
-        .map((l, i) => buildTeamFromShareable(l, i, deps, report))
-      if (teams.length === 0) teams.push(makeTeam(0))
-      return { id: g.id, name: g.name || '預設', teams }
-    })
-    deps.replaceGroups(incoming)
-  } else if (data.lineups && data.lineups.length > 0) {
+const applyGroupsToActive = (
+  groups: ShareableGroup[],
+  deps: ApplyBlobDeps,
+  report: string[],
+): void => {
+  const incoming = hydrateShareableGroups(groups, deps, report)
+  if (incoming.length === 0) return
+  deps.replaceGroups(incoming)
+}
+
+// Top-level restore. `scope: 'all'` (autosave / cloud / OAuth) writes both
+// workspaces; `scope: 'active'` (share-link / dialog import) writes only
+// the currently selected mode and never wipes the other.
+export const applyBlobToState = (
+  data: ShareableData,
+  deps: ApplyBlobDeps,
+  opts?: { scope?: ApplyBlobScope },
+): RestoreReport => {
+  const report: string[] = []
+  const scope: ApplyBlobScope = opts?.scope ?? 'active'
+
+  applyInventory(data, deps)
+
+  if (scope === 'all' && deps.replaceAllWorkspaces && (data.workspaces || (data.groups && data.groups.length > 0))) {
+    const v5 = wrapV4AsV5(data)
+    const incoming = {} as Record<CatalogMode, WorkspaceIncoming>
+    for (const mode of CATALOG_MODES) {
+      const ws = v5.workspaces?.[mode]
+      incoming[mode] = {
+        groups: hydrateShareableGroups(ws?.groups ?? [], deps, report),
+        currentGroupIndex: ws?.active_group_index ?? 0,
+        currentTeamIndex: ws?.active_team_index ?? 0,
+      }
+    }
+    deps.replaceAllWorkspaces(incoming)
+    return {
+      healed: Array.from(new Set(report)),
+      activeIndex: incoming[deps.activeMode ?? 'free']?.currentGroupIndex ?? 0,
+    }
+  }
+
+  const mode = deps.activeMode ?? 'free'
+  const groupsForActive = data.workspaces
+    ? shareableGroupsForMode(data, mode)
+    : (data.groups ?? [])
+  if (groupsForActive.length > 0) {
+    applyGroupsToActive(groupsForActive, deps, report)
+  } else if (!data.workspaces && data.lineups && data.lineups.length > 0) {
     // v1/v2 legacy — in-place mutate the active group's teams.
     deps.ensureTeamCount(data.lineups.length)
     data.lineups.forEach((l, i) => {
@@ -316,7 +436,8 @@ export const applyBlobToState = (
 
   return {
     healed: Array.from(new Set(report)),
-    activeIndex:
-      typeof data.active_group_index === 'number' ? data.active_group_index : null,
+    activeIndex: data.workspaces
+      ? (data.workspaces[mode]?.active_group_index ?? null)
+      : (typeof data.active_group_index === 'number' ? data.active_group_index : null),
   }
 }

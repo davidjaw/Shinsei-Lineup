@@ -150,7 +150,7 @@ interface DestOption {
 }
 
 const destOptions = computed<DestOption[]>(() =>
-  groups
+  groups.value
     .map((g, idx) => ({
       idx,
       id: g.id,
@@ -183,7 +183,7 @@ watch(
 )
 
 const selectedGroup = computed(() =>
-  selectedIdx.value != null ? groups[selectedIdx.value] ?? null : null,
+  selectedIdx.value != null ? groups.value[selectedIdx.value] ?? null : null,
 )
 const selectedGroupName = computed(() => selectedGroup.value?.name ?? '')
 

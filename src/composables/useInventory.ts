@@ -1,4 +1,5 @@
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
+import type { CatalogMode } from '../constants/gameData'
 import { useProfiles } from './useProfiles'
 
 const CATALOG_MODE_KEY = 'nobunaga.catalogMode'
@@ -15,6 +16,9 @@ const readStoredCatalogMode = (): boolean => {
 const ownedHeroes = ref<string[]>([])
 const ownedSkills = ref<string[]>([])
 const showOwnedOnly = ref(readStoredCatalogMode())
+const catalogMode = computed<CatalogMode>(() =>
+  showOwnedOnly.value ? 'inventory' : 'free',
+)
 
 const isEditingInventory = ref(false)
 const isCompactView = ref(false)
@@ -60,6 +64,7 @@ export function useInventory() {
     ownedHeroes,
     ownedSkills,
     showOwnedOnly,
+    catalogMode,
     isEditingInventory,
     isCompactView,
     tempOwnedHeroes,

@@ -38,7 +38,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '我的編組',
           // Cap mirrors MAX_TEAMS_PER_GROUP in types/group.ts — update both if changed.
-          description: '每個編組可放最多 10 支隊伍，展開查看預覽，方便截圖分享給朋友。',
+          description: '每個編組可放最多 10 支隊伍。自由模式與庫存模式的編組分開保存，此頁只顯示目前模式。',
         },
       },
       {

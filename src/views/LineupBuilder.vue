@@ -158,7 +158,7 @@ import { useLineups, defaultStats, isEmptyTeam, type Lineup } from '../composabl
 import { useGroups } from '../composables/useGroups'
 import { MAX_TEAMS_PER_GROUP } from '../types/group'
 import { useGroupPersistence } from '../composables/useGroupPersistence'
-import { applyBlobToState, makeSerializer } from '../lib/lineupSerialize'
+import { applyBlobToState, blobHasInventory, blobHasTeams, makeSerializer } from '../lib/lineupSerialize'
 import { useInventory } from '../composables/useInventory'
 import {
   createShare, loadShare, isShareEnabled, type ShareKind,
@@ -170,6 +170,7 @@ import { useActiveProfile } from '../composables/useActiveProfile'
 import { useDialogs } from '../composables/useDialogs'
 import { useProposals } from '../composables/useProposals'
 import { applyConflictResolution } from '../lib/teamConflicts'
+import { snapshotTeam } from '../lib/lineup'
 import type { ImportConflictResolution } from '../types/group'
 import { useChangelog } from '../composables/useChangelog'
 import { useProfiles } from '../composables/useProfiles'
@@ -197,10 +198,12 @@ const {
   currentGroupIndex,
   setCurrentGroup,
   replaceGroups,
+  replaceAllWorkspaces,
   regenerateCurrentGroupId,
-  resetToDefault: resetGroupsToDefault,
+  resetAllWorkspaces,
   appendTeamToGroup,
   addGroup,
+  isPristineWorkspace,
 } = useGroups()
 
 const {
@@ -211,6 +214,7 @@ const {
   ownedHeroes,
   ownedSkills,
   showOwnedOnly,
+  catalogMode,
   isEditingInventory,
   isCompactView,
   tempOwnedHeroes,
@@ -469,10 +473,10 @@ const clearLineup = (type: ResetTarget) => {
     ElMessage.info('庫存已清空')
   }
   if (type === 'all') {
-    // Wipe groups[] back to a single default group (fresh id) and clear
-    // inventory. The fresh id again ensures stale cloud rows get cleaned
+    // Wipe BOTH workspaces back to a single default group (fresh ids) and
+    // clear inventory. The fresh ids ensure stale cloud rows get cleaned
     // up by stale-detect rather than silently overwritten.
-    resetGroupsToDefault()
+    resetAllWorkspaces()
     clearInventory()
     ElMessage.info('所有資料已重置')
   }
@@ -588,6 +592,9 @@ const { heroes, skills } = useData()
 // (soft-null on unresolved JP keys) lives inside applyBlobToState so a
 // renamed hero / skill upstream doesn't silently leave stale fields behind.
 const restoreFromBlob = (data: ShareableData) => {
+  // Hash / share restore: a full backup (`workspaces`) restores both
+  // modes; a typical lineup/group share writes the active mode only.
+  const scope = data.workspaces ? 'all' : 'active'
   const report = applyBlobToState(data, {
     heroes: heroes.value,
     skills: skills.value,
@@ -596,17 +603,15 @@ const restoreFromBlob = (data: ShareableData) => {
     lineups,
     ensureTeamCount,
     replaceGroups,
-  })
-  if (report.activeIndex != null && report.activeIndex >= 0 && report.activeIndex < groups.length) {
+    replaceAllWorkspaces,
+    activeMode: catalogMode.value,
+  }, { scope })
+  if (report.activeIndex != null && report.activeIndex >= 0 && report.activeIndex < groups.value.length) {
     setCurrentGroup(report.activeIndex)
   }
-  // Share-link restore: if the blob carried inventory, enter 庫存 mode.
-  // Autosave restore goes through applyBlobToState only and must not force this.
-  if (
-    (data.inv_h && data.inv_h.length > 0) ||
-    (data.inv_s && data.inv_s.length > 0) ||
-    (data.inventory && data.inventory.length > 0)
-  ) {
+  // Inventory-only shares may switch to 庫存. A team/group share that
+  // happens to attach inventory must not yank the user out of 自由.
+  if (blobHasInventory(data) && !blobHasTeams(data)) {
     showOwnedOnly.value = true
   }
   if (report.healed.length > 0) {
@@ -709,12 +714,12 @@ const onSubmitProposal = async (payload: { name: string; isPublic: boolean }) =>
 // the user only ever picks "somewhere else". Deep-clone here so a later
 // edit to the live team can't mutate the snapshot held by the dialog.
 const onExportTeamToOtherGroup = () => {
-  if (groups.length <= 1) {
+  if (groups.value.length <= 1) {
     ElMessage.info('尚無其他編組，請先在「我的編組」建立新編組')
     return
   }
   const live = currentLineup.value
-  const cloned: Lineup = JSON.parse(JSON.stringify(live))
+  const cloned: Lineup = snapshotTeam(live)
   exportTeamSource.value = { team: cloned, displayName: live.name }
   exportTeamDialogVisible.value = true
 }
@@ -728,7 +733,7 @@ const onExportTeamConfirmed = ({
 }) => {
   const src = exportTeamSource.value
   if (!src) return
-  const destGroup = groups[destGroupIdx]
+  const destGroup = groups.value[destGroupIdx]
   if (!destGroup) return
   applyConflictResolution(src.team, destGroup.teams, resolution)
   // Branch on isCurrent so the lineups mirror stays in lockstep when the
@@ -767,12 +772,10 @@ const onImportFromLink = (payload: ImportFromLinkPayload) => {
     // dead empty placeholder at index 0 — without it, a later cloud restore
     // would land currentGroupIndex on the placeholder instead of the user's
     // real content (the "login lands on empty default" bug).
-    if (isPristineDefaultState()) {
+    if (isPristineWorkspace()) {
       const next = payload.groups.map((ig) => ({
         name: ig.name,
-        teams: ig.teams.slice(0, MAX_TEAMS_PER_GROUP).map(
-          (t) => JSON.parse(JSON.stringify(t)) as Lineup,
-        ),
+        teams: ig.teams.slice(0, MAX_TEAMS_PER_GROUP).map(snapshotTeam),
       }))
       const truncated = payload.groups.reduce(
         (n, ig) => n + Math.max(0, ig.teams.length - MAX_TEAMS_PER_GROUP),
@@ -793,7 +796,7 @@ const onImportFromLink = (payload: ImportFromLinkPayload) => {
     // Otherwise: append each incoming group as a NEW group. Prefix with
     // "匯入-" when the display name collides with an existing group — keeps
     // the picker unambiguous on subsequent edits.
-    const existing = new Set(groups.map((g) => g.name))
+    const existing = new Set(groups.value.map((g) => g.name))
     let firstNewIdx: number | null = null
     let added = 0
     let truncated = 0
@@ -806,7 +809,7 @@ const onImportFromLink = (payload: ImportFromLinkPayload) => {
       // MAX_TEAMS_PER_GROUP — log a truncation hint if any team is dropped.
       let pushed = 0
       for (const t of ig.teams) {
-        const clone: Lineup = JSON.parse(JSON.stringify(t))
+        const clone: Lineup = snapshotTeam(t)
         if (appendTeamToGroup(newIdx, clone)) {
           pushed += 1
         } else {
@@ -840,9 +843,7 @@ const onImportFromLink = (payload: ImportFromLinkPayload) => {
   // that would re-introduce collisions the prior iteration just cleared.
   const excludeIdx =
     payload.action === 'overwrite' ? currentTeamIndex.value : undefined
-  const clones: Lineup[] = payload.teams.map(
-    (t) => JSON.parse(JSON.stringify(t)) as Lineup,
-  )
+  const clones: Lineup[] = payload.teams.map(snapshotTeam)
   for (const clone of clones) {
     applyConflictResolution(clone, lineups, payload.resolution, excludeIdx)
   }
@@ -965,7 +966,6 @@ const {
   enableAutosave,
   tryBootstrapCloudSync,
   flushLocalAutosave,
-  isPristineDefaultState,
   consumeRecovery,
   healingReport: autosaveHealingReport,
 } = useGroupPersistence()
@@ -979,9 +979,9 @@ watch(autosaveHealingReport, (keys) => {
 
 onMounted(async () => {
   const consumedHash = await initFromHash()
-  // restoreFromLocalStorage internally guards on isPristineDefaultState — if
-  // a share link, OAuth recovery snapshot, or anything else already populated
-  // the UI in this tick, this is a no-op.
+  // restoreFromLocalStorage fills only still-pristine workspaces — if a
+  // share link, OAuth recovery snapshot, or anything else already populated
+  // a mode in this tick, that mode is a no-op.
   restoreFromLocalStorage()
   // Fire-and-forget: the auto-load sequencing only depends on initFromHash
   // (share/recovery should win if present). No reason to block the changelog

@@ -1,122 +1,256 @@
-import { reactive, ref, computed } from 'vue'
+import { reactive, computed, watch, type ComputedRef } from 'vue'
 import type { Group, Team } from '../types/group'
 import { MAX_TEAMS_PER_GROUP } from '../types/group'
+import { CATALOG_MODES, type CatalogMode } from '../constants/gameData'
+import { useInventory } from './useInventory'
 
-// One 編組 holds up to MAX_TEAMS_PER_GROUP teams. Phase 3d only ships the
-// single-group case; addGroup/removeGroup wire the multi-group machinery so
-// Phase 3e/6 (group selector dropdown, "加入編組") can build on top.
+// Two catalog modes share inventory but keep independent 編組 graphs.
+// `groups` / `currentGroup` always point at the active mode's workspace;
+// switching 自由↔庫存 swaps identity (no JSON clone — slot v-models stay
+// bound to the live team objects of whichever workspace is current).
 
-const makeGroupId = () =>
-  `g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+export interface WorkspaceState {
+  groups: Group[]
+  currentGroupIndex: number
+  currentTeamIndex: number
+}
 
-const groups = reactive<Group[]>([
-  // Seeded empty — useLineups inserts the first default team on first init,
-  // so Group ↔ Team ownership stays one-way (groups owns teams, useLineups
-  // mirrors).
-  { id: makeGroupId(), name: '預設', teams: [] },
-])
+export interface IncomingGroup {
+  id?: string
+  name: string
+  teams: Team[]
+}
 
-const currentGroupIndex = ref(0)
-const currentGroup = computed(() => groups[currentGroupIndex.value])
+export interface WorkspaceIncoming {
+  groups: IncomingGroup[]
+  currentGroupIndex?: number
+  currentTeamIndex?: number
+}
+
+const workspacePrefix = (mode: CatalogMode): 'f_' | 'i_' =>
+  mode === 'free' ? 'f_' : 'i_'
+
+// Cloud rows have no workspace column. `f_` → 自由; everything else
+// (legacy unprefixed v4 ids, plus `i_`) → 庫存.
+export const workspaceOfClientId = (id: string): CatalogMode =>
+  id.startsWith('f_') ? 'free' : 'inventory'
+
+export const makeGroupId = (mode: CatalogMode): string =>
+  `${workspacePrefix(mode)}g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
+const makeDefaultGroup = (mode: CatalogMode): Group => ({
+  id: makeGroupId(mode),
+  name: '預設',
+  teams: [],
+})
+
+const workspaces = reactive<Record<CatalogMode, WorkspaceState>>({
+  free: {
+    groups: [makeDefaultGroup('free')],
+    currentGroupIndex: 0,
+    currentTeamIndex: 0,
+  },
+  inventory: {
+    groups: [makeDefaultGroup('inventory')],
+    currentGroupIndex: 0,
+    currentTeamIndex: 0,
+  },
+})
+
+const activeMode = (): CatalogMode => useInventory().catalogMode.value
+
+const activeWorkspace = (): WorkspaceState => workspaces[activeMode()]
+
+const clampIndex = (idx: number, len: number): number => {
+  if (len <= 0) return 0
+  if (idx < 0) return 0
+  if (idx >= len) return len - 1
+  return idx
+}
+
+// ≥1 group, indices in range of the lists they index. Team seed (makeTeam)
+// lives in useLineups so this file doesn't import it at module-init time.
+const normalizeWorkspace = (mode: CatalogMode): WorkspaceState => {
+  const ws = workspaces[mode]
+  if (ws.groups.length === 0) {
+    ws.groups.push(makeDefaultGroup(mode))
+    ws.currentGroupIndex = 0
+    ws.currentTeamIndex = 0
+    return ws
+  }
+  const gi = clampIndex(ws.currentGroupIndex, ws.groups.length)
+  if (gi !== ws.currentGroupIndex) ws.currentGroupIndex = gi
+  const teamCount = ws.groups[gi].teams.length
+  const ti = clampIndex(ws.currentTeamIndex, teamCount)
+  if (ti !== ws.currentTeamIndex) ws.currentTeamIndex = ti
+  return ws
+}
+
+for (const mode of CATALOG_MODES) normalizeWorkspace(mode)
+
+// Mode switch updates currentTeamIndex immediately (it's derived from
+// catalogMode). Run normalize in the same assignment so AppLayout's
+// currentTeamName getter never sees an OOB group index.
+watch(
+  () => useInventory().catalogMode.value,
+  (mode) => { normalizeWorkspace(mode) },
+  { flush: 'sync' },
+)
+
+const groups: ComputedRef<Group[]> = computed(() => activeWorkspace().groups)
+
+const currentGroupIndex = computed({
+  get: () => activeWorkspace().currentGroupIndex,
+  set: (v) => {
+    const ws = activeWorkspace()
+    ws.currentGroupIndex = clampIndex(v, ws.groups.length)
+  },
+})
+
+const currentTeamIndex = computed({
+  get: () => activeWorkspace().currentTeamIndex,
+  set: (v) => {
+    const ws = activeWorkspace()
+    const g = ws.groups[ws.currentGroupIndex]
+    ws.currentTeamIndex = clampIndex(v, g?.teams.length ?? 0)
+  },
+})
+
+const currentGroup = computed((): Group => {
+  const ws = activeWorkspace()
+  return ws.groups[clampIndex(ws.currentGroupIndex, ws.groups.length)]
+})
 
 const addGroup = (name = '新編組'): number => {
-  groups.push({ id: makeGroupId(), name, teams: [] })
-  return groups.length - 1
+  const ws = activeWorkspace()
+  ws.groups.push({ id: makeGroupId(activeMode()), name, teams: [] })
+  return ws.groups.length - 1
 }
 
 const removeGroup = (idx: number): boolean => {
-  if (groups.length <= 1) return false
-  if (idx < 0 || idx >= groups.length) return false
-  groups.splice(idx, 1)
-  if (currentGroupIndex.value >= groups.length) {
-    currentGroupIndex.value = groups.length - 1
-  }
+  const ws = activeWorkspace()
+  if (ws.groups.length <= 1) return false
+  if (idx < 0 || idx >= ws.groups.length) return false
+  ws.groups.splice(idx, 1)
+  normalizeWorkspace(activeMode())
   return true
 }
 
 const renameGroup = (idx: number, name: string) => {
-  const g = groups[idx]
+  const g = activeWorkspace().groups[idx]
   if (g) g.name = name
 }
 
 const setCurrentGroup = (idx: number) => {
-  if (idx >= 0 && idx < groups.length) currentGroupIndex.value = idx
+  const ws = activeWorkspace()
+  if (idx < 0 || idx >= ws.groups.length) return
+  ws.currentGroupIndex = idx
+  ws.currentTeamIndex = clampIndex(ws.currentTeamIndex, ws.groups[idx].teams.length)
 }
 
-// Wholesale replacement, used by share-blob v3 restore AND by localStorage
-// autosave restore. Keeps the `groups` proxy stable (callers holding the
-// reference keep seeing updates) but the element identities are new —
-// watchers on `currentGroup` fire so useLineups can resync its mirror.
-//
-// `id` may be passed in by the autosave restore path so a group keeps the
-// same client-side id across reloads (needed for cross-tab reconciliation
-// and, later, cloud-sync client_id mapping). If omitted (share-link path,
-// proposal import), a fresh id is generated as before.
-const replaceGroups = (incoming: { id?: string; name: string; teams: Team[] }[]) => {
-  if (incoming.length === 0) return
-  const next: Group[] = incoming.map((g) => ({
-    id: g.id ?? makeGroupId(),
+const toLiveGroups = (incoming: IncomingGroup[], mode: CatalogMode): Group[] => {
+  const source = incoming.length > 0 ? incoming : [{ name: '預設', teams: [] as Team[] }]
+  return source.map((g) => ({
+    id: g.id ?? makeGroupId(mode),
     name: g.name,
     teams: g.teams,
   }))
-  groups.splice(0, groups.length, ...next)
-  currentGroupIndex.value = 0
 }
 
-// Replace the current group's id with a fresh one. Called when the user
-// resets the current group's teams — the underlying intent is "start this
-// group over", which for cloud sync means we want the next push to create
-// a new cloud row (and let stale-detect remove the previous one). Without
-// this, the stale group id would PATCH the old cloud row, silently mixing
-// the "reset" intent with whatever was on cloud under the same client_id.
+const replaceWorkspace = (mode: CatalogMode, incoming: WorkspaceIncoming): void => {
+  const ws = workspaces[mode]
+  const next = toLiveGroups(incoming.groups, mode)
+  ws.groups.splice(0, ws.groups.length, ...next)
+  ws.currentGroupIndex = incoming.currentGroupIndex ?? 0
+  ws.currentTeamIndex = incoming.currentTeamIndex ?? 0
+  normalizeWorkspace(mode)
+}
+
+// Wholesale replacement of the *active* workspace. Used by share-link
+// restore, dialog 整組匯入, and any user action that should not touch
+// the other mode. Element identities are new so watchers on `currentGroup`
+// fire and useLineups resyncs its mirror.
+const replaceGroups = (incoming: IncomingGroup[]) => {
+  if (incoming.length === 0) return
+  replaceWorkspace(activeMode(), { groups: incoming, currentGroupIndex: 0, currentTeamIndex: 0 })
+}
+
+const replaceAllWorkspaces = (incoming: Record<CatalogMode, WorkspaceIncoming>): void => {
+  for (const mode of CATALOG_MODES) {
+    replaceWorkspace(mode, incoming[mode] ?? { groups: [] })
+  }
+}
+
 const regenerateCurrentGroupId = (): void => {
-  const g = groups[currentGroupIndex.value]
-  if (g) g.id = makeGroupId()
+  const ws = activeWorkspace()
+  const g = ws.groups[ws.currentGroupIndex]
+  if (g) g.id = makeGroupId(activeMode())
 }
 
-// Append a pre-built team to an arbitrary group identified by index. Caller
-// must pass a deep-cloned Team (the snapshot becomes part of reactive state)
-// and is responsible for capacity checks via MAX_TEAMS_PER_GROUP — this
-// helper enforces it defensively but returns false on overflow rather than
-// throwing. When the target IS the current group, useLineups' lineups mirror
-// won't auto-resync (the watcher fires on currentGroup identity change, not
-// on in-place pushes); callers in that case should prefer
-// useLineups.addTeamFromSnapshot which keeps the mirror in lockstep. For
-// any other target index, the autosave deep-watcher picks up the mutation
-// and the next cloud push PATCHes the affected group.
 const appendTeamToGroup = (groupIdx: number, team: Team): boolean => {
-  if (groupIdx < 0 || groupIdx >= groups.length) return false
-  const g = groups[groupIdx]
+  const ws = activeWorkspace()
+  if (groupIdx < 0 || groupIdx >= ws.groups.length) return false
+  const g = ws.groups[groupIdx]
   if (g.teams.length >= MAX_TEAMS_PER_GROUP) return false
   g.teams.push(team)
   return true
 }
 
-// Wipe groups[] back to a single default group with a fresh id. Used by the
-// "全部重置" reset. The fresh id ensures any stale cloud rows tied to the
-// old ids get cleaned up by stale-detect on the next push, instead of being
-// silently overwritten in place.
-const resetToDefault = (): void => {
-  groups.splice(0, groups.length, {
-    id: makeGroupId(),
-    name: '預設',
-    teams: [],
-  })
-  currentGroupIndex.value = 0
+const resetAllWorkspaces = (): void => {
+  for (const mode of CATALOG_MODES) {
+    replaceWorkspace(mode, { groups: [], currentGroupIndex: 0, currentTeamIndex: 0 })
+  }
+}
+
+const findGroupById = (id: string): Group | undefined => {
+  for (const mode of CATALOG_MODES) {
+    const g = workspaces[mode].groups.find((x) => x.id === id)
+    if (g) return g
+  }
+  return undefined
+}
+
+const forEachGroup = (fn: (g: Group, mode: CatalogMode) => void): void => {
+  for (const mode of CATALOG_MODES) {
+    for (const g of workspaces[mode].groups) fn(g, mode)
+  }
+}
+
+// A workspace is "pristine" when it still has the post-bootstrap shape:
+// one group, zero or one empty team. Used so a share import into 庫存
+// can replace that mode's placeholder without touching 自由.
+const isPristineWorkspace = (mode?: CatalogMode): boolean => {
+  const ws = workspaces[mode ?? activeMode()]
+  if (ws.groups.length !== 1) return false
+  const g = ws.groups[0]
+  if (g.teams.length > 1) return false
+  if (g.teams.length === 1) {
+    const t = g.teams[0]
+    if (t.main?.hero || t.vice1?.hero || t.vice2?.hero) return false
+  }
+  return true
 }
 
 export function useGroups() {
   return {
+    workspaces,
     groups,
     currentGroupIndex,
+    currentTeamIndex,
     currentGroup,
     addGroup,
     removeGroup,
     renameGroup,
     setCurrentGroup,
     replaceGroups,
+    replaceWorkspace,
+    replaceAllWorkspaces,
     regenerateCurrentGroupId,
-    resetToDefault,
+    resetAllWorkspaces,
     appendTeamToGroup,
+    findGroupById,
+    forEachGroup,
+    isPristineWorkspace,
+    normalizeWorkspace,
   }
 }

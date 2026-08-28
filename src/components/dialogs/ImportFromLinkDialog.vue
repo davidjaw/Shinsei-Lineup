@@ -206,9 +206,10 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ElInput } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { loadShare, isShareEnabled } from '../../lib/share'
-import { hydrateShareableTeam } from '../../lib/lineupSerialize'
+import { hydrateShareableTeam, shareableGroupsForMode } from '../../lib/lineupSerialize'
 import { useData } from '../../composables/useData'
 import { useGroups } from '../../composables/useGroups'
+import { useInventory } from '../../composables/useInventory'
 import { MAX_TEAMS_PER_GROUP } from '../../types/group'
 import { useLineups, isEmptyTeam, type Lineup } from '../../composables/useLineups'
 import type { ShareableData, ShareableLineup } from '../../constants/gameData'
@@ -272,6 +273,7 @@ const pickAction = ref<'append' | 'overwrite'>('append')
 const { heroes, skills } = useData()
 const { groups } = useGroups()
 const { lineups } = useLineups()
+const { catalogMode } = useInventory()
 
 // Total team count in the loaded share (informational).
 const totalTeams = computed(() =>
@@ -408,7 +410,7 @@ const togglePick = (key: string, checked: boolean) => {
 // Whether an incoming group name already exists in the user's groups[];
 // surfaces a "本地-" prefix warning at preview time so the user understands
 // the rename will happen on import.
-const existingNames = computed(() => new Set(groups.map((g) => g.name)))
+const existingNames = computed(() => new Set(groups.value.map((g) => g.name)))
 
 const onLoad = async () => {
   if (!canLoad.value) return
@@ -444,52 +446,38 @@ const onLoad = async () => {
     phase.value = 'error'
     return
   }
-  if (data.v !== undefined && (data.v < 1 || data.v > 4)) {
+  if (data.v !== undefined && (data.v < 1 || data.v > 5)) {
     errorMessage.value = `不支援的分享格式（版本 ${data.v}）`
     phase.value = 'error'
     return
   }
 
-  // Hydrate into per-group team lists. v3/v4 use `groups`; v1/v2 use `lineups`
-  // (treat as an unnamed single group). Inventory (inv_h / inv_s) is
-  // intentionally NOT applied — import-from-link only brings in teams /
-  // groups, never overwrites the user's inventory.
+  // Hydrate into per-group team lists for the *active* catalog mode.
+  // v5 `workspaces` prefer the matching mode; v3/v4 use `groups`; v1/v2
+  // use `lineups`. Inventory (inv_h / inv_s) is intentionally NOT applied.
   const deps = { heroes: heroes.value, skills: skills.value }
   const allHealed: string[] = []
   const resultGroups: HydratedGroup[] = []
-  if (data.groups && data.groups.length > 0) {
-    data.groups.forEach((g, gi) => {
-      const teams = (g.teams ?? []).map((l: ShareableLineup, i: number) => {
-        const r = hydrateShareableTeam(l, i, deps)
-        allHealed.push(...r.healed)
-        return r.team
-      })
-      const name = (g.name ?? '').trim() || `分享編組 ${gi + 1}`
-      resultGroups.push({
-        key: `g${gi}`,
-        displayName: name,
-        collidesWithExisting: existingNames.value.has(name),
-        teams,
-      })
-    })
-  } else if (data.lineups && data.lineups.length > 0) {
-    const teams = data.lineups.map((l: ShareableLineup, i: number) => {
-      const r = hydrateShareableTeam(l, i, deps)
-      allHealed.push(...r.healed)
-      return r.team
-    })
-    const name = '匯入的編組'
-    resultGroups.push({
-      key: 'g0',
-      displayName: name,
-      collidesWithExisting: existingNames.value.has(name),
-      teams,
-    })
-  } else {
+  const incoming = shareableGroupsForMode(data, catalogMode.value)
+  if (incoming.length === 0) {
     errorMessage.value = '此分享不包含任何隊伍資料'
     phase.value = 'error'
     return
   }
+  incoming.forEach((g, gi) => {
+    const teams = (g.teams ?? []).map((l: ShareableLineup, i: number) => {
+      const r = hydrateShareableTeam(l, i, deps)
+      allHealed.push(...r.healed)
+      return r.team
+    })
+    const name = (g.name ?? '').trim() || `分享編組 ${gi + 1}`
+    resultGroups.push({
+      key: `g${gi}`,
+      displayName: name,
+      collidesWithExisting: existingNames.value.has(name),
+      teams,
+    })
+  })
 
   hydratedGroups.value = resultGroups
   healingReport.value = Array.from(new Set(allHealed))

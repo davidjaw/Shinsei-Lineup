@@ -1,6 +1,7 @@
-import { reactive, ref, computed, watch } from 'vue'
+import { reactive, computed, watch } from 'vue'
 import { Hero, Skill, BingxueDirection } from './useData'
 import { useGroups } from './useGroups'
+import { useInventory } from './useInventory'
 import { MAX_TEAMS_PER_GROUP } from '../types/group'
 
 // Active 兵學 selection for a hero. A hero activates ONE direction at a time,
@@ -73,7 +74,8 @@ export const makeTeam = (idx: number): Lineup => ({
 export const isEmptyTeam = (t: Lineup): boolean =>
   !t.main.hero && !t.vice1.hero && !t.vice2.hero
 
-const { currentGroup } = useGroups()
+const { currentGroup, currentTeamIndex, forEachGroup, normalizeWorkspace } = useGroups()
+const { catalogMode } = useInventory()
 
 // Phase 3d: groups owns teams; useLineups exposes a stable `lineups` mirror
 // of the active group's teams. `splice` keeps the same array proxy across
@@ -84,18 +86,26 @@ const { currentGroup } = useGroups()
 // direction.
 const lineups = reactive<Lineup[]>([])
 
-const currentTeamIndex = ref(0)
+// Seed every workspace so 自由 and 庫存 each start with ≥1 team. The
+// watcher below also re-seeds the active group if the user deletes the last
+// team; this loop covers the inactive workspace which that watcher never
+// sees until a mode switch.
+forEachGroup((g) => {
+  if (g.teams.length === 0) g.teams.push(makeTeam(0))
+})
 
 // Self-bootstrapping: also seeds the active group with one default team if
 // it's empty (cold start, or user removed the last team). Folding the seed
 // in here removes the seed-then-watch ordering trap an external seed block
-// would create.
+// would create. flush:'sync' so a 自由↔庫存 switch reseeds/mirrors before
+// currentTeamName reads `.name` (default 'pre' is too late once ElMessage
+// or the render effect runs in the same click).
 const syncLineupsFromGroup = () => {
-  if (currentGroup.value.teams.length === 0) {
-    currentGroup.value.teams.push(makeTeam(0))
-  }
-  lineups.splice(0, lineups.length, ...currentGroup.value.teams)
-  if (currentTeamIndex.value >= lineups.length) {
+  const ws = normalizeWorkspace(catalogMode.value)
+  const g = ws.groups[ws.currentGroupIndex]
+  if (g.teams.length === 0) g.teams.push(makeTeam(0))
+  lineups.splice(0, lineups.length, ...g.teams)
+  if (currentTeamIndex.value < 0 || currentTeamIndex.value >= lineups.length) {
     currentTeamIndex.value = Math.max(0, lineups.length - 1)
   }
 }
@@ -103,7 +113,13 @@ const syncLineupsFromGroup = () => {
 // Watch the computed group reference (not just the index) so wholesale
 // replacements via useGroups().replaceGroups() — which the v3 share restore
 // uses — also resync the mirror, even if currentGroupIndex stays at 0.
-watch(currentGroup, syncLineupsFromGroup, { immediate: true })
+// catalogMode is a second source: undefined→undefined currentGroup would
+// otherwise skip the callback on a mode switch.
+watch(
+  [currentGroup, catalogMode],
+  syncLineupsFromGroup,
+  { immediate: true, flush: 'sync' },
+)
 
 // addTeam / ensureTeamCount mutate the source (currentGroup.teams) AND
 // manually mirror the new entries into `lineups`. The watcher does NOT fire
@@ -112,11 +128,12 @@ watch(currentGroup, syncLineupsFromGroup, { immediate: true })
 // would silently grow the source while leaving `lineups` short, until the
 // next group-identity change resynced it.
 const addTeam = (): boolean => {
-  if (currentGroup.value.teams.length >= MAX_TEAMS_PER_GROUP) return false
-  currentGroup.value.teams.push(makeTeam(currentGroup.value.teams.length))
+  const g = currentGroup.value
+  if (g.teams.length >= MAX_TEAMS_PER_GROUP) return false
+  g.teams.push(makeTeam(g.teams.length))
   // Pull the just-pushed item back from the source array so the value
   // mirrored into `lineups` is the same proxy as currentGroup.teams[i].
-  const last = currentGroup.value.teams[currentGroup.value.teams.length - 1]
+  const last = g.teams[g.teams.length - 1]
   lineups.push(last)
   currentTeamIndex.value = lineups.length - 1
   return true
@@ -125,9 +142,10 @@ const addTeam = (): boolean => {
 // Grow the active group up to `target` slots so a share blob with N teams can
 // restore fully. Caller is responsible for not exceeding MAX_TEAMS_PER_GROUP.
 const ensureTeamCount = (target: number) => {
-  while (currentGroup.value.teams.length < target && currentGroup.value.teams.length < MAX_TEAMS_PER_GROUP) {
-    currentGroup.value.teams.push(makeTeam(currentGroup.value.teams.length))
-    const last = currentGroup.value.teams[currentGroup.value.teams.length - 1]
+  const g = currentGroup.value
+  while (g.teams.length < target && g.teams.length < MAX_TEAMS_PER_GROUP) {
+    g.teams.push(makeTeam(g.teams.length))
+    const last = g.teams[g.teams.length - 1]
     lineups.push(last)
   }
 }
@@ -136,9 +154,10 @@ const ensureTeamCount = (target: number) => {
 // Caller must pass a fully-formed deep clone — the snapshot becomes part of
 // the active group's reactive state.
 const addTeamFromSnapshot = (team: Lineup): boolean => {
-  if (currentGroup.value.teams.length >= MAX_TEAMS_PER_GROUP) return false
-  currentGroup.value.teams.push(team)
-  const last = currentGroup.value.teams[currentGroup.value.teams.length - 1]
+  const g = currentGroup.value
+  if (g.teams.length >= MAX_TEAMS_PER_GROUP) return false
+  g.teams.push(team)
+  const last = g.teams[g.teams.length - 1]
   lineups.push(last)
   currentTeamIndex.value = lineups.length - 1
   return true
@@ -166,12 +185,25 @@ const removeTeamFromCurrent = (idx: number): boolean => {
   return true
 }
 
-// Getters
-const currentLineup = computed(() => lineups[currentTeamIndex.value])
+// Read-only placeholder so `.name` / troop-level computeds stay total if
+// the mirror is empty mid-switch. Mutations here are discarded on the next
+// sync; the flush:'sync' watcher is what actually repairs the mirror.
+const fallbackLineup = makeTeam(0)
+
+const currentLineup = computed((): Lineup => {
+  const n = lineups.length
+  if (n === 0) return fallbackLineup
+  const i = currentTeamIndex.value
+  if (i >= 0 && i < n) return lineups[i]
+  return lineups[n - 1]
+})
 
 const currentTeamName = computed({
-  get: () => currentLineup.value.name,
-  set: (val) => { currentLineup.value.name = val }
+  get: () => currentLineup.value?.name ?? '',
+  set: (val) => {
+    const t = currentLineup.value
+    if (t) t.name = val
+  },
 })
 
 const allUsedHeroNames = computed(() => {
@@ -195,10 +227,10 @@ const allUsedSkillNames = computed(() => {
   return names
 })
 
-export const computeTeamCost = (team: Lineup): number =>
-  (team.main.hero?.cost ?? 0)
-  + (team.vice1.hero?.cost ?? 0)
-  + (team.vice2.hero?.cost ?? 0)
+export const computeTeamCost = (team: Lineup | null | undefined): number =>
+  (team?.main.hero?.cost ?? 0)
+  + (team?.vice1.hero?.cost ?? 0)
+  + (team?.vice2.hero?.cost ?? 0)
 
 const totalCost = computed(() => computeTeamCost(currentLineup.value))
 
@@ -206,6 +238,7 @@ const totalCost = computed(() => computeTeamCost(currentLineup.value))
 const swapRoles = (roleA: 'main' | 'vice1' | 'vice2', roleB: 'main' | 'vice1' | 'vice2') => {
   if (roleA === roleB) return
   const l = currentLineup.value
+  if (!l) return
   const clone = (r: RoleData): RoleData => ({
     ...r,
     stats: { ...r.stats },
@@ -218,13 +251,15 @@ const swapRoles = (roleA: 'main' | 'vice1' | 'vice2', roleB: 'main' | 'vice1' | 
 
 // 'team'  = clear the 3 roles of the currently-displayed team
 // 'group' = clear roles across every team in the current group's lineups
-// (No 'all' here — wiping ALL groups lives in useGroups.resetToDefault since
+// (No 'all' here — wiping ALL groups lives in useGroups.resetAllWorkspaces since
 //  it requires recreating the groups[] array, which useLineups doesn't own.)
 const clearLineup = (type: 'team' | 'group') => {
   if (type === 'team') {
-    currentLineup.value.main = emptyRole()
-    currentLineup.value.vice1 = emptyRole()
-    currentLineup.value.vice2 = emptyRole()
+    const t = currentLineup.value
+    if (!t) return
+    t.main = emptyRole()
+    t.vice1 = emptyRole()
+    t.vice2 = emptyRole()
   }
   if (type === 'group') {
     lineups.forEach(l => {

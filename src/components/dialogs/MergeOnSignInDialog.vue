@@ -158,8 +158,8 @@ import { useData } from '../../composables/useData'
 import { hydrateShare } from '../preview/hydrateShare'
 import GroupPreviewCard from '../preview/GroupPreviewCard.vue'
 import { isEmptyTeam, type Lineup } from '../../composables/useLineups'
-import { isEmptyShareableLineup } from '../../lib/lineupSerialize'
-import type { ShareableGroup, ShareableLineup } from '../../constants/gameData'
+import { isEmptyShareableLineup, shareableGroupsInBlob } from '../../lib/lineupSerialize'
+import type { ShareableData, ShareableGroup, ShareableLineup } from '../../constants/gameData'
 
 const APPEND_MAX_TOTAL = 20  // mirrors useGroupPersistence.resolveMergeAppend
 
@@ -167,7 +167,7 @@ const OPTIONS = [
   {
     value: 'append',
     label: '兩邊都保留（合併）',
-    hint: `此裝置上的編組保持不動，帳號之前保存的編組接在後面（總計最多 ${APPEND_MAX_TOTAL} 個）。`,
+    hint: `此裝置上的編組保持不動，帳號之前保存的編組接在後面（自由／庫存各最多 ${APPEND_MAX_TOTAL} 個）。`,
   },
   {
     value: 'keep-cloud',
@@ -203,11 +203,26 @@ const visible = computed({
   },
 })
 
-const localCount = computed(() => ctx.value?.localBlob.groups?.length ?? 0)
+const labeledGroups = (blob: ShareableData | undefined): ShareableGroup[] => {
+  if (!blob) return []
+  if (blob.workspaces) {
+    const tag = (mode: 'free' | 'inventory', g: ShareableGroup): ShareableGroup => ({
+      ...g,
+      name: `${mode === 'free' ? '自由' : '庫存'} · ${g.name}`,
+    })
+    return [
+      ...(blob.workspaces.free?.groups ?? []).map((g) => tag('free', g)),
+      ...(blob.workspaces.inventory?.groups ?? []).map((g) => tag('inventory', g)),
+    ]
+  }
+  return shareableGroupsInBlob(blob)
+}
+
+const localCount = computed(() => labeledGroups(ctx.value?.localBlob).length)
 const cloudCount = computed(() => ctx.value?.cloudRows.length ?? 0)
 const PREVIEW_N = 4
 const localPreviewList = computed(() =>
-  (ctx.value?.localBlob.groups ?? []).slice(0, PREVIEW_N),
+  labeledGroups(ctx.value?.localBlob).slice(0, PREVIEW_N),
 )
 const cloudPreviewList = computed(() =>
   (ctx.value?.cloudRows ?? []).slice(0, PREVIEW_N),
@@ -254,7 +269,7 @@ const hydrateGroupList = (
 
 const localGroupsHydrated = computed<HydratedGroup[]>(() => {
   if (!localPreviewOpen.value || !ctx.value) return []
-  return hydrateGroupList(ctx.value.localBlob.groups ?? [])
+  return hydrateGroupList(labeledGroups(ctx.value.localBlob))
 })
 
 const cloudGroupsHydrated = computed<HydratedGroup[]>(() => {

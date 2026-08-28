@@ -79,7 +79,15 @@ export interface ShareableLineup {
 // and folds into the active group on restore.
 //
 // v4 additions are optional so v3 share-link blobs still typecheck and the
-// share-load codepath stays unchanged. Autosave blobs always set v: 4.
+// share-load codepath stays unchanged. Autosave blobs from that era set v: 4.
+//
+// v5 splits 自由 / 庫存 into independent team workspaces. Inventory (owned
+// heroes/skills) stays global. Share links typically still use v2/v3 and
+// apply to the currently selected mode; autosave / cloud / OAuth recovery
+// round-trip `workspaces`.
+export type CatalogMode = 'free' | 'inventory'
+export const CATALOG_MODES: readonly CatalogMode[] = ['free', 'inventory']
+
 export interface ShareableGroup {
   name: string
   teams: ShareableLineup[]
@@ -90,13 +98,21 @@ export interface ShareableGroup {
   updated_at?: string
 }
 
+export interface ShareableWorkspace {
+  active_group_index?: number
+  active_team_index?: number
+  groups: ShareableGroup[]
+}
+
 export interface ShareableData {
-  v?: number  // 1 = CHT names, 2 = JP names, 3 = JP names + groups envelope, 4 = v3 + autosave metadata.
+  v?: number  // 1 = CHT names, 2 = JP names, 3 = JP names + groups envelope, 4 = v3 + autosave metadata, 5 = dual workspaces.
   inv_h?: string[]
   inv_s?: string[]
   inventory?: string[] // legacy v1 support
   lineups?: ShareableLineup[]  // v1/v2 — flat (single-group) team list
-  groups?: ShareableGroup[]    // v3 — named-group envelope
+  groups?: ShareableGroup[]    // v3/v4 — named-group envelope (single workspace)
+  // v5 — per-mode team graphs. Autosave/cloud/OAuth always write this.
+  workspaces?: Record<CatalogMode, ShareableWorkspace>
   // v4 — autosave metadata. Restored on next session to put the user back
   // where they left off (active group index), and used by the cross-tab
   // reconciler (gen counter) and the future cloud-sync handoff (device_id).

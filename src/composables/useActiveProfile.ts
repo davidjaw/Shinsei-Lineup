@@ -34,14 +34,18 @@ export function useActiveProfile() {
   // Replaces the current inventory with the profile's contents AND marks it
   // active. Unknown JP keys (renamed/removed heroes) are silently dropped —
   // same behavior as restoreFromBlob in LineupBuilder.
-  const applyProfile = (p: Profile): void => {
+  const applyProfile = (p: Profile, opts?: { switchToInventory?: boolean }): void => {
     ownedHeroes.value = p.inv_h
       .map(k => findHero(k)?.name)
       .filter((n): n is string => !!n)
     ownedSkills.value = p.inv_s
       .map(k => findSkill(k)?.name)
       .filter((n): n is string => !!n)
-    showOwnedOnly.value = ownedHeroes.value.length > 0 || ownedSkills.value.length > 0
+    // Manual apply jumps to 庫存 (roster gating). Auto-apply must not yank
+    // a 自由-mode session onto a different team workspace.
+    if (opts?.switchToInventory !== false) {
+      showOwnedOnly.value = ownedHeroes.value.length > 0 || ownedSkills.value.length > 0
+    }
     activeProfile.value = p
     useProfiles().markUserTouched()
   }

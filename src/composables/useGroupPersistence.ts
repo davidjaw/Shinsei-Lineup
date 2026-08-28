@@ -26,8 +26,8 @@
 //   "I just saved" channel for status UI later; BroadcastChannel covers both.
 //
 // active_group_index (risk #5):
-//   Stored inside the v4 blob, applied after replaceGroups (which resets to
-//   0) inside the same synchronous tick during restoreFromLocalStorage().
+//   Stored per workspace inside the v5 blob and applied inside
+//   replaceWorkspace during restoreFromLocalStorage().
 //
 // Healing (risk #4):
 //   applyBlobToState returns a `healed` array of JP keys that failed to
@@ -53,8 +53,11 @@ import { useAuth } from './useAuth'
 import { useDialogs } from './useDialogs'
 import {
   applyBlobToState,
+  hydrateShareableGroups,
   isEmptyShareableLineup,
   makeSerializer,
+  shareableGroupsInBlob,
+  wrapV4AsV5,
   type ApplyBlobDeps,
 } from '../lib/lineupSerialize'
 import {
@@ -68,9 +71,11 @@ import {
 } from '../lib/lineupGroups'
 import { createShare } from '../lib/share'
 import { onSessionEvent } from '../lib/auth'
-import type { ShareableData, ShareableGroup } from '../constants/gameData'
+import { CATALOG_MODES, type CatalogMode, type ShareableData, type ShareableGroup } from '../constants/gameData'
+import { workspaceOfClientId } from './useGroups'
 
-const STORAGE_KEY = 'nobunaga.groups.v4'
+const STORAGE_KEY = 'nobunaga.groups.v5'
+const LEGACY_STORAGE_KEY = 'nobunaga.groups.v4'
 const DEVICE_ID_KEY = 'nobunaga.device.id'
 const CLOUD_SYNC_PREF_KEY = 'nobunaga.cloud_sync_enabled'
 // Per-user persisted meta map. Used as the "we've already synced on this
@@ -223,9 +228,17 @@ const getOrCreateDeviceId = (): string => {
 // Seed localGen from the existing blob at module load so a reload doesn't
 // reset to 0 and confuse cross-tab race detection (other tabs would all
 // look "newer" by gen and trigger needless reconciliations).
+const readStoredRaw = (): string | null => {
+  try {
+    return localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
 const seedLocalGen = (): void => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = readStoredRaw()
     if (!raw) return
     const blob = JSON.parse(raw) as ShareableData
     localGen = typeof blob.gen === 'number' ? blob.gen : 0
@@ -236,21 +249,6 @@ const seedLocalGen = (): void => {
 seedLocalGen()
 
 // Helpers ----------------------------------------------------------------
-
-// "Pristine default" — true when useGroups still has exactly the
-// post-bootstrap state (1 group named 預設, 1 empty team). Used to decide
-// whether localStorage restore should run, or whether some earlier step
-// (share-link, OAuth recovery snapshot) has already populated the UI.
-const isPristineDefaultState = (): boolean => {
-  const { groups } = useGroups()
-  const { ownedHeroes, ownedSkills } = useInventory()
-  if (groups.length !== 1) return false
-  const g = groups[0]
-  if (g.teams.length > 1) return false
-  if (g.teams.length === 1 && !isEmptyTeam(g.teams[0])) return false
-  if (ownedHeroes.value.length > 0 || ownedSkills.value.length > 0) return false
-  return true
-}
 
 // "Empty" for the merge decision — zero groups, OR all groups contain only
 // empty teams. A fresh seeded group (one empty team) counts as empty.
@@ -263,17 +261,14 @@ const isEmptyGroupSet = (groups: { teams: Lineup[] }[]): boolean => {
   return true
 }
 
-// Index of the first group whose teams are not ALL empty. Used to bias the
-// active group toward content the user can actually see after a cloud restore
-// — without it, `replaceGroups`'s default of index 0 can land on a leftover
-// pristine "預設" placeholder while the user's real imported group sits at
-// index 1 (silent restore after share-link → logout → reset → login).
-const firstNonEmptyGroupIndex = (groups: { teams: Lineup[] }[]): number => {
-  const idx = groups.findIndex((g) => g.teams.some((t) => !isEmptyTeam(t)))
+const firstNonEmptyShareableIndex = (
+  groups: { teams: CloudLineupGroup['teams'] }[],
+): number => {
+  const idx = groups.findIndex((g) => g.teams.some((t) => !isEmptyShareableLineup(t)))
   return idx === -1 ? 0 : idx
 }
 
-// Build the v4 ShareableData blob from the current live state. Pure with
+// Build the v5 ShareableData blob from the current live state. Pure with
 // respect to the state refs it reads.
 //
 // `bumpGen` controls whether localGen is incremented — set true on the
@@ -283,7 +278,7 @@ const firstNonEmptyGroupIndex = (groups: { teams: Lineup[] }[]): number => {
 // doesn't drift ahead of what was actually persisted.
 const buildBlob = (bumpGen = true): ShareableData => {
   const { heroes, skills } = useData()
-  const { groups, currentGroupIndex } = useGroups()
+  const { workspaces } = useGroups()
   const { ownedHeroes, ownedSkills } = useInventory()
 
   const serializer = makeSerializer({
@@ -292,22 +287,32 @@ const buildBlob = (bumpGen = true): ShareableData => {
   })
   if (bumpGen) localGen += 1
 
+  const now = new Date().toISOString()
+  const serializeWs = (mode: CatalogMode) => {
+    const ws = workspaces[mode]
+    return {
+      active_group_index: ws.currentGroupIndex,
+      active_team_index: ws.currentTeamIndex,
+      groups: ws.groups.map((g) => ({
+        id: g.id,
+        name: g.name,
+        updated_at: now,
+        teams: g.teams.map((t) => serializer.serializeLineup(t)),
+      })),
+    }
+  }
+
   return {
-    v: 4,
+    v: 5,
     device_id: getOrCreateDeviceId(),
     gen: localGen,
-    saved_at: new Date().toISOString(),
-    active_group_index: currentGroupIndex.value,
+    saved_at: now,
     inv_h: ownedHeroes.value.map((n) => serializer.toJpHero(n) ?? n),
     inv_s: ownedSkills.value.map((n) => serializer.toJpSkill(n) ?? n),
-    groups: groups.map((g) => ({
-      id: g.id,
-      name: g.name,
-      // updated_at is per-group; bump on every save so cloud sync has a
-      // per-row freshness signal. Phase A does not consume it.
-      updated_at: new Date().toISOString(),
-      teams: g.teams.map((t) => serializer.serializeLineup(t)),
-    })),
+    workspaces: {
+      free: serializeWs('free'),
+      inventory: serializeWs('inventory'),
+    },
   }
 }
 
@@ -316,8 +321,8 @@ const buildBlob = (bumpGen = true): ShareableData => {
 const buildApplyDeps = (): ApplyBlobDeps => {
   const { heroes, skills } = useData()
   const { lineups, ensureTeamCount } = useLineups()
-  const { replaceGroups } = useGroups()
-  const { ownedHeroes, ownedSkills } = useInventory()
+  const { replaceGroups, replaceAllWorkspaces } = useGroups()
+  const { ownedHeroes, ownedSkills, catalogMode } = useInventory()
   return {
     heroes: heroes.value,
     skills: skills.value,
@@ -326,6 +331,8 @@ const buildApplyDeps = (): ApplyBlobDeps => {
     lineups,
     ensureTeamCount,
     replaceGroups,
+    replaceAllWorkspaces,
+    activeMode: catalogMode.value,
   }
 }
 
@@ -333,13 +340,8 @@ const buildApplyDeps = (): ApplyBlobDeps => {
 // reconciler and (indirectly) by the merge dialog's "use cloud" path.
 const applyBlobToLiveState = (blob: ShareableData): void => {
   const deps = buildApplyDeps()
-  const { healed, activeIndex } = applyBlobToState(blob, deps)
-  if (activeIndex != null) {
-    const { setCurrentGroup, groups } = useGroups()
-    if (activeIndex >= 0 && activeIndex < groups.length) {
-      setCurrentGroup(activeIndex)
-    }
-  }
+  // Autosave / cross-tab / OAuth / cloud always restore BOTH workspaces.
+  const { healed } = applyBlobToState(blob, deps, { scope: 'all' })
   if (healed.length > 0) healingReport.value = healed
 }
 
@@ -379,18 +381,52 @@ const consumeRecovery = (): boolean => {
   }
 }
 
-// Build a ShareableData blob from a list of cloud rows. Mirror of the v4
-// shape produced by buildBlob, with values pulled from the cloud rather
-// than from local state.
-const cloudRowsToBlob = (rows: CloudLineupGroup[]): ShareableData => ({
-  v: 4,
-  groups: rows.map<ShareableGroup>((r) => ({
-    id: r.client_id ?? r.id, // fall back to db id when client_id was never set (cloud-first row)
-    name: r.name,
-    updated_at: r.updated_at,
-    teams: r.teams,
-  })),
+const rowToShareableGroup = (r: CloudLineupGroup): ShareableGroup => ({
+  id: r.client_id ?? r.id, // fall back to db id when client_id was never set (cloud-first row)
+  name: r.name,
+  updated_at: r.updated_at,
+  teams: r.teams,
 })
+
+const splitCloudRowsByWorkspace = (
+  rows: CloudLineupGroup[],
+): Record<CatalogMode, ShareableGroup[]> => {
+  const out: Record<CatalogMode, ShareableGroup[]> = { free: [], inventory: [] }
+  for (const r of rows) {
+    const id = r.client_id ?? r.id
+    out[workspaceOfClientId(id)].push(rowToShareableGroup(r))
+  }
+  return out
+}
+
+// Build a ShareableData blob from a list of cloud rows. Mirror of the v5
+// shape produced by buildBlob, with values pulled from the cloud rather
+// than from local state. Unprefixed (v4) rows all land in 庫存; if the
+// cloud has no `f_` rows at all we treat it as a pre-split snapshot and
+// copy into both workspaces (same v4→v5 local migration).
+const cloudRowsToBlob = (rows: CloudLineupGroup[]): ShareableData => {
+  const hasFreePrefix = rows.some((r) => (r.client_id ?? r.id).startsWith('f_'))
+  if (!hasFreePrefix && rows.length > 0) {
+    return wrapV4AsV5({
+      v: 4,
+      groups: rows.map(rowToShareableGroup),
+    })
+  }
+  const split = splitCloudRowsByWorkspace(rows)
+  return {
+    v: 5,
+    workspaces: {
+      free: {
+        active_group_index: firstNonEmptyShareableIndex(split.free),
+        groups: split.free,
+      },
+      inventory: {
+        active_group_index: firstNonEmptyShareableIndex(split.inventory),
+        groups: split.inventory,
+      },
+    },
+  }
+}
 
 // Local autosave ---------------------------------------------------------
 
@@ -404,6 +440,7 @@ const writeBlobToStorage = (): void => {
   try {
     const blob = buildBlob()
     localStorage.setItem(STORAGE_KEY, JSON.stringify(blob))
+    try { localStorage.removeItem(LEGACY_STORAGE_KEY) } catch { /* swallow */ }
     bc?.postMessage({
       type: 'saved',
       gen: blob.gen,
@@ -447,7 +484,7 @@ const flushLocalAutosave = (): void => {
 // cross-tab listener — when another tab saves, we re-read and reconcile.
 const applyBlobFromStorage = (): void => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = readStoredRaw()
     if (!raw) return
     const blob = JSON.parse(raw) as ShareableData
     applyBlobToLiveState(blob)
@@ -558,12 +595,13 @@ const pushBlobToCloud = async (blob: ShareableData): Promise<void> => {
   if (!cloudSyncEnabled.value) return
   const { isLoggedIn } = useAuth()
   if (!isLoggedIn.value) return
-  if (!blob.groups || blob.groups.length === 0) return
+  const groupsToPush = shareableGroupsInBlob(blob)
+  if (groupsToPush.length === 0) return
 
   cloudStatus.value = 'syncing'
   try {
-    for (let i = 0; i < blob.groups.length; i++) {
-      const g = blob.groups[i]
+    for (let i = 0; i < groupsToPush.length; i++) {
+      const g = groupsToPush[i]
       if (!g.id) continue // shouldn't happen for v4 blobs; defensive guard
       const meta = cloudGroupsByClientId.get(g.id)
       if (!meta) {
@@ -610,7 +648,7 @@ const pushBlobToCloud = async (blob: ShareableData): Promise<void> => {
     // deleted the group). Only run when the local groups list is the source
     // of truth — i.e. cloud sync is enabled and we've finished the bootstrap.
     if (cloudBootstrapped) {
-      const liveIds = new Set(blob.groups.map((g) => g.id))
+      const liveIds = new Set(groupsToPush.map((g) => g.id))
       const stale: Array<[string, string]> = []  // [clientId, cloudId]
       for (const [clientId, meta] of cloudGroupsByClientId.entries()) {
         if (!liveIds.has(clientId)) stale.push([clientId, meta.cloudId])
@@ -645,12 +683,6 @@ const applyCloudRowsToLocal = (rows: CloudLineupGroup[]): void => {
   // data back to cloud (harmless but wasteful) before the meta map is set up.
   suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
   applyBlobToLiveState(blob)
-  // Bias currentGroupIndex toward the first non-empty group. The blob from
-  // cloud has no `active_group_index` (cloud schema doesn't persist it), so
-  // applyBlobToLiveState leaves the freshly-replaced groups pointed at
-  // index 0 — which is wrong when index 0 is a leftover empty placeholder.
-  const { groups, setCurrentGroup } = useGroups()
-  setCurrentGroup(firstNonEmptyGroupIndex(groups))
   // Rebuild the client_id ↔ cloudId meta map from the rows we just loaded.
   cloudGroupsByClientId.clear()
   for (const r of rows) {
@@ -690,8 +722,10 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   // Determine local emptiness up-front — used by both the fast-path guard
   // and the 2x2. We read groups directly (not via buildBlob) so the
   // read-only decision doesn't pollute the cross-tab gen counter.
-  const { groups: liveGroups } = useGroups()
-  const localActuallyEmpty = isEmptyGroupSet(liveGroups)
+  const { workspaces } = useGroups()
+  const localActuallyEmpty = CATALOG_MODES.every((m) =>
+    isEmptyGroupSet(workspaces[m].groups),
+  )
 
   // Fast path: this device + user has been bootstrapped before AND local
   // still has actual content. Restore the cloud meta so subsequent PATCHes
@@ -760,7 +794,7 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     // Silent upload: local → cloud. buildBlob here is the actual write — it
     // owns the gen bump because we'll be persisting these groups to cloud.
     const localBlob = buildBlob()
-    const localInputs = (localBlob.groups ?? []).map((g, i) => ({
+    const localInputs = shareableGroupsInBlob(localBlob).map((g, i) => ({
       client_id: g.id,
       name: g.name,
       teams: g.teams,
@@ -848,7 +882,7 @@ const resolveMergeKeepLocal = async (): Promise<MergeResolutionResult> => {
         console.warn('[cloud-sync] delete row during overwrite failed:', e)
       }
     }
-    const localInputs = (freshLocalBlob.groups ?? []).map((g, i) => ({
+    const localInputs = shareableGroupsInBlob(freshLocalBlob).map((g, i) => ({
       client_id: g.id,
       name: g.name,
       teams: g.teams,
@@ -882,10 +916,28 @@ const resolveMergeKeepLocal = async (): Promise<MergeResolutionResult> => {
   }
 }
 
-// Append cloud groups after local. Capped at 20 total — past that the UI
-// (我的編組 page) wouldn't render gracefully anyway, and the dialog has
-// already warned about truncation.
+// Append cloud groups after local, per workspace. Capped at 20 per mode so
+// merging never drops the other workspace to make room.
 const APPEND_MAX_TOTAL = 20
+
+const appendWorkspaceGroups = (
+  localGroups: ShareableGroup[],
+  cloudGroups: ShareableGroup[],
+): { merged: ShareableGroup[]; adopted: ShareableGroup[] } => {
+  const capacity = Math.max(0, APPEND_MAX_TOTAL - localGroups.length)
+  const adopted = [...cloudGroups]
+    .sort((a, b) => {
+      const at = a.updated_at ?? ''
+      const bt = b.updated_at ?? ''
+      return at < bt ? 1 : at > bt ? -1 : 0
+    })
+    .slice(0, capacity)
+  const cloudNames = new Set(adopted.map((g) => g.name))
+  const localRenamed = localGroups.map((g) =>
+    cloudNames.has(g.name) ? { ...g, name: `本地-${g.name}` } : g,
+  )
+  return { merged: [...localRenamed, ...adopted], adopted }
+}
 
 const resolveMergeAppend = async (): Promise<MergeResolutionResult> => {
   const ctx = cloudMerge.value
@@ -897,41 +949,30 @@ const resolveMergeAppend = async (): Promise<MergeResolutionResult> => {
   // was visible would be lost if we used ctx.localBlob (the bootstrap-time
   // snapshot). ctx.localBlob is still kept as the backup-share-link target.
   const freshLocalBlob = buildBlob()
-  const localGroups = freshLocalBlob.groups ?? []
-  const capacity = Math.max(0, APPEND_MAX_TOTAL - localGroups.length)
-  // Order cloud rows by updated_at desc so the most-recently-touched groups
-  // win the capacity contest if we have to truncate.
-  const cloudRowsSorted = [...ctx.cloudRows].sort(
-    (a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0),
-  )
-  const cloudRowsToAppend = cloudRowsSorted.slice(0, capacity)
+  // Split by id prefix only — do NOT run the v4 "copy into both" migration
+  // here. Unprefixed cloud rows belong to 庫存; duplicating them into 自由
+  // would clone teams the local v5 workspace already has.
+  const cloudSplit = splitCloudRowsByWorkspace(ctx.cloudRows)
+  const adopted: ShareableGroup[] = []
+  const mergedWorkspaces = {} as NonNullable<ShareableData['workspaces']>
+  for (const mode of CATALOG_MODES) {
+    const localGroups = freshLocalBlob.workspaces?.[mode]?.groups ?? []
+    const localIds = new Set(localGroups.map((g) => g.id))
+    const cloudGroups = cloudSplit[mode].filter((g) => !localIds.has(g.id))
+    const result = appendWorkspaceGroups(localGroups, cloudGroups)
+    adopted.push(...result.adopted)
+    mergedWorkspaces[mode] = {
+      active_group_index: freshLocalBlob.workspaces?.[mode]?.active_group_index ?? 0,
+      active_team_index: freshLocalBlob.workspaces?.[mode]?.active_team_index,
+      groups: result.merged,
+    }
+  }
 
-  // Disambiguate name collisions: any local group whose name matches a
-  // cloud group we're about to append gets a "本地-" prefix. IDs were
-  // already distinct, so this is purely a readability fix — without it the
-  // user sees two identically-named entries (e.g. two "新編組") and can't
-  // tell which is which after reload.
-  const cloudNames = new Set(cloudRowsToAppend.map((r) => r.name))
-  const localGroupsRenamed = localGroups.map((g) =>
-    cloudNames.has(g.name) ? { ...g, name: `本地-${g.name}` } : g,
-  )
-
-  // Build the merged blob: local groups first (keep their ids), then cloud
-  // groups (keep their cloud-side client_ids so subsequent pushes round-trip).
   const merged: ShareableData = {
-    v: 4,
+    v: 5,
     inv_h: freshLocalBlob.inv_h,
     inv_s: freshLocalBlob.inv_s,
-    active_group_index: freshLocalBlob.active_group_index,
-    groups: [
-      ...localGroupsRenamed,
-      ...cloudRowsToAppend.map<ShareableGroup>((r) => ({
-        id: r.client_id ?? r.id,
-        name: r.name,
-        updated_at: r.updated_at,
-        teams: r.teams,
-      })),
-    ],
+    workspaces: mergedWorkspaces,
   }
 
   suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
@@ -939,9 +980,11 @@ const resolveMergeAppend = async (): Promise<MergeResolutionResult> => {
 
   // Seed the meta map for the cloud rows we just adopted. The local ones
   // will INSERT on the next pushBlobToCloud (no meta entry → createLineupGroup
-  // path).
-  for (const r of cloudRowsToAppend) {
+  // path). Match by client_id against the original cloud rows.
+  const adoptedIds = new Set(adopted.map((g) => g.id))
+  for (const r of ctx.cloudRows) {
     const clientId = r.client_id ?? r.id
+    if (!adoptedIds.has(clientId)) continue
     cloudGroupsByClientId.set(clientId, {
       cloudId: r.id,
       serverUpdatedAt: r.updated_at,
@@ -972,33 +1015,26 @@ const resolveConflictUseServer = async (): Promise<void> => {
   if (!ctx) return
   cloudStatus.value = 'syncing'
 
-  // Build a blob that mirrors the current local group list with ONE entry
-  // swapped to the server row's data, then apply it wholesale via
-  // applyBlobToLiveState — the only sanctioned mutation path that runs the
-  // healing pass and triggers the useLineups watcher cleanly.
-  const { groups } = useGroups()
-  const { heroes, skills } = useData()
-  const serializer = makeSerializer({ heroes: heroes.value, skills: skills.value })
-  const mergedGroups: ShareableGroup[] = groups.map((g) => {
-    if (g.id === ctx.localGroupId) {
-      return {
-        id: ctx.serverRow.client_id ?? ctx.serverRow.id,
-        name: ctx.serverRow.name,
-        updated_at: ctx.serverRow.updated_at,
-        teams: ctx.serverRow.teams,
-      }
-    }
-    // Pass-through groups need their Lineup[] re-serialized to ShareableLineup
-    // so the blob shape is homogeneous before applyBlobToLiveState rebuilds.
-    return {
-      id: g.id,
-      name: g.name,
-      teams: g.teams.map((t) => serializer.serializeLineup(t)),
-    }
-  })
+  // Snapshot BOTH workspaces and swap the one conflicting group so the
+  // other mode is not dropped. applyBlobToLiveState is the only sanctioned
+  // mutation path that runs the healing pass and triggers the useLineups
+  // watcher cleanly.
+  const blob = buildBlob(false)
+  const replacement: ShareableGroup = {
+    id: ctx.serverRow.client_id ?? ctx.serverRow.id,
+    name: ctx.serverRow.name,
+    updated_at: ctx.serverRow.updated_at,
+    teams: ctx.serverRow.teams,
+  }
+  for (const mode of CATALOG_MODES) {
+    const groups = blob.workspaces?.[mode]?.groups
+    if (!groups) continue
+    const idx = groups.findIndex((g) => g.id === ctx.localGroupId)
+    if (idx >= 0) groups[idx] = replacement
+  }
 
   suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
-  applyBlobToLiveState({ v: 4, groups: mergedGroups })
+  applyBlobToLiveState(blob)
 
   // Refresh meta for the swapped group so the next push uses the freshly
   // observed updated_at as its precondition.
@@ -1019,8 +1055,8 @@ const resolveConflictForceOverwrite = async (): Promise<void> => {
   cloudStatus.value = 'syncing'
 
   // Find the current local group (post-edit) and push it without the lock.
-  const { groups } = useGroups()
-  const localGroup = groups.find((g) => g.id === ctx.localGroupId)
+  const { findGroupById } = useGroups()
+  const localGroup = findGroupById(ctx.localGroupId)
   if (!localGroup) {
     cloudConflict.value = null
     cloudStatus.value = 'idle'
@@ -1126,13 +1162,8 @@ onSessionEvent((e) => {
 // ordering: share-link / OAuth recovery first, then this. If the state has
 // already been mutated by either of those earlier paths, this is a no-op.
 const restoreFromLocalStorage = (): boolean => {
-  const raw = localStorage.getItem(STORAGE_KEY)
+  const raw = readStoredRaw()
   if (!raw) return false
-
-  // Guard: if a share link / OAuth recovery already populated state, skip
-  // — that path wins by convention (intent is explicit, autosave is
-  // ambient).
-  if (!isPristineDefaultState()) return false
 
   let blob: ShareableData
   try {
@@ -1141,13 +1172,45 @@ const restoreFromLocalStorage = (): boolean => {
     return false
   }
 
-  // Refuse to restore from blobs we don't recognise (v3 share blobs live
-  // under a different localStorage key — the auth recovery one — so they
-  // shouldn't end up here).
-  if (blob.v !== 4) return false
+  if (blob.v !== 4 && blob.v !== 5) return false
 
-  applyBlobToLiveState(blob)
-  return true
+  const v5 = wrapV4AsV5(blob)
+  const { isPristineWorkspace, replaceWorkspace } = useGroups()
+  const { ownedHeroes, ownedSkills } = useInventory()
+  const { heroes, skills } = useData()
+  const deps = { heroes: heroes.value, skills: skills.value }
+  const report: string[] = []
+  let applied = false
+
+  // Per-workspace: a share-link that filled 自由 must not block restoring
+  // 庫存 from autosave, and vice versa.
+  for (const mode of CATALOG_MODES) {
+    if (!isPristineWorkspace(mode)) continue
+    const ws = v5.workspaces?.[mode]
+    if (!ws?.groups?.length) continue
+    replaceWorkspace(mode, {
+      groups: hydrateShareableGroups(ws.groups, deps, report),
+      currentGroupIndex: ws.active_group_index,
+      currentTeamIndex: ws.active_team_index,
+    })
+    applied = true
+  }
+
+  // Inventory is shared. Only fill it when the earlier path (share / OAuth)
+  // left it empty — an inventory-only share already wrote owned*.
+  if (ownedHeroes.value.length === 0 && ownedSkills.value.length === 0) {
+    if (v5.inv_h || v5.inv_s || v5.inventory) {
+      applyBlobToState(
+        { v: 5, inv_h: v5.inv_h, inv_s: v5.inv_s, inventory: v5.inventory },
+        buildApplyDeps(),
+        { scope: 'active' },
+      )
+      applied = true
+    }
+  }
+
+  if (report.length > 0) healingReport.value = Array.from(new Set(report))
+  return applied
 }
 
 // Public: enable the autosave watcher + cross-tab listener. Idempotent.
@@ -1157,11 +1220,11 @@ const enableAutosave = (): void => {
   autosaveEnabled = true
   postMountReady = true
 
-  const { groups, currentGroupIndex } = useGroups()
+  const { workspaces } = useGroups()
   const { ownedHeroes, ownedSkills } = useInventory()
 
   watch(
-    [() => groups, currentGroupIndex, ownedHeroes, ownedSkills],
+    [workspaces, ownedHeroes, ownedSkills],
     scheduleWrite,
     { deep: true },
   )
@@ -1193,37 +1256,10 @@ const enableAutosave = (): void => {
   }
 }
 
-const disableAutosave = (): void => {
-  autosaveEnabled = false
-  if (debounceHandle != null) {
-    clearTimeout(debounceHandle)
-    debounceHandle = null
-  }
-  if (cloudDebounceHandle != null) {
-    clearTimeout(cloudDebounceHandle)
-    cloudDebounceHandle = null
-  }
-  if (bc) {
-    bc.close()
-    bc = null
-  }
-}
-
-const clearStoredGroups = (): void => {
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch {
-    /* swallow */
-  }
-}
-
 export interface UseGroupPersistence {
   // Phase A
   restoreFromLocalStorage: () => boolean
   enableAutosave: () => void
-  disableAutosave: () => void
-  clearStoredGroups: () => void
-  isPristineDefaultState: () => boolean
   snapshotForRecovery: () => void
   consumeRecovery: () => boolean
   healingReport: typeof healingReport
@@ -1249,9 +1285,6 @@ export function useGroupPersistence(): UseGroupPersistence {
   return {
     restoreFromLocalStorage,
     enableAutosave,
-    disableAutosave,
-    clearStoredGroups,
-    isPristineDefaultState,
     snapshotForRecovery,
     consumeRecovery,
     healingReport,

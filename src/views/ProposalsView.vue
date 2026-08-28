@@ -459,7 +459,7 @@ const onExported = ({
 }): void => {
   const src = exportSource.value
   if (!src) return
-  const destGroup = groups[destGroupIdx]
+  const destGroup = groups.value[destGroupIdx]
   if (!destGroup) return
   applyConflictResolution(src.team, destGroup.teams, resolution)
   src.team.name = uniqueTeamName(src.displayName, destGroup.teams.map((t) => t.name))

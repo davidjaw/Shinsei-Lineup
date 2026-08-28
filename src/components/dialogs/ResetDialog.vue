@@ -28,7 +28,7 @@
       <el-button type="danger" size="large" @click="$emit('confirm', 'all')" class="w-full !m-0">
         <div class="flex flex-col items-center">
           <span class="font-bold">全部重置</span>
-          <span class="text-xs opacity-80">清空所有編組與庫存 (慎用)</span>
+          <span class="text-xs opacity-80">清空自由／庫存兩邊的編組與庫存 (慎用)</span>
         </div>
       </el-button>
     </div>

@@ -56,7 +56,7 @@ const tryAutoApplyDefault = async (): Promise<void> => {
 
     const def = profiles.value.find(p => p.is_default)
     if (def) {
-      applyProfile(def)
+      applyProfile(def, { switchToInventory: false })
       ElMessage.info(`已載入預設角色配置：${def.name}`)
     }
   } catch (e) {

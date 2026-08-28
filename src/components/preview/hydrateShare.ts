@@ -4,6 +4,7 @@
 // the preview is read-only and must not perturb the active group.
 
 import type { ShareableData, ShareableLineup } from '../../constants/gameData'
+import { shareableGroupsInBlob } from '../../lib/lineupSerialize'
 import type { Hero, Skill } from '../../composables/useData'
 import type { Lineup, RoleData } from '../../composables/useLineups'
 import { makeTeam } from '../../composables/useLineups'
@@ -61,8 +62,9 @@ export interface HydratedShare {
 }
 
 export const hydrateShare = (data: ShareableData, inputs: HydrateInputs): HydratedShare => {
-  if (data.groups && data.groups.length > 0) {
-    const g = data.groups[0]
+  const envelope = shareableGroupsInBlob(data)
+  if (envelope.length > 0) {
+    const g = envelope[0]
     const teams = (g.teams ?? []).map((l, i) => hydrateTeam(l, i, inputs))
     return { group: { name: g.name || '預設', teams } }
   }

@@ -36,11 +36,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 export const CHANGELOG: ChangelogVersion[] = [
   {
     version: '0.4.7',
-    date: '2026-08-27',
+    date: '2026-08-28',
     entries: [
       { tag: 'feat', text: '配將模擬在側欄分為「自由模式」與「庫存模式」；自由模式可使用全部武將／戰法' },
+      { tag: 'feat', text: '自由模式與庫存模式現在各有獨立的編組／隊伍；切換模式不再共用同一套陣容' },
+      { tag: 'feat', text: '匯入、分享、重置當前隊伍／編組只作用在目前模式；全部重置仍會清掉兩邊與庫存' },
       { tag: 'feat', text: '配將模擬新增截圖模式，方便一次截圖分享整個編組' },
     ],
+    note: '兩邊的隊伍可以放同一名武將。庫存（擁有的武將／戰法）仍然共用。',
   },
   {
     version: '0.4.6',

@@ -301,7 +301,7 @@ const onGroupCommand = async (cmd: string) => {
   } else if (cmd === 'add') {
     const newIdx = addGroup()
     setCurrentGroup(newIdx)
-    ElMessage.success(`已建立並切換到 ${groups[newIdx].name}`)
+    ElMessage.success(`已建立並切換到 ${groups.value[newIdx].name}`)
   } else if (cmd === 'import-from-link') {
     emit('import-from-link')
   } else if (cmd === 'rename') {

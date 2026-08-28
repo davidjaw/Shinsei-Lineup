@@ -14,11 +14,15 @@
         </span>
         <span class="text-xs text-ink-mute hidden sm:inline">·</span>
         <span class="text-xs text-ink-mute hidden sm:inline">
+          目前顯示{{ modeLabel }}（兩邊獨立）
+        </span>
+        <span class="text-xs text-ink-mute hidden sm:inline">·</span>
+        <span class="text-xs text-ink-mute hidden sm:inline">
           每組最多 {{ MAX_TEAMS_PER_GROUP }} 支隊伍
         </span>
 
         <el-tooltip
-          content="編組僅暫存於本機；如需備份請從配將模擬建立分享連結。"
+          content="編組僅暫存於本機。自由模式與庫存模式分開保存；如需備份請從配將模擬建立分享連結。"
           placement="top"
         >
           <span class="ml-auto inline-flex items-center gap-1 text-[11px] text-ink-mute cursor-help">
@@ -70,7 +74,7 @@
               @click="onSwitch(idx)"
             >切換到此</el-button>
 
-            <el-dropdown trigger="click" @command="(cmd) => onMenu(cmd, idx)">
+            <el-dropdown trigger="click" @command="(cmd: string) => onMenu(cmd, idx)">
               <button type="button" class="icon-btn" title="更多操作">
                 <el-icon :size="14"><MoreFilled /></el-icon>
               </button>
@@ -146,6 +150,7 @@ import { useDialogs } from '../composables/useDialogs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MoreFilled, Edit, Delete, InfoFilled, Link } from '@element-plus/icons-vue'
 import { useGroups } from '../composables/useGroups'
+import { useInventory } from '../composables/useInventory'
 import { MAX_TEAMS_PER_GROUP } from '../types/group'
 import TeamPreviewCard from '../components/preview/TeamPreviewCard.vue'
 import type { Group } from '../types/group'
@@ -161,13 +166,17 @@ const {
   renameGroup,
   setCurrentGroup,
 } = useGroups()
+const { catalogMode } = useInventory()
+const modeLabel = computed(() =>
+  catalogMode.value === 'inventory' ? '庫存模式' : '自由模式',
+)
 
 // Filter empty team slots from previews so a fresh group doesn't render
 // three blank cards. Cached per group id so multiple template reads share
 // one filter pass.
 const visibleTeamsByGroup = computed<Map<string, Lineup[]>>(() => {
   const m = new Map<string, Lineup[]>()
-  for (const g of groups) {
+  for (const g of groups.value) {
     m.set(g.id, g.teams.filter((t: Lineup) => !isEmptyTeam(t)))
   }
   return m
@@ -193,7 +202,7 @@ const groupCost = (g: Group): number =>
 const onAddGroup = () => {
   const idx = addGroup()
   setCurrentGroup(idx)
-  ElMessage.success(`已建立並切換到「${groups[idx].name}」`)
+  ElMessage.success(`已建立並切換到「${groups.value[idx].name}」`)
 }
 
 const onImportFromLink = () => {
@@ -209,7 +218,7 @@ const onImportFromLink = () => {
 const onSwitch = (idx: number) => {
   if (idx === currentGroupIndex.value) return
   setCurrentGroup(idx)
-  ElMessage.success(`已切換到「${groups[idx].name}」`)
+  ElMessage.success(`已切換到「${groups.value[idx].name}」`)
 }
 
 // Clicking an empty slot: if the target group is already active, jump
@@ -229,7 +238,7 @@ const renameDialog = reactive({
 })
 const startRename = (idx: number) => {
   renameDialog.idx = idx
-  renameDialog.draft = groups[idx]?.name ?? ''
+  renameDialog.draft = groups.value[idx]?.name ?? ''
   renameDialog.visible = true
 }
 const submitRename = () => {
@@ -251,7 +260,7 @@ const onMenu = async (cmd: string, idx: number) => {
   if (cmd === 'delete') {
     try {
       await ElMessageBox.confirm(
-        `確定要刪除「${groups[idx].name}」這個編組嗎？此操作無法復原。`,
+        `確定要刪除「${groups.value[idx].name}」這個編組嗎？此操作無法復原。`,
         '刪除編組',
         { confirmButtonText: '刪除', cancelButtonText: '取消', type: 'warning' },
       )
