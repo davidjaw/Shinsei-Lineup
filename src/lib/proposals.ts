@@ -8,6 +8,7 @@
 
 import { SUPABASE_URL, fetchWithTimeout, isSupabaseConfigured, restHeaders } from './supabase'
 import { getSession, getValidAccessToken } from './auth'
+import { mapRpcError } from './variants'
 import type { Proposal } from '../types/group'
 
 interface ProposalRow {
@@ -76,7 +77,10 @@ export const createProposal = async (input: CreateProposalInput): Promise<Propos
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`proposal create failed: ${res.status} ${await res.text()}`)
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(mapRpcError(body, `proposal create failed: ${res.status} ${body}`))
+  }
   const rows = (await res.json()) as ProposalRow[]
   return rowToProposal(rows[0])
 }
@@ -104,7 +108,10 @@ export const updateProposal = async (
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`proposal update failed: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(mapRpcError(body, `proposal update failed: ${res.status} ${body}`))
+  }
   const rows = (await res.json()) as ProposalRow[]
   return rowToProposal(rows[0])
 }

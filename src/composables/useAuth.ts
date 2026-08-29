@@ -5,6 +5,8 @@ import {
   updateDisplayName as updateDisplayNameLib,
   onSessionEvent,
 } from '../lib/auth'
+import { formatUserTag } from '../lib/displayName'
+import { fetchMyBan } from '../lib/bans'
 
 // Single shared reactive session for the whole app. Initialized from
 // localStorage so a returning user stays logged in across reloads.
@@ -14,18 +16,35 @@ const session = ref<Session | null>(getSession())
 // (refresh returned a revoked token). Components watch this to show a
 // "your session expired" toast without coupling to the auth lib directly.
 const sessionExpiredCount = ref(0)
+const banned = ref(false)
+
+const refreshBanStatus = async (): Promise<void> => {
+  if (!session.value) {
+    banned.value = false
+    return
+  }
+  try {
+    banned.value = await fetchMyBan()
+  } catch {
+    banned.value = false
+  }
+}
 
 // Subscribe once at module load: keep the reactive ref in sync with storage
 // for every persist/clear, and bump sessionExpiredCount on involuntary clears.
 onSessionEvent((e) => {
   session.value = getSession()
   if (e === 'expired') sessionExpiredCount.value++
+  void refreshBanStatus()
 })
+
+void refreshBanStatus()
 
 // Re-read after handleAuthCallback consumes the OAuth hash. Call this once
 // after auth.handleAuthCallback() succeeds so reactive consumers update.
 const refreshFromStorage = (): void => {
   session.value = getSession()
+  void refreshBanStatus()
 }
 
 const signIn = (provider: OAuthProvider): void => {
@@ -36,6 +55,7 @@ const signIn = (provider: OAuthProvider): void => {
 const signOut = async (): Promise<void> => {
   await signOutLib()
   session.value = null
+  banned.value = false
 }
 
 const updateDisplayName = async (name: string): Promise<void> => {
@@ -55,11 +75,19 @@ export function useAuth() {
       if (!u) return ''
       return u.display_name?.trim() || u.email.split('@')[0] || 'user'
     }),
+    displayTag: computed(() => {
+      const u = session.value?.user
+      if (!u) return ''
+      const raw = u.display_name?.trim() || u.email.split('@')[0] || 'user'
+      return formatUserTag(raw, u.id)
+    }),
     /** True if user has never set display_name — used to trigger first-time prompt. */
     needsDisplayName: computed(() => {
       const u = session.value?.user
       return u != null && (!u.display_name || u.display_name.trim() === '')
     }),
+    isAdmin: computed(() => session.value?.user.is_admin === true),
+    isBanned: computed(() => banned.value),
     signIn,
     signOut,
     updateDisplayName,

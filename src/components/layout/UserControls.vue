@@ -21,7 +21,9 @@
     >
       <button class="user-pill" type="button">
         <el-icon><User /></el-icon>
-        <span class="hidden sm:inline truncate max-w-[120px]">{{ displayName }}</span>
+        <span class="hidden sm:inline user-pill-name">
+          <UserTag :name="displayName || 'user'" :user-id="userId" />
+        </span>
         <el-icon class="opacity-70"><ArrowDown /></el-icon>
       </button>
       <template #dropdown>
@@ -48,12 +50,14 @@
 
 <script setup lang="ts">
 import { Bell, User, ArrowDown, Notebook, Edit, Close } from '@element-plus/icons-vue'
+import UserTag from '../UserTag.vue'
 
 export type UserMenuCmd = 'changelog' | 'rename' | 'signout'
 
 defineProps<{
   isLoggedIn: boolean
   displayName: string | null
+  userId?: string | null
   hasUnseenChangelog: boolean
 }>()
 
@@ -83,6 +87,10 @@ defineEmits<{
   transition: background 0.15s ease, border-color 0.15s ease;
   line-height: 1;
   box-sizing: border-box;
+}
+.user-pill-name {
+  max-width: 180px;
+  min-width: 0;
 }
 .user-pill:hover {
   background: #e0e7ff;

@@ -22,6 +22,7 @@
         <UserControls
           :is-logged-in="isLoggedIn"
           :display-name="displayName"
+          :user-id="userId"
           :has-unseen-changelog="hasUnseenChangelog"
           @open-changelog="$emit('open-changelog')"
           @open-auth="$emit('open-auth')"
@@ -41,6 +42,7 @@ defineProps<{
   description?: string
   isLoggedIn: boolean
   displayName: string | null
+  userId?: string | null
   hasUnseenChangelog: boolean
 }>()
 

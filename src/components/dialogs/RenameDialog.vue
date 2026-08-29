@@ -8,7 +8,7 @@
   >
     <div class="flex flex-col gap-3 pb-1">
       <p class="text-xs text-gray-500 -mt-1 mb-1">
-        目前無實際功能，只是修改電腦版能看到的自訂名稱，未來考慮選擇性的與分享綁定。
+        此名稱會顯示在公開精選的作者欄。後方的識別碼由系統產生，無法修改。
       </p>
       <el-input
         :model-value="name"
@@ -19,6 +19,9 @@
         @keyup.enter="$emit('submit')"
         autofocus
       />
+      <p v-if="name.trim()" class="text-[11px] text-ink-mute leading-snug -mt-1">
+        公開顯示為：<UserTag class="align-baseline" :name="name.trim()" :user-id="userId" />
+      </p>
       <el-button
         type="primary"
         :loading="saving"
@@ -32,10 +35,13 @@
 </template>
 
 <script setup lang="ts">
+import UserTag from '../UserTag.vue'
+
 defineProps<{
   modelValue: boolean
   name: string
   saving: boolean
+  userId?: string | null
 }>()
 defineEmits<{
   (e: 'update:modelValue', v: boolean): void

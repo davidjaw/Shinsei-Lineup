@@ -22,12 +22,16 @@ import {
   listMyVariantVotes,
   listMyContributions,
   isVariantsEnabled,
+  reportContent,
+  adminSetNameHidden,
   type HeroSetSummary,
   type Variant,
   type VariantContributor,
   type VariantSort,
   type VoteDirection,
+  type ReportKind,
 } from '../lib/variants'
+import { adminListBannedUserIds, adminSetUserBanned } from '../lib/bans'
 
 export type HeroSetSort = 'total' | 'recent' | 'latest' | 'count'
 
@@ -36,6 +40,7 @@ const variantsBySet = ref<Map<string, Variant[]>>(new Map())
 const contributorsByVariant = ref<Map<string, VariantContributor[]>>(new Map())
 const myVotes = ref<Map<string, VoteDirection>>(new Map())
 const myContributions = ref<Set<string>>(new Set())
+const bannedUserIds = ref<Set<string>>(new Set())
 
 const activeHeroSetHash = ref<string | null>(null)
 const heroSetSort = ref<HeroSetSort>('total')
@@ -95,6 +100,19 @@ export function useVariants() {
     next.set(variantId, rows)
     contributorsByVariant.value = next
     return rows
+  }
+
+  // Drop cached contributor lists so the next fetch hits the network.
+  // Omit variantId to clear the whole cache.
+  const invalidateContributors = (variantId?: string): void => {
+    if (!variantId) {
+      contributorsByVariant.value = new Map()
+      return
+    }
+    if (!contributorsByVariant.value.has(variantId)) return
+    const next = new Map(contributorsByVariant.value)
+    next.delete(variantId)
+    contributorsByVariant.value = next
   }
 
   // Active variants for the open HeroSet, sorted client-side. Server already
@@ -189,12 +207,13 @@ export function useVariants() {
   const submitFromLineup = async (
     lineup: Lineup,
     authorName: string | null,
+    teamName?: string | null,
   ): Promise<{ variantId: string; isNew: boolean; heroSetHash: string }> => {
     const team = snapshotTeam(lineup)
-    const trimmed = authorName ? authorName.slice(0, 10) : null
-    const result = await remoteSubmit(team, trimmed)
+    const result = await remoteSubmit(team, authorName, teamName)
     // Mark as own contribution so the vote-restriction kicks in immediately.
     myContributions.value = new Set([...myContributions.value, result.variantId])
+    invalidateContributors(result.variantId)
     // Cheapest correct refresh: invalidate the affected HeroSet so the next
     // open sees the new variant (or new contributor on the existing one).
     const variantsNext = new Map(variantsBySet.value)
@@ -245,6 +264,95 @@ export function useVariants() {
     return { deleted: result.deleted }
   }
 
+  const report = async (
+    kind: ReportKind,
+    variantId: string | null,
+    targetUserId: string,
+  ): Promise<{ ok: true; hidden: boolean; alreadyReported: boolean }> => {
+    const result = await reportContent({ kind, variantId, targetUserId })
+    if (result.hidden) {
+      const next = new Map(contributorsByVariant.value)
+      if (kind === 'team_name' && variantId) {
+        const rows = next.get(variantId)
+        if (rows) {
+          next.set(variantId, rows.map(c =>
+            c.userId === targetUserId ? { ...c, teamNameHidden: true } : c,
+          ))
+        }
+      } else if (kind === 'display_name') {
+        for (const [id, rows] of next) {
+          next.set(id, rows.map(c =>
+            c.userId === targetUserId ? { ...c, authorNameHidden: true } : c,
+          ))
+        }
+      }
+      contributorsByVariant.value = next
+    }
+    return result
+  }
+
+  const setNameHidden = async (
+    kind: ReportKind,
+    variantId: string | null,
+    targetUserId: string,
+    hidden: boolean,
+    locked = false,
+  ): Promise<{ ok: true; hidden: boolean; locked: boolean }> => {
+    const result = await adminSetNameHidden({ kind, variantId, targetUserId, hidden, locked })
+    const next = new Map(contributorsByVariant.value)
+    if (kind === 'team_name' && variantId) {
+      const rows = next.get(variantId)
+      if (rows) {
+        next.set(variantId, rows.map(c =>
+          c.userId === targetUserId
+            ? { ...c, teamNameHidden: result.hidden, teamNameLocked: result.locked }
+            : c,
+        ))
+      }
+    } else if (kind === 'display_name') {
+      for (const [id, rows] of next) {
+        next.set(id, rows.map(c =>
+          c.userId === targetUserId
+            ? { ...c, authorNameHidden: result.hidden, authorNameLocked: result.locked }
+            : c,
+        ))
+      }
+    }
+    contributorsByVariant.value = next
+    // Unlock/unhide: GET had nulled locked names, so refetch to restore them.
+    if (!result.hidden) {
+      if (kind === 'team_name' && variantId) {
+        invalidateContributors(variantId)
+        await fetchContributors(variantId)
+      } else if (kind === 'display_name') {
+        const ids = [...contributorsByVariant.value.keys()]
+        invalidateContributors()
+        await Promise.all(ids.map(id => fetchContributors(id)))
+      }
+    }
+    return result
+  }
+
+  const refreshBannedUsers = async (): Promise<void> => {
+    try {
+      bannedUserIds.value = new Set(await adminListBannedUserIds())
+    } catch (e) {
+      lastError.value = e instanceof Error ? e.message : String(e)
+    }
+  }
+
+  const setUserBanned = async (
+    userId: string,
+    banned: boolean,
+  ): Promise<{ ok: true; banned: boolean }> => {
+    const result = await adminSetUserBanned({ userId, banned })
+    const next = new Set(bannedUserIds.value)
+    if (result.banned) next.add(userId)
+    else next.delete(userId)
+    bannedUserIds.value = next
+    return result
+  }
+
   return {
     // state
     heroSets,
@@ -255,6 +363,7 @@ export function useVariants() {
     contributorsByVariant,
     myVotes,
     myContributions,
+    bannedUserIds,
     heroSetSort,
     variantSort,
     loadingSets,
@@ -265,9 +374,14 @@ export function useVariants() {
     refreshActive,
     selectHeroSet,
     fetchContributors,
+    invalidateContributors,
     vote,
     submitFromLineup,
     withdraw,
+    report,
+    setNameHidden,
+    refreshBannedUsers,
+    setUserBanned,
     isEnabled: isVariantsEnabled,
   }
 }

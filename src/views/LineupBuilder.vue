@@ -99,7 +99,9 @@
       v-model:name="shareNameInput"
       :is-logged-in="isLoggedIn"
       :display-name="displayName"
+      :user-id="user?.id ?? null"
       :group-name="currentGroup.name"
+      :is-banned="isBanned"
       @share="onShareDialogSubmit"
     />
 
@@ -110,6 +112,7 @@
       v-model="createProposalDialogVisible"
       :is-logged-in="isLoggedIn"
       :submitting="proposalSubmitting"
+      :is-banned="isBanned"
       @submit="onSubmitProposal"
     />
 
@@ -572,6 +575,10 @@ const onShareDialogSubmit = async (payload: ShareEventPayload) => {
     || `${currentGroup.value.name} · ${currentLineup.value.name}`
   await shareLineup(scope)
   if (scope === 'current' && asPublic && isLoggedIn.value) {
+    if (isBanned.value) {
+      ElMessage.error('此帳號已被封鎖，無法公開分享')
+      return
+    }
     try {
       await createProposalFromLineup(currentLineup.value, {
         name: proposalName,
@@ -628,7 +635,8 @@ const restoreFromBlob = (data: ShareableData) => {
 
 // --- Auth ---
 const {
-  isLoggedIn, displayName, needsDisplayName,
+  isLoggedIn, displayName, user, needsDisplayName,
+  isBanned,
   refreshFromStorage,
   sessionExpiredCount,
 } = useAuth()
@@ -691,9 +699,13 @@ const onSaveAsProposal = () => {
 }
 
 const onSubmitProposal = async (payload: { name: string; isPublic: boolean }) => {
+  if (payload.isPublic && isBanned.value) {
+    ElMessage.error('此帳號已被封鎖，無法公開分享')
+    payload = { ...payload, isPublic: false }
+  }
   proposalSubmitting.value = true
   try {
-    // Display-name cap (10 chars) lives inside createFromLineup so both
+    // Display-name cap (30 chars) lives inside createFromLineup so both
     // create paths stay consistent without callers having to remember it.
     await createProposalFromLineup(currentLineup.value, {
       name: payload.name,

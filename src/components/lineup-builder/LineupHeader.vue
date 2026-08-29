@@ -173,6 +173,7 @@
         <UserControls
           :is-logged-in="isLoggedIn"
           :display-name="displayName"
+          :user-id="userId"
           :has-unseen-changelog="hasUnseenChangelog"
           @open-changelog="$emit('open-changelog')"
           @open-auth="$emit('open-auth')"
@@ -254,6 +255,7 @@ const props = defineProps<{
   isLoggedIn: boolean
   hasUnseenChangelog: boolean
   displayName: string | null
+  userId?: string | null
   activeProfileName: string | null
 }>()
 const emit = defineEmits<{

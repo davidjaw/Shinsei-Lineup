@@ -1,6 +1,7 @@
 // Changelog data — append new versions to the top.
 // LATEST_VERSION drives the auto-open behavior of WhatsNewDialog: when this
 // constant changes, every user sees the dialog once on their next visit.
+// Unreleased work stays on the current unshipped version. Bump only at deploy.
 
 export type ChangelogTag = 'feat' | 'fix' | 'ui' | 'data' | 'misc'
 
@@ -34,6 +35,16 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 }
 
 export const CHANGELOG: ChangelogVersion[] = [
+  {
+    version: '0.4.8',
+    date: '2026-08-29',
+    entries: [
+      { tag: 'feat', text: '公開精選顯示隊伍名稱' },
+      { tag: 'feat', text: '作者名稱加上識別碼 #xxxx，並可檢舉不當名稱' },
+      { tag: 'ui', text: '識別碼以較小灰色顯示；被隱藏的名稱為劇透條，點擊後才顯示' },
+      { tag: 'feat', text: '管理員可隱藏或永久隱藏名稱，並可封鎖帳號（無法再公開分享）' },
+    ],
+  },
   {
     version: '0.4.7',
     date: '2026-08-28',

@@ -13,7 +13,7 @@
     >
       <template #title-prefix>
         <el-popconfirm
-          v-if="canEdit"
+          v-if="canToggleVisibility"
           :title="proposal.isPublic
             ? '確定設為私人？其他人將無法看見此提案'
             : '確定公開此提案？所有人都能看見和投票'"
@@ -27,7 +27,7 @@
               type="button"
               class="visibility-chip"
               :class="{ 'visibility-chip--public': proposal.isPublic }"
-              :title="proposal.isPublic ? '點擊切換成私人' : '點擊切換成公開'"
+              :title="visibilityTitle"
               :aria-label="proposal.isPublic ? '切換成私人' : '切換成公開'"
               @click.stop
             >
@@ -42,7 +42,7 @@
           v-else
           class="visibility-chip visibility-chip--static"
           :class="{ 'visibility-chip--public': proposal.isPublic }"
-          :title="proposal.isPublic ? '公開' : '私人'"
+          :title="visibilityTitle"
         >
           <el-icon :size="13">
             <component :is="proposal.isPublic ? View : Hide" />
@@ -53,12 +53,12 @@
         <el-popconfirm
           v-if="canEdit"
           :title="proposal.isPublic
-            ? '確定刪除此提案？公開的變體也會一併撤回'
+            ? '確定刪除此提案？'
             : '確定刪除此提案？此動作無法復原'"
           confirm-button-text="刪除"
           cancel-button-text="取消"
           confirm-button-type="danger"
-          :width="260"
+          :width="280"
           @confirm="$emit('delete')"
         >
           <template #reference>
@@ -79,17 +79,31 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { View, Hide, Delete } from '@element-plus/icons-vue'
 import type { Proposal } from '../../types/group'
 import TeamPreviewCard from './TeamPreviewCard.vue'
 
-defineProps<{
+const props = withDefaults(defineProps<{
   proposal: Proposal
   /** When true, the visibility chip becomes a clickable popconfirm trigger.
    *  Public listings (if any) would pass false so visitors see the state
    *  without being able to flip it. */
   canEdit: boolean
-}>()
+  isBanned?: boolean
+}>(), {
+  isBanned: false,
+})
+
+const canToggleVisibility = computed(() =>
+  props.canEdit && (props.proposal.isPublic || !props.isBanned),
+)
+
+const visibilityTitle = computed(() => {
+  if (props.proposal.isPublic) return props.canEdit ? '點擊切換成私人' : '公開'
+  if (props.isBanned) return '此帳號已被封鎖，無法公開分享'
+  return props.canEdit ? '點擊切換成公開' : '私人'
+})
 
 defineEmits<{
   (e: 'toggle-public'): void

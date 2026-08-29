@@ -14,6 +14,7 @@
         :is-logged-in="isLoggedIn"
         :has-unseen-changelog="hasUnseenChangelog"
         :display-name="displayName"
+        :user-id="user?.id ?? null"
         :active-profile-name="activeProfileName"
         @open-mobile-sidebar="dialogs.open('mobile-team-drawer')"
         @start-editing-inventory="startEditingInventory"
@@ -37,6 +38,7 @@
         :description="pageDescription"
         :is-logged-in="isLoggedIn"
         :display-name="displayName"
+        :user-id="user?.id ?? null"
         :has-unseen-changelog="hasUnseenChangelog"
         @open-mobile-sidebar="sidebarMobileOpen = true"
         @open-changelog="dialogs.open('changelog')"
@@ -53,6 +55,7 @@
       v-model="renameDialogVisible"
       v-model:name="renameInput"
       :saving="renameSaving"
+      :user-id="user?.id ?? null"
       @submit="submitRename"
     />
 
@@ -96,6 +99,7 @@ import { makeSerializer } from '../lib/lineupSerialize'
 import {
   createProfile, updateProfileInventory, type Profile,
 } from '../lib/profiles'
+import { capAuthorName } from '../lib/displayName'
 
 const route = useRoute()
 const router = useRouter()
@@ -146,7 +150,7 @@ watch(() => route.name, (name) => {
   if (name !== 'lineup') isCompactView.value = false
 })
 
-const { isLoggedIn, displayName, signIn, signOut, updateDisplayName } = useAuth()
+const { isLoggedIn, displayName, user, signIn, signOut, updateDisplayName } = useAuth()
 const {
   activeProfile, activeProfileName, applyProfile, unloadProfile, syncActiveProfile, clearActiveProfile,
 } = useActiveProfile()
@@ -245,7 +249,7 @@ watch(renameDialogVisible, (now) => {
   if (now) renameInput.value = displayName.value ?? ''
 })
 const submitRename = async () => {
-  const name = renameInput.value.trim()
+  const name = capAuthorName(renameInput.value)
   if (!name) {
     ElMessage.warning('名稱不可為空')
     return

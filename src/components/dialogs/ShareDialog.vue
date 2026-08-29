@@ -26,13 +26,19 @@
       >
         <div class="flex flex-col gap-0.5 min-w-0">
           <span class="text-sm">
-            以「<span class="font-bold">{{ displayName || '我' }}</span> · <span class="font-bold">{{ groupName }}</span>」公開分享
+            以「<span class="font-bold"><UserTag :name="displayName || '我'" :user-id="userId" /></span> · <span class="font-bold">{{ groupName }}</span>」公開分享
           </span>
           <span class="text-[11px] text-ink-mute leading-snug">
             僅 <span class="font-bold">分享當前隊伍</span> 適用；勾選後會同時加入公開「精選隊伍」庫
           </span>
+          <span v-if="isBanned" class="text-[11px] text-ink-mute leading-snug">
+            此帳號已被封鎖，無法公開分享
+          </span>
+          <span v-else-if="asPublic" class="text-[11px] text-ink-mute leading-snug">
+            勾選後，上方名稱會作為公開精選的隊伍名稱（空白則用編組·隊伍名）。
+          </span>
         </div>
-        <el-switch v-model="asPublic" class="flex-shrink-0 mt-0.5" />
+        <el-switch v-model="asPublic" :disabled="isBanned" class="flex-shrink-0 mt-0.5" />
       </div>
 
       <el-button type="primary" plain size="large" @click="$emit('share', { scope: 'all', asPublic: false })" class="w-full !m-0">
@@ -41,7 +47,7 @@
           <span class="text-xs opacity-80">所有隊伍 + 庫存 (備份用)</span>
         </div>
       </el-button>
-      <el-button type="success" plain size="large" @click="$emit('share', { scope: 'current', asPublic })" class="w-full !m-0">
+      <el-button type="success" plain size="large" @click="$emit('share', { scope: 'current', asPublic: asPublic && !isBanned })" class="w-full !m-0">
         <div class="flex flex-col items-center">
           <span class="font-bold">分享當前隊伍</span>
           <span class="text-xs opacity-80">僅分享目前編輯的隊伍 1 隊</span>
@@ -59,6 +65,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import UserTag from '../UserTag.vue'
 
 export type ShareScope = 'all' | 'current' | 'inventory'
 export interface ShareEventPayload {
@@ -66,13 +73,18 @@ export interface ShareEventPayload {
   asPublic: boolean
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: boolean
   name: string
   isLoggedIn: boolean
   displayName: string | null
+  userId?: string | null
   groupName: string
-}>()
+  isBanned?: boolean
+}>(), {
+  userId: null,
+  isBanned: false,
+})
 defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'update:name', v: string): void

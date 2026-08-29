@@ -5,9 +5,33 @@
          footprint and frees the bottom for the variant content itself. -->
     <div class="head">
       <div class="head-left">
+        <span
+          v-if="publicTitle.text !== null && publicTitle.locked"
+          class="team-title"
+        >
+          <SpoilerText locked />
+        </span>
+        <span
+          v-else-if="publicTitle.text !== null && publicTitle.hidden"
+          class="team-title"
+        >
+          <SpoilerText>{{ publicTitle.text }}</SpoilerText>
+        </span>
+        <span
+          v-else-if="publicTitle.text !== null"
+          class="team-title"
+          :title="publicTitle.text"
+        >{{ publicTitle.text }}</span>
         <span class="author">
           <span class="author-prefix">原作</span>
-          <strong class="author-name">{{ firstAuthorDisplay }}</strong>
+          <strong class="author-name">
+            <UserTag
+              :name="firstAuthorParts.name"
+              :user-id="firstAuthorParts.userId"
+              :hidden="firstAuthorParts.hidden"
+              :locked="firstAuthorParts.locked"
+            />
+          </strong>
         </span>
         <el-tooltip
           v-if="contributorCount > 1"
@@ -25,6 +49,63 @@
         </span>
       </div>
       <div class="head-right">
+        <el-dropdown
+          v-if="showModeration"
+          trigger="click"
+          @command="onModerationCommand"
+        >
+          <button type="button" class="icon-btn report-btn" title="檢舉" aria-label="檢舉">
+            {{ isAdmin ? '管理' : '檢舉' }}
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="team_name" :disabled="teamNameReportDisabled">
+                檢舉隊伍名稱
+              </el-dropdown-item>
+              <el-dropdown-item command="display_name" :disabled="authorNameReportDisabled">
+                檢舉作者名稱
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-if="isAdmin && !publicTitle.locked"
+                command="admin_team_name"
+                divided
+                :disabled="!publicTitle.sourceUserId"
+              >
+                {{ publicTitle.hidden ? '顯示隊伍名稱' : '隱藏隊伍名稱' }}
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-if="isAdmin"
+                command="admin_lock_team_name"
+                :divided="publicTitle.locked"
+                :disabled="!publicTitle.sourceUserId"
+              >
+                {{ publicTitle.locked ? '解除永久隱藏隊伍名稱' : '永久隱藏隊伍名稱' }}
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-if="isAdmin && !firstAuthorParts.locked"
+                command="admin_display_name"
+                :disabled="!firstAuthorParts.userId"
+              >
+                {{ firstAuthorParts.hidden ? '顯示作者名稱' : '隱藏作者名稱' }}
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-if="isAdmin"
+                command="admin_lock_display_name"
+                :disabled="!firstAuthorParts.userId"
+              >
+                {{ firstAuthorParts.locked ? '解除永久隱藏作者名稱' : '永久隱藏作者名稱' }}
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-if="isAdmin"
+                command="admin_ban"
+                divided
+                :disabled="!firstAuthorParts.userId"
+              >
+                {{ authorBanned ? '解除封鎖' : '封鎖此作者' }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-popconfirm
           v-if="isMyContribution"
           title="撤回你對此配置的提交？若你是最後一位貢獻者，整個變體將被刪除"
@@ -89,42 +170,127 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { CaretTop, CaretBottom, Position, CircleClose } from '@element-plus/icons-vue'
-import type { Variant, VariantContributor } from '../../lib/variants'
+import type { ReportKind, Variant, VariantContributor } from '../../lib/variants'
 import { withCanonicalViceOrder } from '../../lib/lineup'
 import { relativeTime } from '../../lib/time'
+import { resolveAuthorLabel, resolveAuthorParts, resolvePublicTeamTitle } from '../../lib/displayName'
 import TeamSkillsPreview from './TeamSkillsPreview.vue'
+import UserTag from '../UserTag.vue'
+import SpoilerText from '../SpoilerText.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   variant: Variant
   firstAuthorName?: string | null
   contributors?: VariantContributor[]
   votedDirection: -1 | 1 | null
   isMyContribution: boolean
   isLoggedIn: boolean
-}>()
+  currentUserId?: string | null
+  isAdmin?: boolean
+  authorBanned?: boolean
+}>(), {
+  currentUserId: null,
+  isAdmin: false,
+  authorBanned: false,
+})
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'upvote'): void
   (e: 'downvote'): void
   (e: 'import-to-group'): void
   (e: 'withdraw'): void
+  (e: 'report', payload: { kind: ReportKind; targetUserId: string }): void
+  (e: 'admin-set', payload: { kind: ReportKind; targetUserId: string; hidden: boolean; locked?: boolean }): void
+  (e: 'admin-ban', payload: { userId: string; banned: boolean }): void
 }>()
 
 const normalizedTeam = computed(() => withCanonicalViceOrder(props.variant.team))
 
-const firstAuthorDisplay = computed<string>(() => {
-  if (props.firstAuthorName) return props.firstAuthorName
-  const first = (props.contributors ?? [])[0]
-  return first?.authorName ?? '匿名'
+const contributorList = computed(() => props.contributors ?? [])
+
+const publicTitle = computed(() =>
+  resolvePublicTeamTitle(props.variant.firstAuthorId, contributorList.value),
+)
+
+const firstAuthorContributor = computed<VariantContributor | null>(() => {
+  const list = contributorList.value
+  const id = props.variant.firstAuthorId
+  if (id) {
+    const match = list.find(c => c.userId === id)
+    if (match) return match
+  }
+  return list[0] ?? null
 })
 
-const contributorCount = computed(() => props.contributors?.length ?? 0)
+const firstAuthorParts = computed(() =>
+  resolveAuthorParts(firstAuthorContributor.value, props.variant.firstAuthorId),
+)
 
-const contributorTooltip = computed(() => {
-  const list = props.contributors ?? []
-  if (list.length === 0) return ''
-  return list.map(c => c.authorName ?? '匿名').join('、')
+const contributorCount = computed(() => contributorList.value.length)
+
+const contributorTooltip = computed(() =>
+  contributorList.value.map(c => resolveAuthorLabel(c)).join('、'),
+)
+
+const teamNameReportDisabled = computed(() => {
+  const t = publicTitle.value
+  return t.text === null || t.hidden || t.sourceUserId === props.currentUserId
 })
+
+const authorNameReportDisabled = computed(() => {
+  const id = firstAuthorParts.value.userId
+  return !id || firstAuthorParts.value.hidden || id === props.currentUserId
+})
+
+const showModeration = computed(() =>
+  Boolean(props.currentUserId)
+  && (props.isAdmin || !teamNameReportDisabled.value || !authorNameReportDisabled.value),
+)
+
+const onModerationCommand = (command: string) => {
+  if (command === 'admin_team_name') {
+    const id = publicTitle.value.sourceUserId
+    if (!id || !props.isAdmin) return
+    emit('admin-set', { kind: 'team_name', targetUserId: id, hidden: !publicTitle.value.hidden })
+    return
+  }
+  if (command === 'admin_lock_team_name') {
+    const id = publicTitle.value.sourceUserId
+    if (!id || !props.isAdmin) return
+    const locking = !publicTitle.value.locked
+    emit('admin-set', { kind: 'team_name', targetUserId: id, hidden: locking, locked: locking })
+    return
+  }
+  if (command === 'admin_display_name') {
+    const id = firstAuthorParts.value.userId
+    if (!id || !props.isAdmin) return
+    emit('admin-set', { kind: 'display_name', targetUserId: id, hidden: !firstAuthorParts.value.hidden })
+    return
+  }
+  if (command === 'admin_lock_display_name') {
+    const id = firstAuthorParts.value.userId
+    if (!id || !props.isAdmin) return
+    const locking = !firstAuthorParts.value.locked
+    emit('admin-set', { kind: 'display_name', targetUserId: id, hidden: locking, locked: locking })
+    return
+  }
+  if (command === 'admin_ban') {
+    const id = firstAuthorParts.value.userId
+    if (!id || !props.isAdmin) return
+    emit('admin-ban', { userId: id, banned: !props.authorBanned })
+    return
+  }
+  const kind = command as ReportKind
+  if (kind === 'team_name') {
+    const id = publicTitle.value.sourceUserId
+    if (!id || teamNameReportDisabled.value) return
+    emit('report', { kind, targetUserId: id })
+    return
+  }
+  const id = firstAuthorParts.value.userId
+  if (!id || authorNameReportDisabled.value) return
+  emit('report', { kind, targetUserId: id })
+}
 
 const canVote = computed(() => props.isLoggedIn && !props.isMyContribution)
 const voteTooltip = computed(() => {
@@ -171,6 +337,16 @@ const voteTooltip = computed(() => {
   flex: 1 1 auto;
   flex-wrap: wrap;
 }
+.team-title {
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgb(var(--color-ink));
+  flex-shrink: 1;
+}
 .author {
   display: inline-flex;
   align-items: baseline;
@@ -184,13 +360,12 @@ const voteTooltip = computed(() => {
   flex-shrink: 0;
 }
 .author-name {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 16em;
   font-size: 14px;
   font-weight: 700;
   color: #92400e;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 10em;
 }
 
 .chip {
@@ -246,6 +421,14 @@ const voteTooltip = computed(() => {
   background: #fee2e2;
   color: #b91c1c;
   border-color: #fca5a5;
+}
+.report-btn {
+  width: auto;
+  min-width: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 .action-btn {
   display: inline-flex;

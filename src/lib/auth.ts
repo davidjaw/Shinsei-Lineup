@@ -4,6 +4,7 @@
 // router logic so we don't mistake an auth callback for a share link.
 
 import { SUPABASE_URL, SUPABASE_KEY, fetchWithTimeout } from './supabase'
+import { AUTHOR_NAME_MAX } from './displayName'
 
 export type OAuthProvider = 'google' | 'github'
 
@@ -17,6 +18,8 @@ export interface Session {
     /** User-editable display name stored in auth.users.user_metadata.
      *  null on first signup until the user (or first-time prompt) sets one. */
     display_name: string | null
+    /** From JWT app_metadata.role === 'admin'. Set in the Supabase dashboard. */
+    is_admin: boolean
   }
 }
 
@@ -30,7 +33,11 @@ interface JwtPayload {
   sub: string
   email?: string
   user_metadata?: { display_name?: string | null }
+  app_metadata?: { role?: string | null }
 }
+
+const isAdminFromPayload = (payload: JwtPayload | null): boolean =>
+  payload?.app_metadata?.role === 'admin'
 const decodeJwtPayload = (token: string): JwtPayload | null => {
   try {
     const part = token.split('.')[1]
@@ -76,7 +83,11 @@ export const getSession = (): Session | null => {
   const raw = localStorage.getItem(SESSION_KEY)
   if (!raw) return null
   try {
-    return JSON.parse(raw) as Session
+    const session = JSON.parse(raw) as Session
+    // Re-read role from the live JWT so a dashboard metadata edit shows up
+    // after the next token refresh, and old stored sessions still work.
+    session.user.is_admin = isAdminFromPayload(decodeJwtPayload(session.access_token))
+    return session
   } catch {
     clearSession()
     return null
@@ -137,6 +148,7 @@ export const handleAuthCallback = (rawHash?: string): boolean => {
       id: payload.sub,
       email: payload.email || '',
       display_name: payload.user_metadata?.display_name ?? null,
+      is_admin: isAdminFromPayload(payload),
     },
   })
   cleanHash()
@@ -201,6 +213,7 @@ const doRefresh = async (refresh_token: string): Promise<RefreshResult> => {
         display_name: data.user?.user_metadata?.display_name
           ?? payload?.user_metadata?.display_name
           ?? null,
+        is_admin: isAdminFromPayload(payload),
       },
     }
     persistSession(session)
@@ -273,7 +286,9 @@ export const updateDisplayName = async (displayName: string): Promise<void> => {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('auth not configured')
   const trimmed = displayName.trim()
   if (!trimmed) throw new Error('display name cannot be empty')
-  if (trimmed.length > 50) throw new Error('display name too long (max 50)')
+  if (trimmed.length > AUTHOR_NAME_MAX) {
+    throw new Error(`display name too long (max ${AUTHOR_NAME_MAX})`)
+  }
 
   const token = await getValidAccessToken()
   if (!token) throw new Error('not signed in')

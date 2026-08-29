@@ -50,6 +50,11 @@ interface ContributorRowDB {
   user_id: string
   contributed_at: string
   author_name: string | null
+  team_name: string | null
+  team_name_hidden: boolean
+  team_name_locked: boolean
+  author_name_hidden: boolean
+  author_name_locked: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +90,11 @@ export interface VariantContributor {
   userId: string
   contributedAt: string
   authorName: string | null
+  teamName: string | null
+  teamNameHidden: boolean
+  teamNameLocked: boolean
+  authorNameHidden: boolean
+  authorNameLocked: boolean
 }
 
 export interface SubmitVariantResult {
@@ -126,10 +136,15 @@ const rowToVariant = (row: VariantRowDB): Variant => ({
 })
 
 const rowToContributor = (row: ContributorRowDB): VariantContributor => ({
-  variantId:     row.variant_id,
-  userId:        row.user_id,
-  contributedAt: row.contributed_at,
-  authorName:    row.author_name,
+  variantId:         row.variant_id,
+  userId:            row.user_id,
+  contributedAt:     row.contributed_at,
+  authorName:        row.author_name,
+  teamName:          row.team_name ?? null,
+  teamNameHidden:    row.team_name_hidden ?? false,
+  teamNameLocked:    row.team_name_locked ?? false,
+  authorNameHidden:  row.author_name_hidden ?? false,
+  authorNameLocked:  row.author_name_locked ?? false,
 })
 
 // ---------------------------------------------------------------------------
@@ -176,7 +191,7 @@ export const listVariantsInSet = async (
 // by N users" line + the contributor tooltip.
 export const listContributors = async (variantId: string): Promise<VariantContributor[]> => {
   if (!SUPABASE_URL) throw new Error('variants backend not configured')
-  const url = `${SUPABASE_URL}/rest/v1/variant_contributors`
+  const url = `${SUPABASE_URL}/rest/v1/variant_contributors_read`
     + `?variant_id=eq.${encodeURIComponent(variantId)}`
     + `&select=*&order=contributed_at.asc`
   const res = await fetchWithTimeout(url, { headers: restHeaders(null) })
@@ -203,6 +218,7 @@ export const findVariantForTeam = async (team: Lineup): Promise<string | null> =
 export const submitVariant = async (
   team: Lineup,
   authorName: string | null,
+  teamName?: string | null,
 ): Promise<SubmitVariantResult> => {
   if (!SUPABASE_URL) throw new Error('variants backend not configured')
   const token = await getValidAccessToken()
@@ -212,9 +228,16 @@ export const submitVariant = async (
   const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { ...restHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_team: team, p_author_name: authorName }),
+    body: JSON.stringify({
+      p_team: team,
+      p_author_name: authorName,
+      p_team_name: teamName ?? null,
+    }),
   })
-  if (!res.ok) throw new Error(`submit_variant failed: ${res.status} ${await res.text()}`)
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(mapRpcError(body, `submit_variant failed: ${res.status} ${body}`))
+  }
   const body = await res.json() as {
     variant_id: string
     variant_hash: string
@@ -227,6 +250,97 @@ export const submitVariant = async (
     heroSetHash:   body.hero_set_hash,
     isNew:         body.is_new,
   }
+}
+
+export type ReportKind = 'team_name' | 'display_name'
+
+const REPORT_PG_ERRORS: Record<string, string> = {
+  'auth required': '請先登入',
+  'cannot report yourself': '不能檢舉自己',
+  'target is not a contributor': '找不到檢舉對象',
+  'account banned': '此帳號已被封鎖，無法公開分享',
+  'cannot ban yourself': '不能封鎖自己',
+  'admin required': '需要管理員權限',
+}
+
+export const mapRpcError = (body: string, fallback: string): string => {
+  try {
+    const parsed = JSON.parse(body) as { message?: string }
+    const mapped = parsed.message ? REPORT_PG_ERRORS[parsed.message] : undefined
+    if (mapped) return mapped
+  } catch { /* not JSON */ }
+  for (const [pg, zh] of Object.entries(REPORT_PG_ERRORS)) {
+    if (body.includes(pg)) return zh
+  }
+  return fallback
+}
+
+const mapReportError = mapRpcError
+
+export async function reportContent(input: {
+  kind: ReportKind
+  variantId: string | null
+  targetUserId: string
+}): Promise<{ ok: true; hidden: boolean; alreadyReported: boolean }> {
+  if (!SUPABASE_URL) throw new Error('variants backend not configured')
+  const token = await getValidAccessToken()
+  if (!token) throw new Error('請先登入')
+
+  const url = `${SUPABASE_URL}/rest/v1/rpc/report_content`
+  const res = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: { ...restHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      p_kind: input.kind,
+      p_variant_id: input.variantId,
+      p_target_user_id: input.targetUserId,
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(mapReportError(body, `report_content failed: ${res.status} ${body}`))
+  }
+  const body = await res.json() as {
+    ok: boolean
+    hidden: boolean
+    already_reported: boolean
+  }
+  return {
+    ok: true,
+    hidden: body.hidden,
+    alreadyReported: body.already_reported,
+  }
+}
+
+export async function adminSetNameHidden(input: {
+  kind: ReportKind
+  variantId: string | null
+  targetUserId: string
+  hidden: boolean
+  locked?: boolean
+}): Promise<{ ok: true; hidden: boolean; locked: boolean }> {
+  if (!SUPABASE_URL) throw new Error('variants backend not configured')
+  const token = await getValidAccessToken()
+  if (!token) throw new Error('請先登入')
+
+  const url = `${SUPABASE_URL}/rest/v1/rpc/admin_set_name_hidden`
+  const res = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: { ...restHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      p_kind: input.kind,
+      p_variant_id: input.variantId,
+      p_target_user_id: input.targetUserId,
+      p_hidden: input.hidden,
+      p_locked: input.locked ?? false,
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(mapRpcError(body, `admin_set_name_hidden failed: ${res.status} ${body}`))
+  }
+  const body = await res.json() as { ok: boolean; hidden: boolean; locked: boolean }
+  return { ok: true, hidden: body.hidden, locked: body.locked }
 }
 
 // Withdraw the current user from a variant. The RPC returns three flags:
@@ -322,7 +436,7 @@ export const listMyContributions = async (): Promise<Set<string>> => {
   if (!token || !session) return new Set()
 
   const res = await fetchWithTimeout(
-    `${SUPABASE_URL}/rest/v1/variant_contributors`
+    `${SUPABASE_URL}/rest/v1/variant_contributors_read`
       + `?user_id=eq.${encodeURIComponent(session.user.id)}`
       + `&select=variant_id`,
     { headers: restHeaders(token) },

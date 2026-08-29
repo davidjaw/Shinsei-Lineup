@@ -25,10 +25,10 @@
         <div class="flex flex-col gap-0.5">
           <span class="text-sm">公開分享</span>
           <span class="text-[11px] text-ink-mute leading-snug">
-            開啟後將出現在「精選隊伍」公開列表
+            {{ isBanned ? '此帳號已被封鎖，無法公開分享' : '開啟後將出現在「精選隊伍」公開列表' }}
           </span>
         </div>
-        <el-switch v-model="isPublic" />
+        <el-switch v-model="isPublic" :disabled="isBanned" />
       </div>
       <p v-else class="text-[11px] text-ink-mute leading-snug">
         未登入只能存為本機草稿；登入後可選公開分享。
@@ -47,11 +47,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: boolean
   isLoggedIn: boolean
   submitting: boolean
-}>()
+  isBanned?: boolean
+}>(), {
+  isBanned: false,
+})
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'submit', payload: { name: string; isPublic: boolean }): void
@@ -76,7 +79,7 @@ const onSubmit = () => {
   if (!nameValid.value) return
   emit('submit', {
     name: name.value.trim(),
-    isPublic: props.isLoggedIn ? isPublic.value : false,
+    isPublic: props.isLoggedIn && !props.isBanned ? isPublic.value : false,
   })
 }
 </script>

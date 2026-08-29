@@ -166,15 +166,20 @@
                   v-for="v in activeVariants"
                   :key="v.id"
                   :variant="v"
-                  :first-author-name="resolveAuthorName(v.firstAuthorId)"
                   :contributors="contributorsByVariant.get(v.id)"
                   :voted-direction="myVotes.get(v.id) ?? null"
                   :is-my-contribution="myContributions.has(v.id)"
                   :is-logged-in="isLoggedIn"
+                  :current-user-id="user?.id ?? null"
+                  :is-admin="isAdmin"
+                  :author-banned="!!v.firstAuthorId && bannedUserIds.has(v.firstAuthorId)"
                   @upvote="onVariantVote(v.id, 1)"
                   @downvote="onVariantVote(v.id, -1)"
                   @import-to-group="onImportVariantToGroup(v)"
                   @withdraw="onWithdrawVariant(v)"
+                  @report="onReport(v, $event)"
+                  @admin-set="onAdminSet(v, $event)"
+                  @admin-ban="onAdminBan"
                 />
               </div>
             </main>
@@ -198,6 +203,7 @@
                 :key="p.id"
                 :proposal="p"
                 :can-edit="true"
+                :is-banned="isBanned"
                 @toggle-public="onTogglePublic(p)"
                 @delete="onDelete(p)"
               />
@@ -220,7 +226,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch, markRaw, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CaretTop, Top, Bottom, Minus, Clock,
   TrendCharts, Tickets, Calendar, ArrowLeftBold,
@@ -234,7 +240,7 @@ import { useGroupPersistence } from '../composables/useGroupPersistence'
 import { useDialogs } from '../composables/useDialogs'
 import { useLineups } from '../composables/useLineups'
 import type { Proposal, ImportConflictResolution } from '../types/group'
-import type { HeroSetSummary, Variant, VoteDirection } from '../lib/variants'
+import type { HeroSetSummary, ReportKind, Variant, VoteDirection } from '../lib/variants'
 import { sortedViceHeroes, snapshotTeam } from '../lib/lineup'
 import { applyConflictResolution } from '../lib/teamConflicts'
 import HeroSetCard from '../components/preview/HeroSetCard.vue'
@@ -248,7 +254,7 @@ import type { VariantSort } from '../lib/variants'
 
 const route = useRoute()
 const router = useRouter()
-const { isLoggedIn } = useAuth()
+const { isLoggedIn, user, isAdmin, isBanned } = useAuth()
 const { heroes } = useData()
 const {
   heroSets, sortedHeroSets, activeHeroSetHash, activeHeroSet, activeVariants,
@@ -256,7 +262,8 @@ const {
   myVotes, myContributions, heroSetSort, variantSort,
   loadingSets, loadingVariants,
   refreshHeroSets, selectHeroSet, fetchContributors,
-  vote, withdraw,
+  vote, withdraw, report, setNameHidden,
+  bannedUserIds, refreshBannedUsers, setUserBanned,
 } = useVariants()
 const {
   myProposals, loadingMine,
@@ -282,6 +289,7 @@ const variantSortOptions: Array<{ value: VariantSort; label: string; icon?: Comp
 onMounted(async () => {
   await refreshHeroSets()
   if (isLoggedIn.value) void refreshMine()
+  if (isAdmin.value) void refreshBannedUsers()
 
   // Restore split-view selection from URL on cold load.
   const setParam = (route.query.set as string | undefined) ?? null
@@ -293,6 +301,10 @@ onMounted(async () => {
 watch(isLoggedIn, (loggedIn) => {
   if (loggedIn && activeTab.value === 'public') activeTab.value = 'mine'
   if (loggedIn) void refreshMine()
+})
+
+watch(isAdmin, (admin) => {
+  if (admin) void refreshBannedUsers()
 })
 
 const heroOptions = computed(() => {
@@ -410,13 +422,74 @@ const onWithdrawVariant = async (variant: Variant): Promise<void> => {
   }
 }
 
-const resolveAuthorName = (authorId: string | null): string | null => {
-  if (!authorId) return null
-  for (const rows of contributorsByVariant.value.values()) {
-    const match = rows.find(c => c.userId === authorId)
-    if (match) return match.authorName
-  }
-  return null
+const onReport = async (variant: Variant, payload: { kind: ReportKind; targetUserId: string }) => {
+  try {
+    await ElMessageBox.confirm(
+      payload.kind === 'team_name'
+        ? '確定檢舉此隊伍名稱？名稱在多人檢舉後會被隱藏。'
+        : '確定檢舉此作者名稱？名稱在多人檢舉後會被隱藏。',
+      '檢舉',
+      { confirmButtonText: '送出檢舉', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch { return }
+  try {
+    const r = await report(payload.kind, payload.kind === 'team_name' ? variant.id : null, payload.targetUserId)
+    ElMessage.success(r.alreadyReported ? '已更新你的檢舉' : '已送出檢舉')
+  } catch (e) { ElMessage.error(`檢舉失敗：${(e as Error).message}`) }
+}
+
+const onAdminSet = async (
+  variant: Variant,
+  payload: { kind: ReportKind; targetUserId: string; hidden: boolean; locked?: boolean },
+) => {
+  const locking = payload.locked === true
+  const unlocking = payload.locked === false
+  const hiding = payload.hidden
+  const confirmText = locking
+    ? '永久隱藏後無法點擊顯示，確定？'
+    : unlocking
+      ? '確定解除永久隱藏並恢復顯示此名稱？'
+      : payload.kind === 'team_name'
+        ? (hiding ? '確定隱藏此隊伍名稱？' : '確定恢復顯示此隊伍名稱？')
+        : (hiding ? '確定隱藏此作者名稱？' : '確定恢復顯示此作者名稱？')
+  const confirmButton = locking ? '永久隱藏' : unlocking ? '解除' : hiding ? '隱藏' : '顯示'
+  try {
+    await ElMessageBox.confirm(confirmText, '管理員', {
+      confirmButtonText: confirmButton,
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch { return }
+  try {
+    await setNameHidden(
+      payload.kind,
+      payload.kind === 'team_name' ? variant.id : null,
+      payload.targetUserId,
+      payload.hidden,
+      payload.locked ?? false,
+    )
+    ElMessage.success(locking ? '已永久隱藏名稱' : hiding ? '已隱藏名稱' : '已恢復顯示名稱')
+  } catch (e) { ElMessage.error(`操作失敗：${(e as Error).message}`) }
+}
+
+const onAdminBan = async (payload: { userId: string; banned: boolean }) => {
+  try {
+    await ElMessageBox.confirm(
+      payload.banned
+        ? '封鎖後此帳號將無法再公開分享隊伍。確定封鎖？'
+        : '確定解除封鎖？',
+      '管理員',
+      {
+        confirmButtonText: payload.banned ? '封鎖' : '解除封鎖',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch { return }
+  try {
+    await setUserBanned(payload.userId, payload.banned)
+    ElMessage.success(payload.banned ? '已封鎖此作者' : '已解除封鎖')
+  } catch (e) { ElMessage.error(`操作失敗：${(e as Error).message}`) }
 }
 
 // ---------------------------------------------------------------------------

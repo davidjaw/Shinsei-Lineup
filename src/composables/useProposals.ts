@@ -28,12 +28,16 @@ import {
   withdrawVariant,
   findVariantForTeam,
 } from '../lib/variants'
+import { capAuthorName, capTeamName } from '../lib/displayName'
+import { useVariants } from './useVariants'
 
 const myProposals = ref<Proposal[]>([])
 const loadingMine = ref(false)
 const lastError = ref<string | null>(null)
 
 export function useProposals() {
+  const { invalidateContributors } = useVariants()
+
   const refreshMine = async (): Promise<void> => {
     if (!isProposalsEnabled()) return
     loadingMine.value = true
@@ -52,13 +56,19 @@ export function useProposals() {
     opts: { name: string; isPublic: boolean; authorName?: string | null; forkedFrom?: string | null },
   ): Promise<Proposal> => {
     const team = snapshotTeam(lineup)
-    // Centralize the 10-char display-name cap here so every create path gets
+    // Centralize the 30-char display-name cap here so every create path gets
     // the same stored author_name without callers having to remember.
-    const authorName = opts.authorName ? opts.authorName.slice(0, 10) : opts.authorName ?? null
+    const authorName = capAuthorName(opts.authorName)
     const created = await remoteCreate({ ...opts, authorName, team })
     if (opts.isPublic) {
-      try { await submitVariant(team, authorName) }
-      catch (e) { console.warn('submitVariant during create failed:', e) }
+      try {
+        const result = await submitVariant(team, authorName, capTeamName(opts.name))
+        invalidateContributors(result.variantId)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (msg.includes('account banned') || msg.includes('已被封鎖')) throw e
+        console.warn('submitVariant during create failed:', e)
+      }
     }
     myProposals.value = [created, ...myProposals.value]
     return created
@@ -73,11 +83,18 @@ export function useProposals() {
     if (idx >= 0) myProposals.value[idx] = updated
     try {
       if (isPublic) {
-        const authorName = updated.authorName ? updated.authorName.slice(0, 10) : null
-        await submitVariant(updated.team, authorName)
+        const result = await submitVariant(
+          updated.team,
+          capAuthorName(updated.authorName),
+          capTeamName(updated.name),
+        )
+        invalidateContributors(result.variantId)
       } else {
         const variantId = await findVariantForTeam(updated.team)
-        if (variantId) await withdrawVariant(variantId)
+        if (variantId) {
+          await withdrawVariant(variantId)
+          invalidateContributors(variantId)
+        }
       }
     } catch (e) {
       console.warn('variant sync on togglePublic failed:', e)
@@ -92,7 +109,10 @@ export function useProposals() {
     if (target?.isPublic) {
       try {
         const variantId = await findVariantForTeam(target.team)
-        if (variantId) await withdrawVariant(variantId)
+        if (variantId) {
+          await withdrawVariant(variantId)
+          invalidateContributors(variantId)
+        }
       } catch (e) {
         console.warn('variant sync on remove failed:', e)
       }
