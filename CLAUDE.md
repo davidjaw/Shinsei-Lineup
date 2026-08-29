@@ -104,6 +104,7 @@ All prompts share `COMMON_RULES` from `llm_core.py` which enforces:
 - Python 3.10+ managed via [uv](https://docs.astral.sh/uv/) (`uv sync` to install deps from `pyproject.toml`)
 - Node 20+ with Vue 3, Element Plus, TailwindCSS
 - OpenRouter API for LLM calls (default: `anthropic/claude-haiku-4.5`, free test: `google/gemma-4-31b-it:free`) — requires `OPENROUTER_API_KEY` in `.env`
+- Supabase: two projects (dev `pptoljoymqbflmucyxzo`, prod `ebmamfpeffgkmhpyoyul`). Link / push / admin / ban SQL: [doc/supabase.md](doc/supabase.md)
 
 ## Conventions
 
@@ -112,3 +113,4 @@ All prompts share `COMMON_RULES` from `llm_core.py` which enforces:
 - Hero names: JP in `name_jp`, CHT in `name`
 - Skill names: JP key in YAML, CHT `name` field in translated data
 - Data files in `data/` are gitignored except `overrides.yaml` and `statuses.yaml`
+- Changelog (`src/constants/changelog.ts`): unreleased work stays on **one** unshipped version. Do not bump `0.x.y` for each feature; fold new entries into the current top version until that version is deployed. Bump only at deploy.
