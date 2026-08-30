@@ -459,6 +459,8 @@ const conflictingSkillNames = computed(() => {
 })
 
 const clearLineup = (type: ResetTarget) => {
+  // Block in-flight tryAutoApplyDefault from refilling inventory after any reset.
+  markUserTouched()
   if (type === 'team') {
     clearLineupData('team')
     ElMessage.info('當前隊伍已重置')
@@ -481,11 +483,13 @@ const clearLineup = (type: ResetTarget) => {
     // up by stale-detect rather than silently overwritten.
     resetAllWorkspaces()
     clearInventory()
+    noteUserWipe()
     ElMessage.info('所有資料已重置')
   }
   // Synchronously persist so an immediate F5 / logout doesn't lose the
   // reset (the watcher's 800ms debounce would otherwise race the unload).
   flushLocalAutosave()
+  if (type === 'all') void flushPendingCloudPush()
   resetDialogVisible.value = false
 }
 
@@ -893,7 +897,7 @@ const onImportFromLink = (payload: ImportFromLinkPayload) => {
 // Non-null switches the whole UI to spectator mode (no edit affordances).
 const gachaSpectatorBlob = ref<SpectatorBlob | null>(null)
 const { clearActiveProfile } = useActiveProfile()
-const { tryAutoApplyDefault } = useProfiles()
+const { tryAutoApplyDefault, markUserTouched } = useProfiles()
 
 // React to involuntary session expiration (refresh token revoked). The user
 // did NOT click "sign out" — their token genuinely died (revoked elsewhere,
@@ -978,6 +982,8 @@ const {
   enableAutosave,
   tryBootstrapCloudSync,
   flushLocalAutosave,
+  flushPendingCloudPush,
+  noteUserWipe,
   consumeRecovery,
   healingReport: autosaveHealingReport,
 } = useGroupPersistence()

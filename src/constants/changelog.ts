@@ -43,6 +43,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       { tag: 'feat', text: '作者名稱加上識別碼 #xxxx，並可檢舉不當名稱' },
       { tag: 'ui', text: '識別碼以較小灰色顯示；被隱藏的名稱為劇透條，點擊後才顯示' },
       { tag: 'feat', text: '管理員可隱藏或永久隱藏名稱，並可封鎖帳號（無法再公開分享）' },
+      { tag: 'fix', text: '登入並開啟雲端同步時，全部重置後立即加入的武將／戰法不再被雲端舊資料蓋掉' },
     ],
   },
   {

@@ -105,6 +105,10 @@ let cloudDebounceHandle: number | null = null
 let bc: BroadcastChannel | null = null
 let autosaveEnabled = false
 let cloudBootstrapped = false
+let bootstrapInFlight = false
+let bootstrapGeneration = 0
+let bootstrapFlightGen = 0  // generation that currently owns the mutex
+let skipCloudHydrate = false  // session wipe-intent; not persisted
 
 // Cloud-sync reactive surface — components subscribe via useGroupPersistence().
 const cloudSyncEnabled = ref<boolean>(loadCloudSyncPref())
@@ -538,11 +542,20 @@ const scheduleCloudPush = (blob: ShareableData): void => {
 // sits forever.
 const markBootstrapped = (): void => {
   cloudBootstrapped = true
+  bootstrapInFlight = false
   if (pendingCloudBlob) {
     const blob = pendingCloudBlob
     pendingCloudBlob = null
     scheduleCloudPush(blob)
   }
+}
+
+// Public: 全部重置 bumped the generation so an in-flight list cannot apply
+// stale cloud rows over the wipe. skipCloudHydrate also blocks silent
+// cloud→local on a bootstrap that starts after the wipe in this session.
+const noteUserWipe = (): void => {
+  bootstrapGeneration += 1
+  skipCloudHydrate = true
 }
 
 // Replace cloudGroupsByClientId with a fresh snapshot from cloud. Used to
@@ -572,6 +585,9 @@ const hydrateMapFromCloud = async (): Promise<void> => {
 // BEFORE the auth token is invalidated. No-op when nothing is pending or
 // when the user isn't logged in.
 const flushPendingCloudPush = async (): Promise<void> => {
+  // Bootstrap still owns the map — leave pendingCloudBlob so the wipe
+  // branch / markBootstrapped can push with a seeded map + stale-delete.
+  if (!cloudBootstrapped) return
   if (cloudDebounceHandle != null) {
     clearTimeout(cloudDebounceHandle)
     cloudDebounceHandle = null
@@ -709,7 +725,7 @@ const createBackupShareLink = async (blob: ShareableData): Promise<string | null
 // cloudBootstrapped. Called from LineupBuilder.vue's onMounted after the
 // other restore paths have settled, and from the post-OAuth callback hook.
 const tryBootstrapCloudSync = async (): Promise<void> => {
-  if (cloudBootstrapped) return
+  if (cloudBootstrapped || bootstrapInFlight) return
   const { isLoggedIn, user } = useAuth()
   if (!isLoggedIn.value) return
   if (!cloudSyncEnabled.value) {
@@ -719,8 +735,9 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   const userId = user.value?.id
   if (!userId) return // shouldn't happen given isLoggedIn — defensive
 
-  // Determine local emptiness up-front — used by both the fast-path guard
-  // and the 2x2. We read groups directly (not via buildBlob) so the
+  // Fast-path emptiness is sampled NOW (sync). The 2x2 re-samples after
+  // the list await so a wipe/edit during the fetch is not decided on a
+  // stale empty flag. We read groups directly (not via buildBlob) so the
   // read-only decision doesn't pollute the cross-tab gen counter.
   const { workspaces } = useGroups()
   const localActuallyEmpty = CATALOG_MODES.every((m) =>
@@ -752,6 +769,9 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   }
 
   // Cold start (or local-wiped re-bootstrap). Run the 2x2.
+  const gen = bootstrapGeneration
+  bootstrapFlightGen = gen
+  bootstrapInFlight = true
   cloudStatus.value = 'syncing'
   let cloudRows: CloudLineupGroup[]
   try {
@@ -759,8 +779,23 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   } catch (e) {
     console.warn('[cloud-sync] bootstrap list failed:', e)
     cloudStatus.value = 'offline'
+    if (bootstrapFlightGen === gen) bootstrapInFlight = false
+    // Leave cloudBootstrapped false so a later `persisted` can retry.
     return
   }
+
+  if (gen !== bootstrapGeneration && !skipCloudHydrate) {
+    // Stale flight (logout / disable). Do not latch — next sign-in must 2x2.
+    // Drop the mutex only if this flight still owns it; a newer sign-in
+    // may have already set inFlight for a newer gen.
+    cloudStatus.value = 'idle'
+    if (bootstrapFlightGen === gen) bootstrapInFlight = false
+    return
+  }
+
+  const localEmptyNow = CATALOG_MODES.every((m) =>
+    isEmptyGroupSet(workspaces[m].groups),
+  )
 
   // Empty-check the cloud side: a cloud row with only empty teams counts
   // as empty — that data is dead weight and shouldn't force a merge dialog.
@@ -768,7 +803,36 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     (r) => r.teams.every(isEmptyShareableLineup),
   )
 
-  if (localActuallyEmpty && cloudActuallyEmpty) {
+  if (skipCloudHydrate) {
+    // User wiped this session (possibly during the fetch). Keep local;
+    // seed the meta map from the list we already have so the empty push
+    // can stale-delete old cloud rows this turn (not the 1800ms debounce).
+    cloudGroupsByClientId.clear()
+    for (const r of cloudRows) {
+      const clientId = r.client_id ?? r.id
+      cloudGroupsByClientId.set(clientId, {
+        cloudId: r.id,
+        serverUpdatedAt: r.updated_at,
+      })
+    }
+    cloudStatus.value = 'idle'
+    syncCloudMetaToStorage()
+    // Latch the map before the wipe push so stale-delete is allowed, but
+    // do not markBootstrapped yet — that would flush a parallel second push.
+    cloudBootstrapped = true
+    const blob = buildBlob()  // live state, includes hero added during the wait
+    pendingCloudBlob = null
+    try {
+      await pushBlobToCloud(blob)
+    } finally {
+      // Flushes nothing if pending stayed null; still drops inFlight.
+      // If user edits scheduled a pending during the await, flush after.
+      markBootstrapped()
+    }
+    return
+  }
+
+  if (localEmptyNow && cloudActuallyEmpty) {
     // Both empty — silent no-op. Persist an empty meta so reloads take the
     // fast path above.
     cloudStatus.value = 'idle'
@@ -777,7 +841,7 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     return
   }
 
-  if (localActuallyEmpty && !cloudActuallyEmpty) {
+  if (localEmptyNow && !cloudActuallyEmpty) {
     // Silent apply: cloud → local. applyCloudRowsToLocal populates the meta
     // map; persist it so the next reload takes the fast path. flushLocalAutosave
     // also writes the freshly-applied groups to localStorage immediately —
@@ -790,7 +854,7 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     return
   }
 
-  if (!localActuallyEmpty && cloudActuallyEmpty) {
+  if (!localEmptyNow && cloudActuallyEmpty) {
     // Silent upload: local → cloud. buildBlob here is the actual write — it
     // owns the gen bump because we'll be persisting these groups to cloud.
     const localBlob = buildBlob()
@@ -821,6 +885,7 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     } catch (e) {
       console.warn('[cloud-sync] bulk upload failed:', e)
       cloudStatus.value = 'offline'
+      if (bootstrapFlightGen === gen) bootstrapInFlight = false
     }
     return
   }
@@ -831,6 +896,7 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   const localBlob = buildBlob(false)
   cloudMerge.value = { localBlob, cloudRows }
   cloudStatus.value = 'idle'
+  if (bootstrapFlightGen === gen) bootstrapInFlight = false
 }
 
 // Merge-dialog resolutions ---------------------------------------------
@@ -1103,6 +1169,9 @@ const setCloudSyncEnabled = (v: boolean): void => {
     // from a clean slate. Also cancel any in-flight debounce and discard
     // the queued blob, so a re-enable doesn't resurrect a stale pre-disable
     // push and clobber cloud with old state. Mirrors the `expired` handler.
+    // Bump generation so an in-flight 2x2 cannot apply; do not clear
+    // bootstrapInFlight — the aborted continuation drops the mutex.
+    bootstrapGeneration += 1
     cloudGroupsByClientId.clear()
     cloudBootstrapped = false
     if (cloudDebounceHandle != null) {
@@ -1128,8 +1197,11 @@ let postMountReady = false
 // data has to survive sign-out per the brief.
 onSessionEvent((e) => {
   if (e === 'expired' || e === 'signed-out') {
+    bootstrapGeneration += 1
+    skipCloudHydrate = false  // next sign-in may hydrate
     cloudGroupsByClientId.clear()
     cloudBootstrapped = false
+    bootstrapInFlight = false
     cloudConflict.value = null
     cloudMerge.value = null
     cloudStatus.value = 'idle'
@@ -1269,6 +1341,7 @@ export interface UseGroupPersistence {
   cloudConflict: typeof cloudConflict
   cloudMerge: typeof cloudMerge
   tryBootstrapCloudSync: () => Promise<void>
+  noteUserWipe: () => void
   flushPendingCloudPush: () => Promise<void>
   flushLocalAutosave: () => void
   setCloudSyncEnabled: (v: boolean) => void
@@ -1293,6 +1366,7 @@ export function useGroupPersistence(): UseGroupPersistence {
     cloudConflict,
     cloudMerge,
     tryBootstrapCloudSync,
+    noteUserWipe,
     flushPendingCloudPush,
     flushLocalAutosave,
     setCloudSyncEnabled,
