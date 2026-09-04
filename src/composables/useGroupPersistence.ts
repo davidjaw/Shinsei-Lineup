@@ -484,6 +484,19 @@ const flushLocalAutosave = (): void => {
   writeBlobToStorage()
 }
 
+// Persist an in-flight debounced write now. Unlike flushLocalAutosave this
+// does not restore-from-disk first (that latch is for routes that never
+// mounted LineupBuilder) and is a no-op when nothing is pending — used by
+// pagehide so F5 / tab discard within the 800ms window does not lose edits.
+const flushPendingDebouncedWrite = (): void => {
+  if (!autosaveEnabled) return
+  if (debounceHandle == null) return
+  clearTimeout(debounceHandle)
+  debounceHandle = null
+  suppressWritesUntil = 0
+  writeBlobToStorage()
+}
+
 // Apply the blob currently in localStorage back into state. Used by the
 // cross-tab listener — when another tab saves, we re-read and reconcile.
 const applyBlobFromStorage = (): void => {
@@ -1326,6 +1339,11 @@ const enableAutosave = (): void => {
       applyBlobFromStorage()
     }
   }
+
+  // pagehide fires on F5, tab close, and mobile tab discard. beforeunload
+  // is unreliable on mobile; visibilitychange-to-hidden is too aggressive
+  // (app switch). Only flush when a debounce is actually armed.
+  window.addEventListener('pagehide', flushPendingDebouncedWrite)
 }
 
 export interface UseGroupPersistence {

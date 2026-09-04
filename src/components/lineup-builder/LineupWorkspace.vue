@@ -42,6 +42,7 @@
             @hero-drag-start="$emit('hero-drag-start', slot.role)"
             @hero-drag-end="$emit('hero-drag-end')"
             @hero-drop="$emit('hero-drop', slot.role)"
+            @hero-removed="$emit('hero-removed')"
           />
         </div>
       </div>
@@ -130,6 +131,7 @@ defineEmits<{
   (e: 'hero-drag-start', role: Role): void
   (e: 'hero-drag-end'): void
   (e: 'hero-drop', role: Role): void
+  (e: 'hero-removed'): void
   (e: 'select-hero-from-library', hero: Hero): void
   (e: 'select-skill-from-library', skill: Skill): void
   (e: 'edit-inventory'): void

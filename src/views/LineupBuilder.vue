@@ -51,6 +51,7 @@
           @hero-drag-start="(role) => dragSourceRole = role"
           @hero-drag-end="() => dragSourceRole = null"
           @hero-drop="handleHeroDrop"
+          @hero-removed="flushLocalAutosave"
           @select-hero-from-library="selectHeroFromLibrary"
           @select-skill-from-library="selectSkillFromDialog"
           @edit-inventory="startEditingInventory"
@@ -680,7 +681,7 @@ const onRemoveTeam = (idx: number) => {
   if (!removeTeamFromCurrent(idx)) return
   // Synchronously persist so an F5 / logout right after delete doesn't
   // lose the change (the autosave watcher's 800ms debounce would race
-  // page unload otherwise). Same pattern as the reset handler.
+  // page unload otherwise). Same pattern as the reset handler / slot X.
   flushLocalAutosave()
   if (wasLast) {
     ElMessage.info(`已刪除「${removedName}」，並自動建立一支空隊伍`)

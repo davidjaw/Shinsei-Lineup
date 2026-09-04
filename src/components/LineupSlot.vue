@@ -519,6 +519,7 @@ const emit = defineEmits([
   'hero-drag-start',
   'hero-drag-end',
   'hero-drop',
+  'hero-removed',
   'skill-drag-start',
   'skill-drag-end',
   'skill-slot-drop'
@@ -530,6 +531,9 @@ const removeHero = () => {
   emit('update:skill2', null)
   emit('update:breakthrough', 0)
   emit('update:bingxue', { direction: null, major: null, minors: [] })
+  // Parent flushes localStorage after the v-model writes above; the 800ms
+  // autosave debounce would otherwise lose this delete on an immediate F5.
+  emit('hero-removed')
 }
 
 const handleHeroDragStart = (event: DragEvent) => {
