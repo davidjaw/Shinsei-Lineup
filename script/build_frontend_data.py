@@ -17,6 +17,7 @@ Usage:
 import json
 import os
 import re
+import unicodedata
 import yaml
 from pathlib import Path
 
@@ -612,11 +613,129 @@ def _flatten_trait(jp_name: str, tr: dict) -> dict:
     }
 
     # Carry affinity info through to frontend for useTroopLevels
-    passive = tr.get("passive")
-    if isinstance(passive, dict) and passive.get("affinity"):
-        result["affinity"] = passive["affinity"]
+    aff = _affinity_from_canon(tr)
+    if aff:
+        result["affinity"] = aff
 
     return result
+
+
+# Override heroes carry CHT names (炮術II) while traits.yaml is keyed by JP
+# (砲術Ⅱ). Fold roman numerals and a few CHT/JP variants so lookup hits.
+_ROMAN_FOLD = {"Ⅰ": "I", "Ⅱ": "II", "Ⅲ": "III", "Ⅳ": "IV", "Ⅴ": "V"}
+_TRAIT_CHAR_FOLD = str.maketrans("炮鐵將輕", "砲鉄将軽")
+
+# Description aliases → canonical troop types (longest match first).
+_TROOP_ALIASES = (
+    ("足輕", "足輕"), ("足軽", "足輕"), ("槍兵", "足輕"),
+    ("弓兵", "弓兵"),
+    ("騎兵", "騎兵"),
+    ("鐵炮", "鐵炮"), ("鉄砲", "鐵炮"), ("鐵砲", "鐵炮"), ("鉄炮", "鐵炮"),
+    ("器械", "器械"), ("兵器", "器械"),
+)
+
+
+def _norm_trait_key(name: str) -> str:
+    if not name:
+        return ""
+    s = unicodedata.normalize("NFC", name)
+    for src, dst in _ROMAN_FOLD.items():
+        s = s.replace(src, dst)
+    return s.translate(_TRAIT_CHAR_FOLD)
+
+
+def _affinity_from_canon(canon: dict | None) -> dict | None:
+    if not isinstance(canon, dict):
+        return None
+    passive = canon.get("passive")
+    if isinstance(passive, dict) and passive.get("affinity"):
+        return passive["affinity"]
+    return None
+
+
+def _trait_affinity_index(traits_data: dict) -> dict:
+    """JP key, CHT name, and folded variants → canonical trait entry."""
+    index: dict[str, dict] = {}
+
+    def _add(key: str, entry: dict) -> None:
+        if key and key not in index:
+            index[key] = entry
+        nk = _norm_trait_key(key)
+        if nk and nk not in index:
+            index[nk] = entry
+
+    for jp_name, entry in traits_data.items():
+        if not isinstance(entry, dict):
+            continue
+        _add(jp_name, entry)
+        text = entry.get("text") if isinstance(entry.get("text"), dict) else {}
+        _add(text.get("name") or "", entry)
+        _add(entry.get("name") or "", entry)
+    return index
+
+
+def _parse_affinity_from_desc(desc: str, vars_dict: dict | None = None) -> dict | None:
+    """Pull troop affinity out of override descriptions like 部隊的騎兵、鐵炮等級+3."""
+    if not desc or ("等級" not in desc and "レベル" not in desc):
+        return None
+    text = desc
+    for k, v in (vars_dict or {}).items():
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            continue
+        rendered = str(int(v)) if float(v).is_integer() else str(v)
+        text = text.replace(f"{{var:{k}}}", rendered)
+
+    found: list[tuple[int, str]] = []
+    seen: set[str] = set()
+    for raw, canon in sorted(_TROOP_ALIASES, key=lambda x: -len(x[0])):
+        if canon in seen:
+            continue
+        pos = text.find(raw)
+        if pos >= 0:
+            found.append((pos, canon))
+            seen.add(canon)
+    troop_types = [canon for _, canon in sorted(found)]
+    if not troop_types:
+        return None
+
+    cap = 0
+    cap_m = re.search(r"(?:等級上限|レベル上限)\s*(?:增加|増加|[+＋])\s*(\d+)", text)
+    if cap_m:
+        cap = int(cap_m.group(1))
+    before_cap = re.split(r"等級上限|レベル上限", text, maxsplit=1)[0]
+    lv_m = re.search(
+        r"(?:等級|レベル)\s*(?:上升|増加|增加|[+＋])\s*(\d+)"
+        r"|(?:上升|増加|增加|[+＋])\s*(\d+)\s*級",
+        before_cap,
+    )
+    if not lv_m:
+        return None
+    return {
+        "troop_types": troop_types,
+        "level": int(lv_m.group(1) or lv_m.group(2)),
+        "level_cap_bonus": cap,
+    }
+
+
+def enrich_hero_trait_affinity(heroes: list[dict], traits_data: dict) -> None:
+    """Fill missing affinity on override traits via canonical lookup, then description."""
+    index = _trait_affinity_index(traits_data)
+    for h in heroes:
+        for t in h.get("traits") or []:
+            if t.get("affinity"):
+                continue
+            canon = None
+            for raw in (t.get("name_jp"), t.get("name")):
+                if not raw:
+                    continue
+                canon = index.get(raw) or index.get(_norm_trait_key(raw))
+                if canon:
+                    break
+            aff = _affinity_from_canon(canon)
+            if aff is None:
+                aff = _parse_affinity_from_desc(t.get("description") or "", t.get("vars"))
+            if aff:
+                t["affinity"] = aff
 
 
 def build_heroes(
@@ -859,18 +978,10 @@ def main():
         heroes = apply_hero_overrides(heroes, overrides["heroes"], hero_cfg_fn)
         override_count += len(overrides["heroes"])
 
-    # Enrich override-added hero traits with affinity from canonical traits.yaml.
-    # Override heroes have inline trait dicts that lack affinity; the canonical
-    # traits.yaml (populated by migration) has the structured data.
-    for h in heroes:
-        for t in h.get("traits") or []:
-            if t.get("affinity"):
-                continue
-            canon = traits_data.get(t.get("name_jp", "")) or traits_data.get(t.get("name", ""))
-            if canon and isinstance(canon, dict):
-                passive = canon.get("passive")
-                if isinstance(passive, dict) and passive.get("affinity"):
-                    t["affinity"] = passive["affinity"]
+    # Override heroes have inline trait dicts that lack affinity. Look up the
+    # canonical entry (folded CHT/JP + roman variants) then parse the
+    # description for unique traits like 飛龍在天 that were never crawled.
+    enrich_hero_trait_affinity(heroes, traits_data)
 
     # Post-process: normalize text, fix types, sort
     heroes, skills = postprocess(heroes, skills)
