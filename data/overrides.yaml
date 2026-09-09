@@ -2155,7 +2155,7 @@ skills:
     rarity: S
     target: 自身
     activation_rate: 100%
-    description: 戰鬥前{var:front_turns}回合，使自身受到的傷害降低{var:dmg_reduction}（{scale:統率}）。自身每次受到兵刃傷害，有{var:counter_chance}機率（{scale:統率}，隨我軍武將陣亡數增加而降低）對敵軍群體（2人）造成兵刃傷害（傷害率{var:dmg_rate}，額外{scale:統率}）。
+    description: 戰鬥前{var:front_turns}回合，使自身受到的傷害降低{var:dmg_reduction}（{scale:統率}）。自身每次受到兵刃傷害，有{var:counter_chance}機率（{scale:統率}，且存活的友軍數量越少，機率越低）對敵軍群體（2人）造成兵刃傷害（傷害率{var:dmg_rate}，額外{scale:統率}）。
     commander_description: 傷害率增加{var:commander_dmg_bonus}。
     brief_description: 前三回合減傷，受傷機率反打
     tags:
@@ -2166,7 +2166,7 @@ skills:
     - 條件觸發
     - 統率系
     - 大將技
-    raw_text: 肥前之熊 (S) 種類： 被動 | 兵刃群體 發動機率：-- 效果： 戰鬥前3回合，使自身受到的傷害降低12%->24%（受統率影響）。自身每次受到兵刃傷害，有15%->30%機率（受統率影響，隨我軍武將陣亡數增加而降低）對敵軍群體（2人）造成兵刃傷害（傷害率35%->70%，額外受統率影響） 大將技： 傷害率增加7%->14%
+    raw_text: 肥前之熊 (S) 種類： 被動 | 兵刃群體 發動機率：-- 效果： 戰鬥前3回合，使自身受到的傷害降低12%->24%（受統率影響）。自身每次受到兵刃傷害，有15%->30%機率（受統率影響，且存活的友軍數量越少，機率越低）對敵軍群體（2人）造成兵刃傷害（傷害率35%->70%，額外受統率影響） 大將技： 傷害率增加7%->14%
     vars:
       front_turns: 3
       dmg_reduction:
