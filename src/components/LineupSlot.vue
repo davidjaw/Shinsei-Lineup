@@ -408,44 +408,13 @@
       </div>
     </div>
 
-    <!-- Stats Editor Dialog -->
-    <el-dialog v-model="statsDialogVisible" title="自由屬性加點" width="360px" append-to-body align-center>
-      <div class="flex flex-col gap-3">
-        <div class="text-xs text-gray-500 flex justify-between">
-          <span>剩餘可分配點數</span>
-          <span class="font-bold" :class="localFreeRemaining < 0 ? 'text-red-500' : 'text-focus'">{{ localFreeRemaining }} / {{ freePointsTotal }}</span>
-        </div>
-        <div class="space-y-2">
-          <div v-for="(label, key) in statLabels" :key="key" class="flex items-center gap-1.5">
-            <div class="w-8 text-xs font-bold text-gray-600">{{ label }}</div>
-            <div class="text-xs text-gray-400 w-8 text-right">{{ heroBaseStats[key] }}</div>
-            <button class="px-1.5 py-0.5 text-xs rounded border hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-              :disabled="localBonus[key] <= 0"
-              @click="adjustBonus(key, -10)">-10</button>
-            <button class="px-1.5 py-0.5 text-xs rounded border hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-              :disabled="localBonus[key] <= 0"
-              @click="adjustBonus(key, -1)">-</button>
-            <div class="w-10 text-center text-xs font-bold" :class="localBonus[key] > 0 ? 'text-green-600' : localBonus[key] < 0 ? 'text-red-500' : 'text-gray-400'">
-              {{ localBonus[key] > 0 ? '+' : '' }}{{ localBonus[key] }}
-            </div>
-            <button class="px-1.5 py-0.5 text-xs rounded border hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-              :disabled="localFreeRemaining <= 0"
-              @click="adjustBonus(key, 1)">+</button>
-            <button class="px-1.5 py-0.5 text-xs rounded border hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-              :disabled="localFreeRemaining < 10"
-              @click="adjustBonus(key, 10)">+10</button>
-            <div class="w-8 text-xs font-bold text-right text-gray-800">{{ heroBaseStats[key] + localBonus[key] }}</div>
-          </div>
-        </div>
-        <button class="text-xs text-gray-400 hover:text-red-500 self-end" @click="resetBonus">重置</button>
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="statsDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveStats">確認修改</el-button>
-        </span>
-      </template>
-    </el-dialog>
+    <StatsEditorDialog
+      v-model="statsDialogVisible"
+      :hero="hero"
+      :stats="stats"
+      :breakthrough="breakthrough"
+      @update:stats="(s) => $emit('update:stats', s)"
+    />
   </div>
 </template>
 
@@ -457,6 +426,7 @@ import SkillDescription from './SkillDescription.vue'
 import BriefDescription from './BriefDescription.vue'
 import SkillTypeMark from './SkillTypeMark.vue'
 import BingxueSection from './BingxueSection.vue'
+import StatsEditorDialog from './StatsEditorDialog.vue'
 import type { BingxueActive } from '../composables/useLineups'
 import { Hero, Skill, Trait, useData } from '../composables/useData'
 import { useTemplateParser } from '../composables/useTemplateParser'
@@ -576,41 +546,9 @@ const freePointsRemaining = computed(() => {
   return freePointsTotal.value - used
 })
 
-// Local editing state
-const localBonus = ref<Record<string, number>>({})
-
-const localFreeRemaining = computed(() => {
-  let used = 0
-  for (const k of STAT_KEYS) used += Math.max(0, localBonus.value[k] ?? 0)
-  return freePointsTotal.value - used
-})
-
 const openStatsEditor = () => {
   if (!props.hero) return
-  const b: Record<string, number> = {}
-  for (const k of STAT_KEYS) b[k] = statBonus.value[k]
-  localBonus.value = b
   statsDialogVisible.value = true
-}
-
-const adjustBonus = (key: string, delta: number) => {
-  const current = localBonus.value[key] ?? 0
-  const newVal = current + delta
-  if (newVal < 0) return
-  if (delta > 0 && delta > localFreeRemaining.value) return
-  localBonus.value[key] = newVal
-}
-
-const resetBonus = () => {
-  for (const k of STAT_KEYS) localBonus.value[k] = 0
-}
-
-const saveStats = () => {
-  const base = heroBaseStats.value
-  const result: Record<string, number> = {}
-  for (const k of STAT_KEYS) result[k] = base[k] + (localBonus.value[k] ?? 0)
-  emit('update:stats', result)
-  statsDialogVisible.value = false
 }
 
 const statLabels: Record<string, string> = {

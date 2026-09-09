@@ -12,6 +12,8 @@
       :role-name="role === 'main' ? '大將' : '副將'"
       :hero="roleData.hero"
       :stats="roleData.stats"
+      :breakthrough="roleData.breakthrough"
+      @update:stats="(s) => $emit('update:stats', s)"
     />
   </el-drawer>
 </template>
@@ -27,5 +29,6 @@ defineProps<{
 }>()
 defineEmits<{
   (e: 'update:modelValue', v: boolean): void
+  (e: 'update:stats', stats: RoleData['stats']): void
 }>()
 </script>

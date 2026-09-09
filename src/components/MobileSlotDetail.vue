@@ -1,10 +1,14 @@
 <template>
   <div class="flex flex-col h-full bg-slate-50 p-4 overflow-y-auto">
     
-    <!-- Header + stats table -->
+    <!-- Header + stats table (tap opens free-point editor) -->
     <div class="mb-4">
       <div class="font-bold text-lg text-gray-800 mb-3">{{ roleName }} - {{ hero?.name }}</div>
-      <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+      <div
+        class="bg-white rounded-lg p-3 shadow-sm border border-gray-100 cursor-pointer active:bg-slate-50"
+        :title="`點擊調整自由加點 · 剩餘 ${freePointsRemaining} 點`"
+        @click="openStatsEditor"
+      >
         <div class="grid grid-cols-3 gap-2">
           <div
             v-for="key in STAT_KEYS"
@@ -18,6 +22,7 @@
             <span v-else class="text-[10px] text-transparent mt-0.5 select-none">·</span>
           </div>
         </div>
+        <div class="text-[10px] text-gray-400 text-center mt-2">點擊調整自由加點 · 剩餘 {{ freePointsRemaining }} 點</div>
       </div>
     </div>
 
@@ -41,14 +46,23 @@
       </div>
     </div>
 
+    <StatsEditorDialog
+      v-model="statsDialogVisible"
+      :hero="hero"
+      :stats="stats"
+      :breakthrough="breakthrough"
+      @update:stats="(s) => emit('update:stats', s)"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { PropType, ref, watch } from 'vue'
+import { PropType, computed, ref, watch } from 'vue'
 import { Hero, Trait } from '../composables/useData'
 import { getTraitColor } from '../constants/gameData'
 import { useTemplateParser } from '../composables/useTemplateParser'
+import type { RoleData } from '../composables/useLineups'
+import StatsEditorDialog from './StatsEditorDialog.vue'
 
 const { parseTextToPlain } = useTemplateParser()
 const resolveTraitDesc = (trait: any) => {
@@ -59,8 +73,13 @@ const resolveTraitDesc = (trait: any) => {
 const props = defineProps({
   roleName: String,
   hero: Object as PropType<Hero | null>,
-  stats: { type: Object as PropType<any>, required: true }
+  stats: { type: Object as PropType<any>, required: true },
+  breakthrough: { type: Number, default: 0 },
 })
+
+const emit = defineEmits<{
+  (e: 'update:stats', stats: RoleData['stats']): void
+}>()
 
 const STAT_KEYS = ['lea', 'val', 'int', 'pol', 'cha', 'spd'] as const
 const STAT_LABELS: Record<typeof STAT_KEYS[number], string> = {
@@ -68,6 +87,19 @@ const STAT_LABELS: Record<typeof STAT_KEYS[number], string> = {
 }
 const bonus = (key: typeof STAT_KEYS[number]): number =>
   (props.stats?.[key] ?? 0) - (props.hero?.stats?.[key] ?? 0)
+
+const freePointsTotal = computed(() => 50 + (props.breakthrough ?? 0) * 10)
+const freePointsRemaining = computed(() => {
+  let used = 0
+  for (const k of STAT_KEYS) used += Math.max(0, bonus(k))
+  return freePointsTotal.value - used
+})
+
+const statsDialogVisible = ref(false)
+const openStatsEditor = () => {
+  if (!props.hero) return
+  statsDialogVisible.value = true
+}
 
 
 // Trait Logic (Similar to LineupSlot but simplified for display/toggle)
