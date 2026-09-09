@@ -1,9 +1,10 @@
 <template>
   <el-dialog
-    v-model="visible"
+    :model-value="ctx !== null"
     title="偵測到尚未同步的編組變更"
     width="600px"
     :close-on-click-modal="false"
+    :close-on-press-escape="false"
     :show-close="false"
     align-center
   >
@@ -195,13 +196,6 @@ const { heroes, skills } = useData()
 const busy = ref(false)
 const choice = ref<ChoiceValue>('append')
 const ctx = computed(() => cloudMerge.value)
-
-const visible = computed({
-  get: () => ctx.value !== null,
-  set: (v) => {
-    if (!v) resolveMergeCancel()
-  },
-})
 
 const labeledGroups = (blob: ShareableData | undefined): ShareableGroup[] => {
   if (!blob) return []

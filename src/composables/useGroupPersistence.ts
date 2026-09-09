@@ -475,7 +475,11 @@ const scheduleWrite = (): void => {
 // suppressed by these decision paths (to prevent a redundant write of state
 // we're about to apply); without this explicit flush, the write never
 // happens and localStorage stays frozen at the pre-decision state.
+//
+// Restore first: non-lineup routes never mount LineupBuilder, so workspaces
+// may still be module-init defaults. Writing those would overwrite saved 編組.
 const flushLocalAutosave = (): void => {
+  restoreFromLocalStorage()
   if (debounceHandle != null) {
     clearTimeout(debounceHandle)
     debounceHandle = null
@@ -748,6 +752,10 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   const userId = user.value?.id
   if (!userId) return // shouldn't happen given isLoggedIn — defensive
 
+  // Hydrate still-pristine workspaces first — setCloudSyncEnabled can
+  // re-bootstrap without LineupBuilder ever mounting.
+  restoreFromLocalStorage()
+
   // Fast-path emptiness is sampled NOW (sync). The 2x2 re-samples after
   // the list await so a wipe/edit during the fetch is not decided on a
   // stale empty flag. We read groups directly (not via buildBlob) so the
@@ -758,9 +766,10 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   )
 
   // Fast path: this device + user has been bootstrapped before AND local
-  // still has actual content. Restore the cloud meta so subsequent PATCHes
-  // carry the optimistic-lock preconditions we last observed; skip the 2x2
-  // / merge dialog entirely. If a competing device pushed while we were
+  // still has actual content AND every non-empty workspace overlaps the
+  // persisted meta map. Restore the cloud meta so subsequent PATCHes carry
+  // the optimistic-lock preconditions we last observed; skip the 2x2 /
+  // merge dialog entirely. If a competing device pushed while we were
   // offline, the next push hits a precondition mismatch and surfaces the
   // conflict dialog naturally.
   //
@@ -770,15 +779,29 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   // localStorage never got the post-cloud-fetch write. In either case we
   // must fall through to the full 2x2, otherwise the empty local would
   // silently overwrite cloud on the next autosave push.
+  //
+  // A workspace whose live ids are disjoint from the persisted map (v5
+  // share restore mints ids in the active mode only) is a 2x2/merge case
+  // — otherwise the other mode's overlap would skip the prompt and the
+  // next push stale-deletes the replaced mode's cloud 編組. Genuine
+  // per-group deletes still overlap via remaining ids, so stale-delete
+  // after a real bootstrap is unchanged.
   const persisted = loadPersistedCloudMeta(userId)
   if (persisted && !localActuallyEmpty) {
-    cloudGroupsByClientId.clear()
-    for (const [clientId, m] of Object.entries(persisted)) {
-      cloudGroupsByClientId.set(clientId, m)
+    const everyNonEmptyOverlaps = CATALOG_MODES.every((m) => {
+      const groups = workspaces[m].groups
+      if (isEmptyGroupSet(groups)) return true
+      return groups.some((g) => Boolean(g.id && persisted[g.id]))
+    })
+    if (everyNonEmptyOverlaps) {
+      cloudGroupsByClientId.clear()
+      for (const [clientId, m] of Object.entries(persisted)) {
+        cloudGroupsByClientId.set(clientId, m)
+      }
+      cloudStatus.value = 'idle'
+      markBootstrapped()
+      return
     }
-    cloudStatus.value = 'idle'
-    markBootstrapped()
-    return
   }
 
   // Cold start (or local-wiped re-bootstrap). Run the 2x2.
@@ -1158,6 +1181,7 @@ const resolveConflictForceOverwrite = async (): Promise<void> => {
   } catch (e) {
     console.warn('[cloud-sync] force overwrite failed:', e)
     cloudStatus.value = 'error'
+    throw e
   }
 }
 
@@ -1243,10 +1267,17 @@ onSessionEvent((e) => {
 })
 
 // Public: attempt a restore from localStorage. Returns true if anything was
-// restored. Caller (LineupBuilder.vue onMounted) is responsible for the
-// ordering: share-link / OAuth recovery first, then this. If the state has
-// already been mutated by either of those earlier paths, this is a no-op.
+// restored. Once per session — a later pass would treat a post-wipe default
+// as pristine and re-apply the pre-wipe blob. LineupBuilder restores first
+// then overlays share/OAuth; the latch makes a later flushLocalAutosave a
+// write-only so it cannot re-apply disk over the overlay. The pristine skip
+// still fills only untouched workspaces if this runs after a partial hydrate.
+let localRestoreAttempted = false
+
 const restoreFromLocalStorage = (): boolean => {
+  if (localRestoreAttempted) return false
+  localRestoreAttempted = true
+
   const raw = readStoredRaw()
   if (!raw) return false
 

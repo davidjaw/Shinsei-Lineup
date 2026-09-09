@@ -1,9 +1,10 @@
 <template>
   <el-dialog
-    v-model="visible"
+    :model-value="ctx !== null"
     title="編組同步衝突"
     width="520px"
     :close-on-click-modal="false"
+    :close-on-press-escape="false"
     :show-close="false"
     align-center
   >
@@ -68,15 +69,6 @@ const { findGroupById } = useGroups()
 const busy = ref(false)
 const ctx = computed(() => cloudConflict.value)
 
-// el-dialog needs a writable model. Open whenever a conflict is queued; the
-// resolution handlers null it out, which auto-closes via the computed setter.
-const visible = computed({
-  get: () => ctx.value !== null,
-  set: (v) => {
-    if (!v) resolveConflictDefer()
-  },
-})
-
 const localGroup = computed(() =>
   ctx.value ? findGroupById(ctx.value.localGroupId) ?? null : null,
 )
@@ -117,11 +109,18 @@ const serverUpdatedLabel = computed(() => {
   }
 })
 
+const failReason = (e: unknown): string =>
+  e instanceof Error && e.message ? e.message : '請再試一次'
+
 const onUseServer = async () => {
   busy.value = true
   try {
     await resolveConflictUseServer()
-    ElMessage.success('已採用雲端版本')
+    if (cloudConflict.value === null) {
+      ElMessage.success('已採用雲端版本')
+    }
+  } catch (e) {
+    ElMessage.error(`採用雲端失敗：${failReason(e)}`)
   } finally {
     busy.value = false
   }
@@ -131,7 +130,11 @@ const onForceOverwrite = async () => {
   busy.value = true
   try {
     await resolveConflictForceOverwrite()
-    ElMessage.success('已以本地版本覆寫雲端')
+    if (cloudConflict.value === null) {
+      ElMessage.success('已以本地版本覆寫雲端')
+    }
+  } catch (e) {
+    ElMessage.error(`覆寫雲端失敗：${failReason(e)}`)
   } finally {
     busy.value = false
   }
