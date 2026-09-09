@@ -35,6 +35,10 @@ const currentBannerId = ref<string | null>(null)
 const drawsByBanner = ref<Map<string, GachaDraw[]>>(new Map())
 const drawsLoadedAt = new Map<string, number>()
 const isLoading = ref(false)
+// Per-banner generation: loadDraws and local mutations increment so a stale
+// in-flight list cannot setDraws over a newer prepend, delete, or fetch.
+const drawFetchGen = new Map<string, number>()
+let loadsInFlight = 0
 
 // ---------- pure helpers (also used by spectator view with its own draws) ----------
 
@@ -70,6 +74,8 @@ const resetState = (): void => {
   currentBannerId.value = null
   drawsByBanner.value = new Map()
   drawsLoadedAt.clear()
+  // Keep drawFetchGen so a stale in-flight list from the previous session
+  // cannot pass the gen check after the next login restarts at 1.
 }
 onSessionEvent((e) => {
   if (e === 'signed-out' || e === 'expired') resetState()
@@ -92,6 +98,22 @@ const setDraws = (bannerId: string, draws: GachaDraw[]): void => {
 const isDrawCacheFresh = (bannerId: string): boolean => {
   const loaded = drawsLoadedAt.get(bannerId)
   return loaded != null && Date.now() - loaded < DRAWS_TTL_MS
+}
+
+const bumpDrawGen = (bannerId: string): number => {
+  const next = (drawFetchGen.get(bannerId) ?? 0) + 1
+  drawFetchGen.set(bannerId, next)
+  return next
+}
+
+const beginLoad = (): void => {
+  loadsInFlight++
+  isLoading.value = true
+}
+
+const endLoad = (): void => {
+  loadsInFlight = Math.max(0, loadsInFlight - 1)
+  if (loadsInFlight === 0) isLoading.value = false
 }
 
 // ---------- derived ----------
@@ -159,7 +181,7 @@ const markedPerHero = computed<Map<string, number>>(() => {
 // ---------- actions ----------
 
 const loadBanners = async (): Promise<void> => {
-  isLoading.value = true
+  beginLoad()
   try {
     banners.value = await listMyBanners()
     if (banners.value.length === 0) {
@@ -171,18 +193,20 @@ const loadBanners = async (): Promise<void> => {
     const matched = remembered && banners.value.find(b => b.id === remembered)
     currentBannerId.value = matched ? matched.id : banners.value[0].id
   } finally {
-    isLoading.value = false
+    endLoad()
   }
 }
 
 const loadDraws = async (bannerId: string, force = false): Promise<void> => {
   if (!force && isDrawCacheFresh(bannerId)) return
-  isLoading.value = true
+  const gen = bumpDrawGen(bannerId)
+  beginLoad()
   try {
     const draws = await apiListDraws(bannerId)
+    if (drawFetchGen.get(bannerId) !== gen) return
     setDraws(bannerId, draws)
   } finally {
-    isLoading.value = false
+    endLoad()
   }
 }
 
@@ -218,6 +242,7 @@ const deleteBanner = async (id: string): Promise<void> => {
   next.delete(id)
   drawsByBanner.value = next
   drawsLoadedAt.delete(id)
+  drawFetchGen.delete(id)
   if (currentBannerId.value === id) {
     currentBannerId.value = banners.value[0]?.id ?? null
     if (currentBannerId.value) await loadDraws(currentBannerId.value)
@@ -231,6 +256,8 @@ const logDraw = async (hero: Hero, rarity = 3): Promise<void> => {
   // that have name_jp = null (or absent). Same convention as profiles inv_h.
   const heroJp = hero.name_jp || hero.name
   const draw = await apiAppendDraw({ banner_id: bannerId, hero_jp: heroJp, rarity })
+  // Invalidate in-flight list fetches so they cannot replace this prepend.
+  bumpDrawGen(bannerId)
   // Insert at index 0 (newest first ordering matches server query).
   const next = new Map(drawsByBanner.value)
   next.set(bannerId, [draw, ...(next.get(bannerId) ?? [])])
@@ -277,6 +304,7 @@ const deleteDraw = async (drawId: number): Promise<void> => {
   const cache = new Map(drawsByBanner.value)
   cache.set(bannerId, next)
   drawsByBanner.value = cache
+  bumpDrawGen(bannerId)
   try {
     await apiDeleteDraw(drawId)
   } catch (e) {

@@ -6,10 +6,8 @@
 //
 // Same PostgREST-via-fetch pattern as profiles.ts.
 
-import { SUPABASE_URL, fetchWithTimeout, isSupabaseConfigured, restHeaders } from './supabase'
+import { SUPABASE_URL, fetchWithTimeout, restHeaders } from './supabase'
 import { requireAuth } from './auth'
-
-export const isGachaLogEnabled = isSupabaseConfigured
 
 export interface GachaBanner {
   id: string

@@ -149,7 +149,7 @@
 
             <!-- Tabs: picker / log+stats merged -->
             <el-tabs v-model="activeTab" class="gacha-tabs">
-              <el-tab-pane label="快速登錄" name="picker">
+              <el-tab-pane label="快速登錄" name="picker" lazy>
                 <div class="flex flex-col gap-2">
                   <div
                     v-if="currentDraws.length > 0"
@@ -161,7 +161,7 @@
                       <span class="text-xs text-gray-400 ml-auto">右鍵或長按開啟動作選單</span>
                     </div>
                     <GachaLogList
-                      :draws="currentDraws"
+                      :draws="pickerDraws"
                       :hero-by-jp="heroByJp"
                       flat
                       horizontal
@@ -181,7 +181,7 @@
                   </div>
                 </div>
               </el-tab-pane>
-              <el-tab-pane :label="`紀錄與統計 (${currentDraws.length})`" name="log">
+              <el-tab-pane :label="`紀錄與統計 (${currentDraws.length})`" name="log" lazy>
                 <div class="flex flex-col">
                   <div v-if="currentDraws.length > 0" class="flex flex-col gap-2 mb-3">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -460,6 +460,9 @@ const topHeroes = computed<{ jp: string; count: number }[]>(() =>
   computeTopHeroes(drawsPerHero.value),
 )
 
+const PICKER_STRIP_LIMIT = 50
+const pickerDraws = computed(() => currentDraws.value.slice(0, PICKER_STRIP_LIMIT))
+
 const editingPool = ref(false)
 const poolDraftCht = ref<string[]>([])
 const savingPool = ref(false)
@@ -517,15 +520,6 @@ const hydrate = async (): Promise<void> => {
 
 onMounted(hydrate)
 watch(isLoggedIn, (now) => { if (now) void hydrate() })
-
-watch(currentBannerId, async (id) => {
-  if (!id || !isLoggedIn.value) return
-  try {
-    await loadDraws(id)
-  } catch (e) {
-    ElMessage.error(`載入失敗：${(e as Error).message}`)
-  }
-})
 
 const onSelectHero = async (hero: Hero): Promise<void> => {
   try {
