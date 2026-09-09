@@ -133,7 +133,7 @@
           }"
           @click="handleClick(hero)"
         >
-          <HeroCard :hero="hero" :show-aptitude="mode !== 'manage'" :compact="mode === 'manage'" />
+          <HeroCard :hero="hero" :compact="mode === 'manage'" />
           
           <!-- Used Label (Select Mode) -->
           <div v-if="mode === 'select' && isUsed(hero.name)" class="absolute inset-0 flex items-center justify-center z-20">

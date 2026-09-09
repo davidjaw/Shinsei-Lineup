@@ -80,7 +80,7 @@ defineProps({
 // Inline SVG placeholder — singlefile build forbids external requests, and the
 // previously-used placeholder.com domain returns 404 / blocks CSP intermittently.
 const IMG_PLACEHOLDER =
-  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 120'><rect width='90' height='120' fill='%23e5e7eb'/><text x='45' y='65' text-anchor='middle' font-family='sans-serif' font-size='10' fill='%239ca3af'>No Img</text></svg>"
+  "data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 120'><rect width='90' height='120' fill='%23e5e7eb'/><text x='45' y='65' text-anchor='middle' font-family='sans-serif' font-size='10' fill='%239ca3af'>No%20Img</text></svg>"
 
 const handleImageError = (e: Event) => {
   (e.target as HTMLImageElement).src = IMG_PLACEHOLDER

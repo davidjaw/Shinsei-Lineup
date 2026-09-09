@@ -1,7 +1,6 @@
 <template>
   <div 
-    class="flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow relative"
-    :class="variant === 'lineup' ? 'h-auto w-auto' : 'h-full w-full'"
+    class="flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow relative h-full w-full"
   >
     <!-- Rarity Indicator (Top Right) -->
     <div v-if="!compact" class="absolute top-0 right-0 z-10">
@@ -17,8 +16,7 @@
 
     <!-- Image Container -->
     <div 
-      class="relative bg-gray-100 flex justify-center overflow-hidden"
-      :class="variant === 'lineup' ? 'h-[350px] aspect-[3/4]' : 'w-full aspect-[3/4]'"
+      class="relative bg-gray-100 flex justify-center overflow-hidden w-full aspect-[3/4]"
     >
       <img 
         :src="hero.portrait" 
@@ -57,10 +55,6 @@ const props = defineProps({
     type: Object as PropType<Hero>,
     required: true
   },
-  variant: {
-    type: String as PropType<'lineup' | 'library'>,
-    default: 'library' // Default to library to be safe for lists
-  },
   compact: {
     type: Boolean,
     default: false
@@ -71,7 +65,14 @@ const props = defineProps({
   }
 })
 
+// Inline SVG placeholder — singlefile build forbids external requests, and the
+// previously-used placeholder.com domain returns 404 / blocks CSP intermittently.
+const IMG_PLACEHOLDER =
+  "data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 120'><rect width='90' height='120' fill='%23e5e7eb'/><text x='45' y='65' text-anchor='middle' font-family='sans-serif' font-size='10' fill='%239ca3af'>No%20Img</text></svg>"
+
 const handleImageError = (e: Event) => {
-  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=No+Img'
+  const img = e.target as HTMLImageElement
+  if (img.src === IMG_PLACEHOLDER || img.src.startsWith('data:')) return
+  img.src = IMG_PLACEHOLDER
 }
 </script>
