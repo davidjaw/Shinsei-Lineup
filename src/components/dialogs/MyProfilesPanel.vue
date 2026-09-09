@@ -193,6 +193,7 @@ import { getOrCreateProfileShareSlug } from '../../composables/useProfiles'
 import { relativeTime } from '../../lib/time'
 import { loadShare } from '../../lib/share'
 import { makeSerializer } from '../../lib/lineupSerialize'
+import { normalizeHash } from '../../lib/initial-hash'
 import { useData } from '../../composables/useData'
 import { useInventory } from '../../composables/useInventory'
 import { useActiveProfile } from '../../composables/useActiveProfile'
@@ -389,7 +390,7 @@ const parseShareInput = (input: string): { slug?: string; base64?: string } => {
   let payload = input.trim()
   const hashIdx = payload.indexOf('#')
   if (hashIdx >= 0) payload = payload.slice(hashIdx + 1)
-  payload = payload.replace(/^\//, '')
+  payload = normalizeHash(payload)
   if (!payload) throw new Error('連結為空')
   if (payload.startsWith('s/')) return { slug: payload.slice(2) }
   return { base64: payload }

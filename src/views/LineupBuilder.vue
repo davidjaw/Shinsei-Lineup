@@ -86,6 +86,7 @@
       v-model="mobileDetailVisible"
       :role="currentDetailRole"
       :role-data="currentDetailRole ? currentLineup[currentDetailRole] : null"
+      @update:stats="updateMobileDetailStats"
     />
 
     <SkillSelectDialog
@@ -134,6 +135,13 @@
   <SkillDragPreview :skill="draggingSkill" :pos="dragPos" />
 </template>
 
+<script lang="ts">
+// First-load share/auth consume. Survives the catch-all remount under AppLayout
+// (`#s/slug` → `#/`) so the second onMounted does not auto-open changelog.
+// Later in-session remounts still open it unless this first-load hash was consumed.
+let initialHashConsumed = false
+</script>
+
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -158,7 +166,7 @@ import GachaSpectatorView from '../components/GachaSpectatorView.vue'
 import { useData, Hero, Skill } from '../composables/useData'
 
 import { ShareableData, ShareableLineup } from '../constants/gameData'
-import { useLineups, defaultStats, isEmptyTeam, type Lineup } from '../composables/useLineups'
+import { useLineups, defaultStats, isEmptyTeam, type Lineup, type RoleData } from '../composables/useLineups'
 import { useGroups } from '../composables/useGroups'
 import { MAX_TEAMS_PER_GROUP } from '../types/group'
 import { useGroupPersistence } from '../composables/useGroupPersistence'
@@ -178,7 +186,7 @@ import { snapshotTeam } from '../lib/lineup'
 import type { ImportConflictResolution } from '../types/group'
 import { useChangelog } from '../composables/useChangelog'
 import { useProfiles } from '../composables/useProfiles'
-import { consumeInitialHash } from '../lib/initial-hash'
+import { consumeInitialHash, normalizeHash } from '../lib/initial-hash'
 
 const router = useRouter()
 
@@ -315,6 +323,12 @@ const openMobileDetail = (role: Role) => {
   mobileDetailVisible.value = true
 }
 
+const updateMobileDetailStats = (stats: RoleData['stats']) => {
+  const role = currentDetailRole.value
+  if (!role) return
+  currentLineup.value[role].stats = stats
+}
+
 const handleSkillSlotClick = (role: Role, slotIdx: number) => {
   currentSelectingSkillRole.value = role
   currentSelectingSkillSlot.value = slotIdx
@@ -340,11 +354,11 @@ const handleSkillSlotDrop = (targetRole: Role, sourceRole: Role, sourceSlotIdx: 
 }
 
 // Assign a hero into a role. When the hero actually changes, reset that role's
-// stats to the new hero's base and clear breakthrough — the previous values
-// were relative to the old hero and no longer apply. This reset lives here (the
-// explicit user-assignment path) rather than in a LineupSlot watch, so that
-// switching teams or restoring saved data — which also change props.hero —
-// never wipe the user's 突破/屬性.
+// stats to the new hero's base and clear breakthrough / 戰法 / 兵學 — the
+// previous values were relative to the old hero and no longer apply. This reset
+// lives here (the explicit user-assignment path) rather than in a LineupSlot
+// watch, so that switching teams or restoring saved data — which also change
+// props.hero — never wipe the user's 突破/屬性/戰法/兵學.
 const assignHeroToRole = (role: Role, hero: Hero) => {
   const slot = currentLineup.value[role]
   if (slot.hero?.name === hero.name) return
@@ -353,6 +367,9 @@ const assignHeroToRole = (role: Role, hero: Hero) => {
   // single source of truth lives in useLineups (no divergent literals).
   slot.stats = { ...defaultStats, ...hero.stats }
   slot.breakthrough = 0
+  slot.skill1 = null
+  slot.skill2 = null
+  slot.bingxue = { direction: null, major: null, minors: [] }
 }
 
 const selectHeroFromLibrary = (hero: Hero) => {
@@ -912,14 +929,15 @@ watch(sessionExpiredCount, () => {
   ElMessage.warning('登入已過期，請重新登入以同步雲端資料')
 })
 
-// Returns true if a competing UI was shown (toast / rename dialog) — caller
-// uses this to suppress the changelog auto-open so it doesn't overlay them.
-const initFromHash = async (): Promise<boolean> => {
-  // Use the hash captured at module-load time (see lib/initial-hash.ts) —
-  // vue-router rewrites location.hash on init by prepending a `/`, which
-  // breaks URLSearchParams (auth) and slug detection (share).
+// consumed: hash was share/auth (suppress changelog). flushShare: a lineup
+// / group share (or OAuth recovery) mutated the graph and must hit disk
+// before the user can F5 on `#/`.
+const initFromHash = async (): Promise<{ consumed: boolean; flushShare: boolean }> => {
+  // Use the hash captured at module-load time (see lib/initial-hash.ts).
+  // vue-router rewrites `#s/…` → `#/s/…`; normalizeHash strips that slash
+  // so slug / auth / legacy base64 parsers see a stable payload.
   const initialHash = consumeInitialHash()
-  const rawHash = initialHash.replace(/^#/, '')
+  const rawHash = normalizeHash(initialHash)
 
   // 1. OAuth callback first — must consume the auth hash before share-loading.
   // handleAuthCallback cleans the URL via history.replaceState; we then sync
@@ -933,17 +951,20 @@ const initFromHash = async (): Promise<boolean> => {
       // First-time prompt: ask new users to pick a display name. AppLayout
       // owns the rename dialog and prefills the input when it opens.
       if (needsDisplayName.value) dialogs.open('rename')
+      // Flag before replace — catch-all remount's onMounted must not open changelog.
+      initialHashConsumed = true
       router.replace('/')
-      return true
+      return { consumed: true, flushShare: recovered }
     }
   } catch (e) {
     ElMessage.error(`登入失敗：${(e as Error).message}`)
+    initialHashConsumed = true
     router.replace('/')
-    return true
+    return { consumed: true, flushShare: false }
   }
 
   // 2. Share link (slug or legacy base64).
-  if (rawHash && rawHash !== '/') {
+  if (rawHash) {
     try {
       let data: ShareableData
       if (rawHash.startsWith('s/')) {
@@ -953,31 +974,37 @@ const initFromHash = async (): Promise<boolean> => {
         data = JSON.parse(json) as ShareableData
       }
       // v3 = gacha-log snapshot — render spectator UI instead of restoring
-      // into the lineup builder. Anything that v3 doesn't carry (lineups,
-      // inventory) stays untouched, so the URL is purely a viewer experience.
+      // into the lineup builder. Keep `#/s/slug` so spectator refresh works.
+      // Do not flush lineup autosave — this blob does not mutate 編組.
       const maybeBlob = data as Partial<SpectatorBlob>
       if (maybeBlob?.v === 3 && maybeBlob?.kind === 'gacha_log') {
         gachaSpectatorBlob.value = maybeBlob as SpectatorBlob
-        return true
+        initialHashConsumed = true
+        return { consumed: true, flushShare: false }
       }
       restoreFromBlob(data)
+      // Overlay writes slot 0; local restore may still be on team 2/3.
+      // Idempotent for replaceGroups, which already resets the index.
+      currentTeamIndex.value = 0
       ElMessage.success('已載入分享的配置')
+      initialHashConsumed = true
       router.replace('/')
+      return { consumed: true, flushShare: true }
     } catch (e) {
       ElMessage.error('無效的分享連結')
+      initialHashConsumed = true
       router.replace('/')
+      return { consumed: true, flushShare: false }
     }
-    return true
   }
-  return false
+  return { consumed: false, flushShare: false }
 }
 
 // Autosave + restore — survives reload for both anon and signed-in users.
-// restoreFromLocalStorage is a no-op if a share link or OAuth recovery has
-// already mutated state (those paths win by convention — explicit intent
-// beats ambient autosave). enableAutosave installs the deep watcher + the
-// cross-tab BroadcastChannel listener. tryBootstrapCloudSync runs the
-// anon→signed-in handoff (2x2 silent paths + the explicit merge dialog).
+// Restore local 編組 first, then overlay share / OAuth recovery on top.
+// enableAutosave installs the deep watcher + the cross-tab BroadcastChannel
+// listener. tryBootstrapCloudSync runs the anon→signed-in handoff (2x2
+// silent paths + the explicit merge dialog).
 const {
   restoreFromLocalStorage,
   enableAutosave,
@@ -997,11 +1024,15 @@ watch(autosaveHealingReport, (keys) => {
 })
 
 onMounted(async () => {
-  const consumedHash = await initFromHash()
-  // restoreFromLocalStorage fills only still-pristine workspaces — if a
-  // share link, OAuth recovery snapshot, or anything else already populated
-  // a mode in this tick, that mode is a no-op.
+  // Local 編組 / 庫存 first so a one-team share overlays slot 0 instead of
+  // hydrating onto the empty module-init default (which would drop extras).
   restoreFromLocalStorage()
+  const { consumed: consumedHash, flushShare } = await initFromHash()
+  if (consumedHash) initialHashConsumed = true
+  // Share / recovery already mutated memory. Flush now so F5 on `#/` (after
+  // router.replace) rereads the merged graph — the 800ms autosave debounce
+  // would otherwise leave disk at the pre-share snapshot.
+  if (flushShare) flushLocalAutosave()
   // Fire-and-forget: the auto-load sequencing only depends on initFromHash
   // (share/recovery should win if present). No reason to block the changelog
   // open on a Supabase round-trip — they don't conflict, and `consumedHash`
@@ -1020,8 +1051,9 @@ onMounted(async () => {
   void tryBootstrapCloudSync()
   // Auto-open changelog only when nothing else is competing for the user's
   // attention. Triggers for both first-time visitors and returning users on
-  // a release day (LATEST_VERSION mismatch).
-  if (hasUnseenChangelog.value && !consumedHash) {
+  // a release day (LATEST_VERSION mismatch). Skip if this first-load hash
+  // was share/auth — including the AppLayout remount after router.replace.
+  if (hasUnseenChangelog.value && !(consumedHash || initialHashConsumed)) {
     dialogs.open('changelog')
   }
 })

@@ -4,7 +4,7 @@
 // here is load-bearing — keep this import above createRouter().
 // See src/lib/initial-hash.ts for the full explanation.
 import '../lib/initial-hash'
-import { peekInitialHash } from '../lib/initial-hash'
+import { peekInitialHash, isShareOrAuthHash } from '../lib/initial-hash'
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 import AppLayout from '../layouts/AppLayout.vue'
 import LineupBuilder from '../views/LineupBuilder.vue'
@@ -85,22 +85,19 @@ const routes: RouteRecordRaw[] = [
   // Catch-all is critical: legacy share links (#<base64>), short share links
   // (#s/<slug>), and OAuth callbacks (#access_token=...) all hit the router with
   // a non-`/` path. Send them through LineupBuilder (no layout) so its onMounted
-  // handler consumes the hash via initFromHash() before the URL is normalized
-  // to `#/`.
+  // handler consumes the hash via initFromHash().
   //
-  // Guard differentiates real shares from typed garbage paths by inspecting
-  // the captured hash: real shares come in as `#abc...` (no leading `/`),
-  // while typed-by-hand URLs like `/#/foo` capture as `#/foo`. The latter
-  // would otherwise leave the user on a chromeless LineupBuilder until F5,
-  // since hash-only navigation doesn't re-fire onMounted to detect the
-  // invalid blob. peek-not-consume so initFromHash can still process real
-  // shares after the route mounts.
+  // Guard differentiates real share/auth blobs from typed garbage so `/#/foo`
+  // does not leave the user on a chromeless LineupBuilder. vue-router rewrites
+  // `#s/x` → `#/s/x`, so a leading `/` is no longer a garbage signal — use
+  // isShareOrAuthHash (slug / auth / slash-free base64). peek-not-consume so
+  // initFromHash can still process the blob after the route mounts.
   {
     path: '/:pathMatch(.*)*',
     component: LineupBuilder,
     beforeEnter: () => {
       const raw = peekInitialHash()
-      if (!raw || raw === '#' || raw.startsWith('#/')) {
+      if (!isShareOrAuthHash(raw)) {
         return { path: '/' }
       }
       return true

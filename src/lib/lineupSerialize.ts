@@ -180,6 +180,9 @@ const findSkillByKey = (skills: Skill[], key: string): Skill | undefined =>
 // Per-role hydrate with healing. Mutates `role` in place.
 //
 // Behaviour:
+//   - hero key absent/empty (JSON drops empty-hero keys) → reset entire
+//     role to emptyRole(), skip remaining fields. Same ghost-data outcome
+//     as an unresolved hero if leftover occupant fields were kept.
 //   - hero JP key fails to resolve → reset entire role to emptyRole(), skip
 //     remaining fields. Prevents the legacy bug where a null hero kept the
 //     previous occupant's skills/stats/breakthrough/bingxue, which then
@@ -197,16 +200,19 @@ const restoreRoleInto = (
   const safeL = l as unknown as Record<string, unknown>
 
   const hName = safeL[prefix] as string | undefined
-  if (hName) {
-    const h = findHeroByKey(deps.heroes, hName)
-    if (h) {
-      role.hero = h
-    } else {
-      report.push(`hero:${hName}`)
-      // Reset the whole role — see comment above.
-      Object.assign(role, emptyRole())
-      return
-    }
+  if (!hName) {
+    Object.assign(role, emptyRole())
+    return
+  }
+
+  const h = findHeroByKey(deps.heroes, hName)
+  if (h) {
+    role.hero = h
+  } else {
+    report.push(`hero:${hName}`)
+    // Reset the whole role — see comment above.
+    Object.assign(role, emptyRole())
+    return
   }
 
   const s1Name = safeL[`${prefix}_s1`] as string | undefined
@@ -282,18 +288,23 @@ export const hydrateShareableTeam = (
   return { team, healed: Array.from(new Set(report)) }
 }
 
-// In-place hydrate of an existing Lineup (used by the v2 legacy path which
-// mutates the active group's teams[] rather than wholesale-replacing).
+// Rebuild a mapped team from empty and assign onto the existing array slot
+// (used by the v1/v2 path and the v3 1-group/1-team overlay). The share is
+// the source of truth for that team — merging into the previous occupant's
+// RoleData objects left omitted vice slots as ghosts. Extra local teams
+// past the share length are left as-is.
 const hydrateTeamInPlace = (
   target: Lineup,
   l: ShareableLineup,
+  idx: number,
   deps: SerializeDeps,
   report: string[],
 ): void => {
-  if (l.name) target.name = l.name
-  restoreRoleInto('m', target.main, l, deps, report)
-  restoreRoleInto('v1', target.vice1, l, deps, report)
-  restoreRoleInto('v2', target.vice2, l, deps, report)
+  const rebuilt = buildTeamFromShareable(l, idx, deps, report)
+  target.name = rebuilt.name
+  target.main = rebuilt.main
+  target.vice1 = rebuilt.vice1
+  target.vice2 = rebuilt.vice2
 }
 
 // Inventory restore — converts JP keys back to CHT names. Drops keys that
@@ -360,6 +371,21 @@ export interface ApplyBlobDeps extends SerializeDeps {
 
 export type ApplyBlobScope = 'active' | 'all'
 
+// Overlay share teams onto the active group's existing slots. Grows an
+// empty group via ensureTeamCount; never shrinks or renames the group.
+const overlayTeamsInPlace = (
+  teams: ShareableLineup[],
+  deps: ApplyBlobDeps,
+  report: string[],
+): void => {
+  if (teams.length === 0) return
+  deps.ensureTeamCount(teams.length)
+  teams.forEach((l, i) => {
+    if (i >= deps.lineups.length) return
+    hydrateTeamInPlace(deps.lineups[i], l, i, deps, report)
+  })
+}
+
 const applyInventory = (data: ShareableData, deps: ApplyBlobDeps): void => {
   if (data.inventory) {
     deps.ownedHeroes.value = toChtArray(data.inventory, (k) =>
@@ -423,15 +449,21 @@ export const applyBlobToState = (
   const groupsForActive = data.workspaces
     ? shareableGroupsForMode(data, mode)
     : (data.groups ?? [])
-  if (groupsForActive.length > 0) {
+  const singleGroupTeams = groupsForActive.length === 1
+    ? (groupsForActive[0].teams ?? [])
+    : null
+  if (singleGroupTeams && singleGroupTeams.length === 1) {
+    // v3 分享全部 of a 1-team group (and any 1-group/1-team envelope):
+    // overlay that team onto slot 0 like v2. Do not replaceGroups — extra
+    // local teams and the local group name stay. Multi-team / multi-group
+    // blobs still wipe-and-replace (real 編組 backup).
+    overlayTeamsInPlace(singleGroupTeams, deps, report)
+  } else if (groupsForActive.length > 0) {
     applyGroupsToActive(groupsForActive, deps, report)
   } else if (!data.workspaces && data.lineups && data.lineups.length > 0) {
-    // v1/v2 legacy — in-place mutate the active group's teams.
-    deps.ensureTeamCount(data.lineups.length)
-    data.lineups.forEach((l, i) => {
-      if (i >= deps.lineups.length) return
-      hydrateTeamInPlace(deps.lineups[i], l, deps, report)
-    })
+    // v1/v2 — overlay mapped teams in the active group; extra local teams
+    // are kept. Rebuild-from-empty so omitted roles do not merge.
+    overlayTeamsInPlace(data.lineups, deps, report)
   }
 
   return {

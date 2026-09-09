@@ -5,6 +5,7 @@
 
 import { SUPABASE_URL, SUPABASE_KEY, fetchWithTimeout } from './supabase'
 import { AUTHOR_NAME_MAX } from './displayName'
+import { normalizeHash } from './initial-hash'
 
 export type OAuthProvider = 'google' | 'github'
 
@@ -107,11 +108,11 @@ export const signInWithProvider = (provider: OAuthProvider): void => {
 // Returns true if the hash was an auth callback we consumed (and cleared).
 // Throws if the callback indicates a provider-side error (cancelled, denied).
 //
-// `rawHash` lets the caller pass a hash captured before vue-router's hash
-// normalization (which would otherwise prepend a `/` and break URLSearchParams
-// parsing). Falls back to live location.hash for non-router callers.
+// `rawHash` lets the caller pass a hash captured at module load. Falls back
+// to live location.hash for non-router callers. Leading `#/` from vue-router
+// is stripped via normalizeHash so URLSearchParams sees `access_token`.
 export const handleAuthCallback = (rawHash?: string): boolean => {
-  const hash = (rawHash ?? location.hash).replace(/^#/, '')
+  const hash = normalizeHash(rawHash ?? location.hash)
   if (!hash || (!hash.includes('access_token=') && !hash.includes('error='))) {
     return false
   }
