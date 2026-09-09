@@ -5,10 +5,8 @@
 //
 // Same PostgREST-via-fetch pattern as share.ts.
 
-import { SUPABASE_URL, fetchWithTimeout, isSupabaseConfigured, restHeaders } from './supabase'
+import { SUPABASE_URL, fetchWithTimeout, restHeaders } from './supabase'
 import { requireAuth } from './auth'
-
-export const isProfilesEnabled = isSupabaseConfigured
 
 export interface Profile {
   id: string

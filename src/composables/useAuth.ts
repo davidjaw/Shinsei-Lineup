@@ -5,7 +5,6 @@ import {
   updateDisplayName as updateDisplayNameLib,
   onSessionEvent,
 } from '../lib/auth'
-import { formatUserTag } from '../lib/displayName'
 import { fetchMyBan } from '../lib/bans'
 
 // Single shared reactive session for the whole app. Initialized from
@@ -74,12 +73,6 @@ export function useAuth() {
       const u = session.value?.user
       if (!u) return ''
       return u.display_name?.trim() || u.email.split('@')[0] || 'user'
-    }),
-    displayTag: computed(() => {
-      const u = session.value?.user
-      if (!u) return ''
-      const raw = u.display_name?.trim() || u.email.split('@')[0] || 'user'
-      return formatUserTag(raw, u.id)
     }),
     /** True if user has never set display_name — used to trigger first-time prompt. */
     needsDisplayName: computed(() => {
