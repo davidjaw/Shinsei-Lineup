@@ -51,6 +51,8 @@ data/cfg/cfg_current.json
 .pytest_cache/
 ai-doc/
 .playwright-mcp/
+.grok/
+_freeze/
 
 # Supabase CLI local state (per-machine: project ref, pooler URL, version pins)
 supabase/.temp/
