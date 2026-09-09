@@ -8,14 +8,11 @@
 // optimistic voting deltas, contributor cache, sort/filter selections.
 
 import { ref, computed } from 'vue'
-import type { Lineup } from './useLineups'
-import { snapshotTeam } from '../lib/lineup'
 import { getSession } from '../lib/auth'
 import {
   listHeroSets,
   listVariantsInSet,
   listContributors,
-  submitVariant as remoteSubmit,
   withdrawVariant as remoteWithdraw,
   setVariantVote,
   clearVariantVote,
@@ -35,8 +32,16 @@ import { adminListBannedUserIds, adminSetUserBanned } from '../lib/bans'
 
 export type HeroSetSort = 'total' | 'recent' | 'latest' | 'count'
 
+// Server RPC is still `ORDER BY total_vote_count DESC LIMIT p_limit`. Page
+// until a short page or this cap so client sorts (recent/latest/count) see
+// more than the top 60 by total votes.
+const HERO_SET_PAGE_SIZE = 60
+const HERO_SET_MAX_PAGES = 5
+const VARIANTS_TTL_MS = 45 * 1000
+
 const heroSets = ref<HeroSetSummary[]>([])
 const variantsBySet = ref<Map<string, Variant[]>>(new Map())
+const variantsLoadedAt = new Map<string, number>()
 const contributorsByVariant = ref<Map<string, VariantContributor[]>>(new Map())
 const myVotes = ref<Map<string, VoteDirection>>(new Map())
 const myContributions = ref<Set<string>>(new Set())
@@ -48,20 +53,27 @@ const variantSort = ref<VariantSort>('votes')
 
 const loadingSets = ref(false)
 const loadingVariants = ref(false)
-const lastError = ref<string | null>(null)
+const setsError = ref<string | null>(null)
+const variantsError = ref<string | null>(null)
 
 export function useVariants() {
 
   const refreshHeroSets = async (): Promise<void> => {
     if (!isVariantsEnabled()) return
     loadingSets.value = true
-    lastError.value = null
+    setsError.value = null
     try {
-      heroSets.value = await listHeroSets()
+      const rows: HeroSetSummary[] = []
+      for (let page = 0; page < HERO_SET_MAX_PAGES; page++) {
+        const chunk = await listHeroSets(HERO_SET_PAGE_SIZE, page * HERO_SET_PAGE_SIZE)
+        rows.push(...chunk)
+        if (chunk.length < HERO_SET_PAGE_SIZE) break
+      }
+      heroSets.value = rows
       myVotes.value = await listMyVariantVotes()
       myContributions.value = await listMyContributions()
     } catch (e) {
-      lastError.value = e instanceof Error ? e.message : String(e)
+      setsError.value = e instanceof Error ? e.message : String(e)
     } finally {
       loadingSets.value = false
     }
@@ -70,8 +82,12 @@ export function useVariants() {
   const selectHeroSet = async (hash: string | null): Promise<void> => {
     activeHeroSetHash.value = hash
     if (!hash) return
-    // Cache hit: skip refetch on re-open. Caller can force via refreshActive.
-    if (variantsBySet.value.has(hash)) return
+    const loadedAt = variantsLoadedAt.get(hash)
+    if (
+      variantsBySet.value.has(hash)
+      && loadedAt != null
+      && Date.now() - loadedAt < VARIANTS_TTL_MS
+    ) return
     await refreshActive()
   }
 
@@ -79,16 +95,37 @@ export function useVariants() {
     const hash = activeHeroSetHash.value
     if (!hash || !isVariantsEnabled()) return
     loadingVariants.value = true
+    variantsError.value = null
     try {
       const rows = await listVariantsInSet(hash, variantSort.value)
       const next = new Map(variantsBySet.value)
       next.set(hash, rows)
       variantsBySet.value = next
+      variantsLoadedAt.set(hash, Date.now())
     } catch (e) {
-      lastError.value = e instanceof Error ? e.message : String(e)
+      variantsError.value = e instanceof Error ? e.message : String(e)
     } finally {
       loadingVariants.value = false
     }
+  }
+
+  // Drop cached Variant[] so the next select hits the network.
+  // Omit hash to clear every HeroSet. If the cleared set is currently open,
+  // refetch immediately so the L2 pane is not left stale.
+  const invalidateHeroSet = async (hash?: string): Promise<void> => {
+    if (!hash) {
+      variantsBySet.value = new Map()
+      variantsLoadedAt.clear()
+    } else {
+      if (variantsBySet.value.has(hash)) {
+        const next = new Map(variantsBySet.value)
+        next.delete(hash)
+        variantsBySet.value = next
+      }
+      variantsLoadedAt.delete(hash)
+    }
+    const active = activeHeroSetHash.value
+    if (active && (!hash || hash === active)) await refreshActive()
   }
 
   const fetchContributors = async (variantId: string): Promise<VariantContributor[]> => {
@@ -204,27 +241,6 @@ export function useVariants() {
     }
   }
 
-  const submitFromLineup = async (
-    lineup: Lineup,
-    authorName: string | null,
-    teamName?: string | null,
-  ): Promise<{ variantId: string; isNew: boolean; heroSetHash: string }> => {
-    const team = snapshotTeam(lineup)
-    const result = await remoteSubmit(team, authorName, teamName)
-    // Mark as own contribution so the vote-restriction kicks in immediately.
-    myContributions.value = new Set([...myContributions.value, result.variantId])
-    invalidateContributors(result.variantId)
-    // Cheapest correct refresh: invalidate the affected HeroSet so the next
-    // open sees the new variant (or new contributor on the existing one).
-    const variantsNext = new Map(variantsBySet.value)
-    variantsNext.delete(result.heroSetHash)
-    variantsBySet.value = variantsNext
-    // Refresh the Level-1 grid so the new HeroSet (or the bumped stats on an
-    // existing one) is visible without a manual reload.
-    void refreshHeroSets()
-    return result
-  }
-
   const withdraw = async (variantId: string): Promise<{ deleted: boolean }> => {
     const result = await remoteWithdraw(variantId)
     const nextContributions = new Set(myContributions.value)
@@ -337,7 +353,7 @@ export function useVariants() {
     try {
       bannedUserIds.value = new Set(await adminListBannedUserIds())
     } catch (e) {
-      lastError.value = e instanceof Error ? e.message : String(e)
+      console.warn('[variants] banned-user list failed:', e)
     }
   }
 
@@ -368,15 +384,16 @@ export function useVariants() {
     variantSort,
     loadingSets,
     loadingVariants,
-    lastError,
+    setsError,
+    variantsError,
     // actions
     refreshHeroSets,
     refreshActive,
     selectHeroSet,
     fetchContributors,
     invalidateContributors,
+    invalidateHeroSet,
     vote,
-    submitFromLineup,
     withdraw,
     report,
     setNameHidden,

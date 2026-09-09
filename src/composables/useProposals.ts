@@ -36,7 +36,7 @@ const loadingMine = ref(false)
 const lastError = ref<string | null>(null)
 
 export function useProposals() {
-  const { invalidateContributors } = useVariants()
+  const { invalidateContributors, invalidateHeroSet } = useVariants()
 
   const refreshMine = async (): Promise<void> => {
     if (!isProposalsEnabled()) return
@@ -64,6 +64,7 @@ export function useProposals() {
       try {
         const result = await submitVariant(team, authorName, capTeamName(opts.name))
         invalidateContributors(result.variantId)
+        await invalidateHeroSet(result.heroSetHash)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         if (msg.includes('account banned') || msg.includes('已被封鎖')) throw e
@@ -89,11 +90,13 @@ export function useProposals() {
           capTeamName(updated.name),
         )
         invalidateContributors(result.variantId)
+        await invalidateHeroSet(result.heroSetHash)
       } else {
         const variantId = await findVariantForTeam(updated.team)
         if (variantId) {
           await withdrawVariant(variantId)
           invalidateContributors(variantId)
+          await invalidateHeroSet()
         }
       }
     } catch (e) {
@@ -112,6 +115,7 @@ export function useProposals() {
         if (variantId) {
           await withdrawVariant(variantId)
           invalidateContributors(variantId)
+          await invalidateHeroSet()
         }
       } catch (e) {
         console.warn('variant sync on remove failed:', e)

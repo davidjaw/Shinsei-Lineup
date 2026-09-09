@@ -39,7 +39,13 @@
           <!-- Default state: full-width grid of HeroSet cards. -->
           <div v-if="!activeHeroSetHash" v-loading="loadingSets" class="min-h-[240px]">
             <p
-              v-if="!loadingSets && filteredHeroSets.length === 0"
+              v-if="!loadingSets && setsError && heroSets.length === 0"
+              class="empty-state empty-state--error"
+            >
+              載入失敗，請稍後再試。
+            </p>
+            <p
+              v-else-if="!loadingSets && filteredHeroSets.length === 0"
               class="empty-state"
             >
               {{ heroSets.length === 0
@@ -159,7 +165,16 @@
               </header>
 
               <div v-loading="loadingVariants" class="variants-grid">
-                <p v-if="!loadingVariants && activeVariants.length === 0" class="empty-state empty-state--inline">
+                <p
+                  v-if="!loadingVariants && variantsError && activeVariants.length === 0"
+                  class="empty-state empty-state--inline empty-state--error"
+                >
+                  載入失敗，請稍後再試。
+                </p>
+                <p
+                  v-else-if="!loadingVariants && activeVariants.length === 0"
+                  class="empty-state empty-state--inline"
+                >
                   這個英雄組合還沒有變體。
                 </p>
                 <VariantCard
@@ -192,7 +207,13 @@
           </div>
           <div v-else v-loading="loadingMine" class="min-h-[160px]">
             <p
-              v-if="!loadingMine && myProposals.length === 0"
+              v-if="!loadingMine && mineError && myProposals.length === 0"
+              class="empty-state empty-state--error"
+            >
+              載入失敗，請稍後再試。
+            </p>
+            <p
+              v-else-if="!loadingMine && myProposals.length === 0"
               class="empty-state"
             >
               還沒有任何提案。在配將模擬完成隊伍後，從側欄「另存為精選隊伍」建立。
@@ -260,13 +281,13 @@ const {
   heroSets, sortedHeroSets, activeHeroSetHash, activeHeroSet, activeVariants,
   contributorsByVariant,
   myVotes, myContributions, heroSetSort, variantSort,
-  loadingSets, loadingVariants,
+  loadingSets, loadingVariants, setsError, variantsError,
   refreshHeroSets, selectHeroSet, fetchContributors,
   vote, withdraw, report, setNameHidden,
   bannedUserIds, refreshBannedUsers, setUserBanned,
 } = useVariants()
 const {
-  myProposals, loadingMine,
+  myProposals, loadingMine, lastError: mineError,
   refreshMine, togglePublic, remove,
 } = useProposals()
 
@@ -498,11 +519,13 @@ const onAdminBan = async (payload: { userId: string; banned: boolean }) => {
 const dialogs = useDialogs()
 const { groups, currentGroup, currentGroupIndex, appendTeamToGroup } = useGroups()
 const { addTeamFromSnapshot } = useLineups()
-const { flushLocalAutosave } = useGroupPersistence()
+const { flushLocalAutosave, restoreFromLocalStorage } = useGroupPersistence()
 const exportDialogVisible = dialogs.useDialog('export-team-to-group')
 const exportSource = ref<ExportSource | null>(null)
 
 const onImportVariantToGroup = (variant: Variant): void => {
+  // LineupBuilder may never have mounted — hydrate saved 編組 before picker.
+  restoreFromLocalStorage()
   const t = variant.team
   const name = [t.main?.hero?.name, t.vice1?.hero?.name, t.vice2?.hero?.name]
     .filter(Boolean).join(' + ') || '精選變體'
@@ -869,5 +892,8 @@ const onDelete = async (p: Proposal): Promise<void> => {
 .empty-state--inline {
   grid-column: 1 / -1;
   padding: 60px 0;
+}
+.empty-state--error {
+  color: #b91c1c;
 }
 </style>
