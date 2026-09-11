@@ -88,6 +88,9 @@ export interface Skill {
   // Historical names this skill replaced (e.g. fixed typos). Profile/inventory
   // lookups treat these as alternate keys so saved references still resolve.
   aliases?: string[];
+  // Official cfg.json numeric id (Sialia). Missing on override-only entries.
+  cfg_id?: number;
+
   type: string;
   tags: string[];
   rarity: string;
@@ -154,6 +157,9 @@ export interface Hero {
   name: string
   name_jp?: string | null
   aliases?: string[]
+  // Official cfg.json numeric id (Sialia). Missing on override-only entries.
+  cfg_id?: number
+
   faction: string
   clan?: string
   cost: number

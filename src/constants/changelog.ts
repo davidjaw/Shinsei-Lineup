@@ -36,6 +36,15 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.0',
+    date: '2026-09-11',
+    entries: [
+      { tag: 'feat', text: '可從官方圖鑑分享網址導入庫存，並切換到庫存模式' },
+      { tag: 'feat', text: '支援貼上包含「快來幫我配將吧！...」的完整分享文案，自動擷取 snapshot_id' },
+      { tag: 'data', text: '補上甲斐弓騎兵·拓' },
+    ],
+  },
+  {
     version: '0.4.8',
     date: '2026-08-29',
     entries: [
@@ -48,6 +57,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       { tag: 'fix', text: '從隊伍格子刪除武將後立刻存檔；關閉分頁時也會寫出尚未存下的變更' },
     ],
   },
+
   {
     version: '0.4.7',
     date: '2026-08-28',

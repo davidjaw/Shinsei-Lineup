@@ -2,6 +2,9 @@ import { defineConfig, type PluginOption, type ViteDevServer } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 import { spawn } from 'node:child_process'
+import type { IncomingMessage } from 'node:http'
+import { fetchSialiaSnapshot, SNAPSHOT_ID_RE } from './src/lib/handbookSialia'
+
 
 // Press `d` in the dev terminal to re-run the Python data build and reload.
 // Avoids having to ctrl+c and `npm run dev` again after editing data/scripts.
@@ -73,12 +76,73 @@ function injectProdCsp(): PluginOption {
   }
 }
 
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  const raw = Buffer.concat(chunks).toString('utf8').trim()
+  if (!raw) return {}
+  return JSON.parse(raw)
+}
+
+
+
+// Dev-only: browser cannot call Sialia (CORS). Prod uses the Supabase
+// edge function `handbook-snapshot`.
+function handbookSnapshotProxy(): PluginOption {
+  return {
+    name: 'handbook-snapshot-proxy',
+    apply: 'serve',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use('/api/handbook-snapshot', (req, res) => {
+        void (async () => {
+          const send = (status: number, body: unknown) => {
+            res.statusCode = status
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(body))
+          }
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 204
+            res.end()
+            return
+          }
+          if (req.method !== 'POST') {
+            send(405, { error: 'method not allowed' })
+            return
+          }
+          let snapshotId = ''
+          try {
+            const body = (await readJsonBody(req)) as { snapshot_id?: unknown }
+            snapshotId = typeof body.snapshot_id === 'string' ? body.snapshot_id.trim() : ''
+          } catch {
+            send(400, { error: 'invalid json' })
+            return
+          }
+          if (!SNAPSHOT_ID_RE.test(snapshotId)) {
+            send(400, { error: '無效的 snapshot_id' })
+            return
+          }
+          try {
+            const snap = await fetchSialiaSnapshot(snapshotId)
+            send(200, snap)
+          } catch (e) {
+            send(502, { error: e instanceof Error ? e.message : '無法連線官方圖鑑' })
+          }
+        })()
+      })
+    },
+  }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
     viteSingleFile(),
     rebuildDataShortcut(),
+    handbookSnapshotProxy(),
+
     injectProdCsp(),
   ],
   resolve: {

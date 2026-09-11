@@ -31,6 +31,8 @@
         @unload-profile="onUnloadProfile"
         @goto-profiles="router.push({ name: 'profiles' })"
         @import-from-link="dialogs.open('import-from-link')"
+        @import-handbook="dialogs.open('import-handbook')"
+
       />
       <PageHeader
         v-else
@@ -69,6 +71,14 @@
          from every route, not just the lineup builder. -->
     <ChangelogDialog v-model="changelogDialogVisible" />
     <AuthDialog v-model="authDialogVisible" @sign-in="onSignIn" />
+    <ImportHandbookDialog
+      ref="handbookDialogRef"
+      v-model="importHandbookVisible"
+      :is-logged-in="isLoggedIn"
+      :active-profile-name="activeProfileName"
+      @import="onImportHandbook"
+    />
+
   </div>
 </template>
 
@@ -84,6 +94,8 @@ import MergeOnSignInDialog from '../components/dialogs/MergeOnSignInDialog.vue'
 import CloudConflictDialog from '../components/dialogs/CloudConflictDialog.vue'
 import ChangelogDialog from '../components/dialogs/ChangelogDialog.vue'
 import AuthDialog from '../components/dialogs/AuthDialog.vue'
+import ImportHandbookDialog, { type ImportHandbookPayload } from '../components/dialogs/ImportHandbookDialog.vue'
+
 import type { UserMenuCmd } from '../components/layout/UserControls.vue'
 import { useLineups } from '../composables/useLineups'
 import { useInventory } from '../composables/useInventory'
@@ -144,7 +156,9 @@ const {
   saveInventory,
   ownedHeroes,
   ownedSkills,
+  showOwnedOnly,
 } = useInventory()
+
 
 watch(() => route.name, (name) => {
   if (name !== 'lineup') isCompactView.value = false
@@ -154,18 +168,21 @@ const { isLoggedIn, displayName, user, signIn, signOut, updateDisplayName } = us
 const {
   activeProfile, activeProfileName, applyProfile, unloadProfile, syncActiveProfile, clearActiveProfile,
 } = useActiveProfile()
-const { profiles, refresh: refreshProfiles } = useProfiles()
+const { profiles, refresh: refreshProfiles, markUserTouched } = useProfiles()
 const dialogs = useDialogs()
 const { hasUnseen: hasUnseenChangelog, changelogDialogVisible } = useChangelog()
 const { heroes, skills } = useData()
 const { flushPendingCloudPush, flushLocalAutosave, snapshotForRecovery } = useGroupPersistence()
 
 const authDialogVisible = dialogs.useDialog('auth')
+const importHandbookVisible = dialogs.useDialog('import-handbook')
+const handbookDialogRef = ref<{ setCommitting: (v: boolean) => void } | null>(null)
 
 // OAuth full-page redirect — snapshot in-progress lineup so the post-redirect
 // mount can restore it. Snapshot itself is harmless from non-lineup routes
 // (it just captures the current state, which on those routes is whatever
 // the user last had in the builder).
+
 const onSignIn = (provider: Parameters<typeof signIn>[0]) => {
   authDialogVisible.value = false
   snapshotForRecovery()
@@ -241,6 +258,55 @@ const onSaveInventoryToNew = async (name: string) => {
     ElMessage.error(`建立失敗：${(e as Error).message}`)
   }
 }
+
+const onImportHandbook = async (payload: ImportHandbookPayload) => {
+  if (isEditingInventory.value) {
+    handbookDialogRef.value?.setCommitting(false)
+    ElMessage.warning('請先儲存或取消庫存編輯')
+    return
+  }
+  try {
+    if (payload.action === 'create') {
+      const name = payload.name?.trim()
+      if (!name) throw new Error('請輸入配置名稱')
+      const created: Profile = await createProfile({
+        name,
+        inv_h: payload.inv_h,
+        inv_s: payload.inv_s,
+      })
+      applyProfile(created)
+      void refreshProfiles().catch(() => { /* swallow */ })
+    } else {
+      const active = activeProfile.value
+      if (payload.syncActiveProfile && active) {
+        await updateProfileInventory(active.id, payload.inv_h, payload.inv_s)
+        syncActiveProfile({
+          ...active,
+          inv_h: payload.inv_h,
+          inv_s: payload.inv_s,
+          updated_at: new Date().toISOString(),
+        })
+        void refreshProfiles().catch(() => { /* swallow */ })
+      }
+      ownedHeroes.value = payload.chtHeroes
+      ownedSkills.value = payload.chtSkills
+      markUserTouched()
+      showOwnedOnly.value = true
+    }
+    flushLocalAutosave()
+    dialogs.close()
+
+    const unmatched = payload.unmatchedHeroes + payload.unmatchedSkills
+    const extra = unmatched > 0 ? `，略過 ${unmatched} 筆未收錄` : ''
+    ElMessage.success(
+      `已匯入 ${payload.chtHeroes.length} 武將、${payload.chtSkills.length} 戰法，已切換到庫存模式（自由模式編組仍保留）${extra}`,
+    )
+  } catch (e) {
+    handbookDialogRef.value?.setCommitting(false)
+    ElMessage.error(`匯入失敗：${(e as Error).message}`)
+  }
+}
+
 
 const renameDialogVisible = dialogs.useDialog('rename')
 const renameInput = ref('')

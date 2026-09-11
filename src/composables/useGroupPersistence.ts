@@ -1365,6 +1365,8 @@ const enableAutosave = (): void => {
       if (cloudMerge.value || cloudConflict.value) return
       const { active } = useDialogs()
       if (active.value === 'import-from-link') return
+      if (active.value === 'import-handbook') return
+
       if (active.value === 'export-team-to-group') return
       suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
       applyBlobFromStorage()

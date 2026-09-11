@@ -57,6 +57,10 @@
               <el-dropdown-item command="edit-inventory" divided>
                 <el-icon class="mr-1"><Edit /></el-icon> 編輯目前庫存…
               </el-dropdown-item>
+              <el-dropdown-item command="import-handbook">
+                <el-icon class="mr-1"><Link /></el-icon> 從網址導入庫存…
+              </el-dropdown-item>
+
               <el-dropdown-item command="goto-profiles">
                 <el-icon class="mr-1"><Setting /></el-icon> 管理角色配置…
               </el-dropdown-item>
@@ -124,6 +128,15 @@
             庫存模式
           </button>
         </div>
+        <el-button
+          plain
+          class="!rounded-sm !m-0"
+          @click="onImportHandbook"
+        >
+          <el-icon class="mr-1"><Link /></el-icon>
+          從網址導入庫存
+        </el-button>
+
       </div>
 
       <div class="flex-1 min-h-0 overflow-y-auto py-1">
@@ -240,6 +253,8 @@ const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'select', idx: number): void
   (e: 'remove-team', idx: number): void
+  (e: 'import-handbook'): void
+
   (e: 'add-team'): void
   (e: 'share'): void
   (e: 'export-to-group'): void
@@ -268,6 +283,11 @@ const onProfileVisibleChange = (visible: boolean) => {
   if (visible) void refreshProfiles().catch(() => { /* swallow */ })
 }
 
+const onImportHandbook = () => {
+  emit('import-handbook')
+  emit('update:modelValue', false)
+}
+
 const onProfileCommand = (cmd: string) => {
   if (isEditingInventory.value && (cmd === 'unload' || cmd.startsWith('apply:'))) {
     ElMessage.warning('請先儲存或取消庫存編輯')
@@ -279,6 +299,8 @@ const onProfileCommand = (cmd: string) => {
   } else if (cmd === 'edit-inventory') {
     startEditingInventory()
     emit('update:modelValue', false)
+  } else if (cmd === 'import-handbook') {
+    onImportHandbook()
   } else if (cmd === 'goto-profiles') {
     router.push({ name: 'profiles' })
     emit('update:modelValue', false)
@@ -293,6 +315,7 @@ const onProfileCommand = (cmd: string) => {
     ElMessage.success(`已套用「${p.name}」`)
   }
 }
+
 
 const onGroupCommand = async (cmd: string) => {
   if (cmd.startsWith('switch:')) {

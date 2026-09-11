@@ -1,6 +1,12 @@
 skills:
   回山倒海:
     rarity: A
+  百戰錬磨:
+    cfg_id: 20116
+    aliases:
+    - 百戰磨煉
+    - 百戰煉磨
+
   同盟姻親:
     name: 同盟姻親
     type: 主動
@@ -719,6 +725,10 @@ skills:
     name: 三河武士
     type: 兵種
     rarity: S
+    cfg_id: 20193
+    aliases:
+    - 三河武士隊
+
     target: 自軍全體
     activation_rate: 100%
     description: 將足輕進階為忠勇雙全的三河武士。 戰鬥中，使自軍全體統率增加{var:stat_buff}； 自軍全體累計受到3次普通攻擊後（每次成功發動後所需次數+1），下回合開始時觸發1次不屈：恢復自軍全體兵力（恢復率{var:recovery_rate}，{scale:統率}）。
@@ -775,6 +785,49 @@ skills:
           target_selection: random
     is_event_skill: true
     _action: add
+  甲斐弓騎兵·拓:
+    name: 甲斐弓騎兵·拓
+    type: 兵種
+    rarity: S
+    target: 自軍全體
+    activation_rate: 100%
+    description: 將弓兵進階為射技精妙的甲斐弓騎兵。部隊行軍速度增加{var:speed_increase}。 自軍全體各自首個主動戰法發動率增加{var:skill_rate_increase}（準備型戰法增加{var:prep_skill_rate_increase}）。
+      一條信龍統領時，發動率增加值受速度影響。
+    brief_description: 弓兵進階，提升行軍與發動率
+    tags:
+    - 增益
+    - 兵種
+    - 提升屬性
+    - 速度系
+    raw_text: 甲斐弓騎兵·拓 (S) 種類： 弓兵兵種戰法 | 增益 發動機率： 效果： 將弓兵進階為射技精妙的甲斐弓騎兵：部隊行軍速度提高5%→50%，我軍全體各自首個主動戰法的發動幾率增加（4%→8%，若需要準備則增加6%→12%）；若一條信龍統領，提高發動率受速度影響
+    vars:
+      speed_increase:
+        base: 0.05
+        max: 0.5
+      skill_rate_increase:
+        base: 0.04
+        max: 0.08
+      prep_skill_rate_increase:
+        base: 0.06
+        max: 0.12
+    battle:
+      type: 兵種
+      trigger: battleStart
+      do:
+      - to: allyAll
+        do:
+        - type: buff
+          stat: speed
+          value: $speed_increase
+        - type: buff
+          stat: skill_activation_rate
+          value: $skill_rate_increase
+        - type: buff
+          stat: prepared_skill_activation_rate
+          value: $prep_skill_rate_increase
+    is_event_skill: true
+    _action: add
+
   越後先手組:
     name: 越後先手組
     type: 兵種

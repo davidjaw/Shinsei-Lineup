@@ -64,6 +64,8 @@ SKILLS_JSON = BUILD_DIR / "skills.json"
 STATUSES_JSON = BUILD_DIR / "statuses.json"
 BINGXUE_JSON = BUILD_DIR / "bingxue.json"
 TRANSLATION_FAILURES_JSON = BUILD_DIR / "translation_failures.json"
+HANDBOOK_SNAPSHOT_JSON = BUILD_DIR / "handbook_snapshot.json"
+
 
 # ---------------------------------------------------------------------------
 # Bingxue (兵學) direction mapping — shared constant, NOT a path.

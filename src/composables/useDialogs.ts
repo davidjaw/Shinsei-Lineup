@@ -16,6 +16,8 @@ export type OverlayName =
   | 'create-proposal'
   | 'export-team-to-group'
   | 'import-from-link'
+  | 'import-handbook'
+
   // Note: cloud-merge / cloud-conflict are NOT in this union. Those dialogs
   // are controlled directly by cloudMerge.value / cloudConflict.value refs
   // inside useGroupPersistence so the single-active overlay logic here

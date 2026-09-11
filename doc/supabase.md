@@ -19,6 +19,9 @@ npm run db:link:prod   # ebmamfpeffgkmhpyoyul
 # Push pending migrations only. Do NOT use `npm run db:push`
 # (that also overwrites supabase/schema.sql).
 npx supabase db push --yes
+
+# Edge functions are not included in db push. Deploy after link:
+npx supabase functions deploy handbook-snapshot
 ```
 
 GRANT/REVOKE in migrations: never quote `"boolean"` (Postgres type name is `bool`). Use unquoted `boolean` / `text` / `uuid` / `jsonb`.

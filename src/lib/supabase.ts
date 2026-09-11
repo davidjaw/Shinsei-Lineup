@@ -8,9 +8,13 @@ const FETCH_TIMEOUT_MS = 8000
 
 // Promotes silent network hangs (slow Supabase, captive portal, dead DNS) into
 // a fast caught error so callers don't await past the browser's TCP timeout.
-export const fetchWithTimeout = async (url: string, init: RequestInit = {}): Promise<Response> => {
+export const fetchWithTimeout = async (
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<Response> => {
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     return await fetch(url, { ...init, signal: ctrl.signal })
   } finally {

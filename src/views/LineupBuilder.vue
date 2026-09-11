@@ -69,6 +69,8 @@
         @share="dialogs.open('share')"
         @export-to-group="onExportTeamToOtherGroup"
         @import-from-link="dialogs.open('import-from-link')"
+        @import-handbook="dialogs.open('import-handbook')"
+
         @compact="enterCompactView"
       />
 

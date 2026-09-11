@@ -53,6 +53,10 @@
             <el-dropdown-item command="edit-inventory" divided>
               <el-icon class="mr-1"><Edit /></el-icon> 編輯目前庫存…
             </el-dropdown-item>
+            <el-dropdown-item command="import-handbook">
+              <el-icon class="mr-1"><Link /></el-icon> 從網址導入庫存…
+            </el-dropdown-item>
+
             <el-dropdown-item command="goto-profiles">
               <el-icon class="mr-1"><Setting /></el-icon> 管理角色配置…
             </el-dropdown-item>
@@ -144,6 +148,16 @@
             <el-icon><Edit /></el-icon>
           </el-button>
         </template>
+
+        <template v-if="!isCompactView">
+          <el-button type="info" plain @click="$emit('import-handbook')" class="hidden sm:inline-flex !rounded-sm">
+            <el-icon class="mr-1"><Link /></el-icon> 從網址導入
+          </el-button>
+          <el-button type="info" plain @click="$emit('import-handbook')" class="sm:hidden !rounded-sm !w-9 !h-9 !p-0" title="從網址導入">
+            <el-icon><Link /></el-icon>
+          </el-button>
+        </template>
+
 
         <template v-if="isCompactView">
           <el-button type="primary" plain @click="exitCompactView" class="hidden sm:inline-flex !rounded-sm">
@@ -275,6 +289,8 @@ const emit = defineEmits<{
   (e: 'unload-profile'): void
   (e: 'goto-profiles'): void
   (e: 'import-from-link'): void
+  (e: 'import-handbook'): void
+
 }>()
 
 const { groups, currentGroup, currentGroupIndex, setCurrentGroup, addGroup, renameGroup } = useGroups()
@@ -307,12 +323,15 @@ const onProfileCommand = (cmd: string) => {
     emit('unload-profile')
   } else if (cmd === 'edit-inventory') {
     emit('start-editing-inventory')
+  } else if (cmd === 'import-handbook') {
+    emit('import-handbook')
   } else if (cmd === 'goto-profiles') {
     emit('goto-profiles')
   } else if (cmd.startsWith('apply:')) {
     emit('apply-profile', cmd.slice(6))
   }
 }
+
 
 const onGroupCommand = async (cmd: string) => {
   if (cmd.startsWith('switch:')) {

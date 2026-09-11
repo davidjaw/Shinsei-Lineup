@@ -29,13 +29,14 @@ from paths import (
 )
 
 CFG_URL = (
-    "https://p11386-media-cdn.sialiagames.com.tw/"
+    "https://p11386-media-cdn.sialiagamesinc.com.tw/"
     "P11386/sns/public_config/release/cfg.json"
 )
 HEADERS = {
     "accept": "*/*",
-    "referer": "https://general.sialiagames.com.tw/",
+    "referer": "https://general.sialiagamesinc.com.tw/",
 }
+
 HISTORY_KEEP = 10
 
 
