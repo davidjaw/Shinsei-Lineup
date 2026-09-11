@@ -1,7 +1,10 @@
 // Changelog data — append new versions to the top.
 // LATEST_VERSION drives the auto-open behavior of WhatsNewDialog: when this
 // constant changes, every user sees the dialog once on their next visit.
-// Unreleased work stays on the current unshipped version. Bump only at deploy.
+// Released versions are frozen — never append to them. After a release, bump
+// patch by 1 once (`0.4.8` → `0.4.9`) for the next unreleased batch, then fold
+// all subsequent work into that one unshipped version until deploy. Do not bump
+// per session, per feature, or per commit.
 
 export type ChangelogTag = 'feat' | 'fix' | 'ui' | 'data' | 'misc'
 
@@ -42,6 +45,7 @@ export const CHANGELOG: ChangelogVersion[] = [
       { tag: 'feat', text: '可從官方圖鑑分享網址導入庫存，並切換到庫存模式' },
       { tag: 'feat', text: '支援貼上包含「快來幫我配將吧！...」的完整分享文案，自動擷取 snapshot_id' },
       { tag: 'data', text: '補上甲斐弓騎兵·拓' },
+      { tag: 'data', text: '修正高橋紹運兵學選項池' },
     ],
   },
   {
