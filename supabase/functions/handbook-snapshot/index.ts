@@ -1,6 +1,8 @@
 // Public proxy for Sialia handbook share snapshots.
 // Browser cannot call p11386-platform (no CORS + prod CSP connect-src).
 // Returns ids only — no talent / attrs / equipped slots.
+// Deploy with verify_jwt = false (config.toml / --no-verify-jwt): gateway
+// JWT would 401 OPTIONS preflight and GitHub Pages would report CORS.
 
 const SIALIA_SNAPSHOT_URL =
   'https://p11386-platform.sialiagamesinc.com.tw/sns/web/api/cache/get_player_share_snapshot'

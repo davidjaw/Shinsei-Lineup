@@ -1,0 +1,9 @@
+# Hosted-project function settings only. This repo does not run a local
+# Supabase stack (`supabase start`); db push uses the linked project.
+#
+# handbook-snapshot is a public CORS proxy. Gateway JWT verification would
+# 401 the browser OPTIONS preflight (no Authorization header) and surface
+# as a CORS error on GitHub Pages.
+
+[functions.handbook-snapshot]
+verify_jwt = false

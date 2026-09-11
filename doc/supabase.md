@@ -20,8 +20,10 @@ npm run db:link:prod   # ebmamfpeffgkmhpyoyul
 # (that also overwrites supabase/schema.sql).
 npx supabase db push --yes
 
-# Edge functions are not included in db push. Deploy after link:
-npx supabase functions deploy handbook-snapshot
+# Edge functions are not included in db push. Deploy after link.
+# `verify_jwt = false` in supabase/config.toml is required: gateway JWT
+# would 401 the browser OPTIONS preflight and GitHub Pages would see CORS.
+npx supabase functions deploy handbook-snapshot --no-verify-jwt
 ```
 
 GRANT/REVOKE in migrations: never quote `"boolean"` (Postgres type name is `bool`). Use unquoted `boolean` / `text` / `uuid` / `jsonb`.
