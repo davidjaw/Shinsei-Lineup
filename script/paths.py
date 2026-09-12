@@ -65,6 +65,7 @@ STATUSES_JSON = BUILD_DIR / "statuses.json"
 BINGXUE_JSON = BUILD_DIR / "bingxue.json"
 TRANSLATION_FAILURES_JSON = BUILD_DIR / "translation_failures.json"
 HANDBOOK_SNAPSHOT_JSON = BUILD_DIR / "handbook_snapshot.json"
+OMP_TASKS_DIR = BUILD_DIR / "omp-tasks"
 
 
 # ---------------------------------------------------------------------------

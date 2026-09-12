@@ -1,9 +1,11 @@
 """
 LLM-based skill translator and battle engine extractor.
 
-Reads crawled YAML, sends skills to OpenRouter in batches for:
+Reads crawled YAML, sends skills in batches for:
   1. Translation (JP → CHT) for frontend display
   2. Battle engine structured extraction (vars, triggers, effects)
+
+Default driver is headless OMP (`@smol`). Pass `--backend openrouter` for OpenRouter.
 
 Usage:
     python script/llm_translate.py [options]
@@ -13,9 +15,7 @@ Examples:
     python script/llm_translate.py --name 武田之赤備         # single skill
     python script/llm_translate.py                          # all skills
     python script/llm_translate.py --force --limit 5        # re-process, overwrite cache + output
-    python script/llm_translate.py --batch-size 3           # 3 skills per LLM call
-    python script/llm_translate.py --model google/gemma-4-31b-it:free  # free test
-    python script/llm_translate.py --model anthropic/claude-haiku-4.5  # cheaper
+    python script/llm_translate.py --backend openrouter --model anthropic/claude-haiku-4.5
 """
 
 import argparse
@@ -26,10 +26,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from tqdm import tqdm
 
+from llm_backend import DEFAULT_BACKEND, complete, resolve_backend, resolve_model
 from llm_core import (
     CANONICAL_STATUSES, COMMON_RULES, SKILL_OUTPUT_FORMAT,
     DEFAULT_MODEL, MODEL_FREE, MODEL_GEMMA, MODEL_HAIKU, MODEL_SONNET,
-    call_llm, parse_llm_output, has_kana,
+    parse_llm_output, has_kana,
     validate_skill_entry, validate_trait_entry, validate_bingxue_entry,
     validate_entry_quality,
     load_llm_cache, save_llm_cache, save_raw_cache,
@@ -966,6 +967,7 @@ def process_batch(
     correction_prompt_fn=None,
     provider: str | None = None,
     validate_fn=None,
+    backend: str = DEFAULT_BACKEND,
 ) -> tuple[dict, list]:
     """Process a batch of items. Returns (results_dict, failed_list).
 
@@ -1007,7 +1009,7 @@ def process_batch(
 
     try:
         timeout = 180
-        raw = call_llm(user, system_prompt=system, model=model, timeout=timeout, provider=provider)
+        raw = complete(user, system_prompt=system, model=model, backend=backend, timeout=timeout, provider=provider)
         batch_label = "batch_" + "_".join(n for n, _ in uncached)
         save_raw_cache(batch_label, raw)
 
@@ -1021,7 +1023,8 @@ def process_batch(
                                          single_prompt_fn=single_prompt_fn,
                                          batch_prompt_fn=batch_prompt_fn,
                                          cache_prefix=cache_prefix,
-                                         provider=provider)
+                                         provider=provider,
+                                         backend=backend)
                     results.update(r)
                     failed.extend(f)
                 return results, failed
@@ -1137,6 +1140,7 @@ def process_skills(
     parallel: int = 1,
     provider: str | None = None,
     preserve_vars: bool = False,
+    backend: str = DEFAULT_BACKEND,
 ):
     # Read from canonical file; fall back to crawled for bootstrap
     canonical_path = Path(SKILLS_CANONICAL)
@@ -1165,7 +1169,7 @@ def process_skills(
         batches,
         desc="translate",
         parallel=parallel,
-        process_fn=lambda b: process_batch(b, model, force, provider=provider),
+        process_fn=lambda b: process_batch(b, model, force, provider=provider, backend=backend),
     )
 
     # Auto-retry failed items with batch correction feedback
@@ -1188,7 +1192,7 @@ def process_skills(
                 items = [(n, s, *corrections[n]) for n, s in batch]
                 system, user = build_skill_batch_correction_prompt(items)
                 try:
-                    raw = call_llm(user, system_prompt=system, model=model, timeout=180, provider=provider)
+                    raw = complete(user, system_prompt=system, model=model, backend=backend, timeout=180, provider=provider)
                     save_raw_cache("correct_" + "_".join(n for n, _ in batch), raw)
                     parsed = parse_llm_output(raw)
                     if parsed is None:
@@ -1229,7 +1233,7 @@ def process_skills(
                 blind_batches,
                 desc="retry",
                 parallel=parallel,
-                process_fn=lambda b: process_batch(b, model, force=True, provider=provider),
+                process_fn=lambda b: process_batch(b, model, force=True, provider=provider, backend=backend),
             )
             retry_results.update(blind_results)
             all_failed.extend(blind_failed)
@@ -1287,6 +1291,7 @@ def process_traits(
     parallel: int = 1,
     provider: str | None = None,
     preserve_vars: bool = False,
+    backend: str = DEFAULT_BACKEND,
 ):
     # Read from canonical file; fall back to crawled for bootstrap
     canonical_path = Path(TRAITS_CANONICAL)
@@ -1322,6 +1327,7 @@ def process_traits(
             cache_prefix="trait",
             provider=provider,
             validate_fn=validate_trait_entry,
+            backend=backend,
         ),
     )
 
@@ -1345,6 +1351,7 @@ def process_traits(
                 correction_prompt_fn=build_trait_correction_prompt,
                 provider=provider,
                 validate_fn=validate_trait_entry,
+                backend=backend,
             ),
         )
         all_results.update(retry_results)
@@ -1406,6 +1413,7 @@ def process_bingxue(
     parallel: int = 1,
     provider: str | None = None,
     preserve_vars: bool = False,
+    backend: str = DEFAULT_BACKEND,
 ):
     """Translate 兵学 option effect descriptions JP → CHT.
 
@@ -1445,6 +1453,7 @@ def process_bingxue(
             cache_prefix="bingxue",
             provider=provider,
             validate_fn=validate_bingxue_entry,
+            backend=backend,
         ),
     )
 
@@ -1468,6 +1477,7 @@ def process_bingxue(
                 correction_prompt_fn=build_bingxue_correction_prompt,
                 provider=provider,
                 validate_fn=validate_bingxue_entry,
+                backend=backend,
             ),
         )
         all_results.update(retry_results)
@@ -1514,6 +1524,7 @@ def process_hero_batch(
     model: str,
     force: bool,
     provider: str | None = None,
+    backend: str = DEFAULT_BACKEND,
 ) -> tuple[dict, list]:
     """Process a batch of heroes. Returns (results_dict, failed_list)."""
     results = {}
@@ -1535,7 +1546,7 @@ def process_hero_batch(
 
     try:
         timeout = 180
-        raw = call_llm(user, system_prompt=system, model=model, timeout=timeout, provider=provider)
+        raw = complete(user, system_prompt=system, model=model, backend=backend, timeout=timeout, provider=provider)
         batch_label = "batch_hero_" + "_".join(n for n, _, _ in uncached[:5])
         save_raw_cache(batch_label, raw)
 
@@ -1591,6 +1602,7 @@ def process_heroes(
     batch_size: int = 25,
     parallel: int = 1,
     provider: str | None = None,
+    backend: str = DEFAULT_BACKEND,
 ):
     raw_data = yaml.safe_load(Path(HEROES_CRAWLED).read_text("utf-8"))
     if not raw_data:
@@ -1622,7 +1634,7 @@ def process_heroes(
         batches,
         desc="heroes",
         parallel=parallel,
-        process_fn=lambda b: process_hero_batch(b, model, force, provider=provider),
+        process_fn=lambda b: process_hero_batch(b, model, force, provider=provider, backend=backend),
     )
 
     # Merge into output
@@ -1659,8 +1671,11 @@ def main():
     p.add_argument("--limit", type=int, help="Max items to process")
     p.add_argument("--name", help="Filter by name (substring)")
     p.add_argument("--force", action="store_true", help="Ignore cache, overwrite output")
-    p.add_argument("--model", default=DEFAULT_MODEL,
-                   help=f"OpenRouter model: free={MODEL_FREE}, gemma={MODEL_GEMMA}, haiku={MODEL_HAIKU}, sonnet={MODEL_SONNET} (default)")
+    p.add_argument("--backend", choices=("omp", "openrouter"), default=None,
+                   help="LLM driver (default: omp; auto openrouter if --model is vendor/name)")
+    p.add_argument("--model", default=None,
+                   help="OMP role/id (default @smol) or OpenRouter model "
+                        f"(free={MODEL_FREE}, gemma={MODEL_GEMMA}, haiku={MODEL_HAIKU}, sonnet={MODEL_SONNET})")
     p.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Items per LLM call")
     p.add_argument("--parallel", type=int, default=1, help="Number of batches to dispatch concurrently (default: 1, recommended max: 5)")
     p.add_argument("--provider", help="OpenRouter provider name (e.g. Parasail, 'Google AI Studio', Anthropic)")
@@ -1671,6 +1686,11 @@ def main():
     _error_counts.clear()
     _correction_store.clear()
     reset_token_totals()
+
+    backend = resolve_backend(args.backend, args.model)
+    model = resolve_model(backend, args.model)
+    if backend == "omp" and args.provider:
+        tqdm.write("[info] --provider ignored with --backend omp")
 
     # Default: all if none specified
     none_specified = not args.skills and not args.traits and not args.heroes and not args.bingxue
@@ -1687,11 +1707,12 @@ def main():
             limit=args.limit,
             name_filter=args.name,
             force=args.force,
-            model=args.model,
+            model=model,
             batch_size=args.batch_size,
             parallel=args.parallel,
             preserve_vars=pv,
             provider=args.provider,
+            backend=backend,
         )
     if do_traits:
         process_traits(
@@ -1699,11 +1720,12 @@ def main():
             limit=args.limit,
             name_filter=args.name,
             force=args.force,
-            model=args.model,
+            model=model,
             batch_size=args.batch_size,
             parallel=args.parallel,
             preserve_vars=pv,
             provider=args.provider,
+            backend=backend,
         )
     if do_heroes:
         process_heroes(
@@ -1711,10 +1733,11 @@ def main():
             limit=args.limit,
             name_filter=args.name,
             force=args.force,
-            model=args.model,
+            model=model,
             batch_size=args.batch_size,
             parallel=args.parallel,
             provider=args.provider,
+            backend=backend,
         )
     if do_bingxue:
         process_bingxue(
@@ -1722,16 +1745,17 @@ def main():
             limit=args.limit,
             name_filter=args.name,
             force=args.force,
-            model=args.model,
+            model=model,
             batch_size=args.batch_size,
             parallel=args.parallel,
             preserve_vars=pv,
             provider=args.provider,
+            backend=backend,
         )
 
     _write_failure_manifest()
     _print_error_summary()
-    _print_token_summary(args.model)
+    _print_token_summary(model)
 
 
 if __name__ == "__main__":

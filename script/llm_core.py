@@ -291,28 +291,34 @@ def parse_llm_output(raw: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def autofix_frontend(fe: dict) -> list[str]:
-    """Auto-fix known LLM issues in a frontend dict. Returns list of fixes applied."""
+    """Auto-fix known LLM issues in frontend text. Returns list of fixes applied.
+
+    Nested skills store vars on the parent entry; a flat dict may hold both.
+    """
     fixes = []
-    vars_dict = fe.get("vars", {})
+    body = fe["text"] if isinstance(fe.get("text"), dict) else fe
+    vars_dict = fe.get("vars") if isinstance(fe.get("vars"), dict) else body.get("vars", {})
+    if not isinstance(vars_dict, dict):
+        vars_dict = {}
 
     # Fix 1: {var:name}% where var is ratio → remove trailing %
     for field in ("description", "commander_description"):
-        text = fe.get(field, "")
-        if not text:
+        text = body.get(field, "")
+        if not isinstance(text, str) or not text:
             continue
         for vk, vv in vars_dict.items():
             if isinstance(vv, dict) and "base" in vv and vv.get("type") != "flat":
                 pattern = rf"\{{var:{vk}\}}%"
                 if re.search(pattern, text):
-                    fe[field] = re.sub(pattern, f"{{var:{vk}}}", text)
-                    text = fe[field]
+                    body[field] = re.sub(pattern, f"{{var:{vk}}}", text)
+                    text = body[field]
                     fixes.append(f"removed trailing % after {{var:{vk}}}")
 
     # Fix 2: {var:name:%} → {var:name}%
     for field in ("description", "commander_description"):
-        text = fe.get(field, "")
-        if text and ":%}" in text:
-            fe[field] = re.sub(r"\{var:(\w+):%\}", r"{var:\1}%", text)
+        text = body.get(field, "")
+        if isinstance(text, str) and ":%}" in text:
+            body[field] = re.sub(r"\{var:(\w+):%\}", r"{var:\1}%", text)
             fixes.append("fixed {var:name:%} → {var:name}%")
 
     # Fix 3: base == max → plain number
@@ -324,18 +330,18 @@ def autofix_frontend(fe: dict) -> list[str]:
 
     # Fix 4: 受{scale:X}影響 → {scale:X}
     for field in ("description", "commander_description"):
-        text = fe.get(field, "")
-        if text and "受{scale:" in text:
-            fe[field] = re.sub(r"受\{scale:([^}]+)\}影響", r"{scale:\1}", text)
+        text = body.get(field, "")
+        if isinstance(text, str) and "受{scale:" in text:
+            body[field] = re.sub(r"受\{scale:([^}]+)\}影響", r"{scale:\1}", text)
             fixes.append("fixed 受{scale:X}影響 → {scale:X}")
 
     # Fix 5: {{var:X}} → {var:X}, {{status:X}} → {status:X}, etc.
     for field in ("description", "commander_description"):
-        text = fe.get(field, "")
-        if text and "{{" in text:
+        text = body.get(field, "")
+        if isinstance(text, str) and "{{" in text:
             new_text = re.sub(r"\{\{(var|status|scale|dmg|stat):([^}]+)\}\}", r"{\1:\2}", text)
             if new_text != text:
-                fe[field] = new_text
+                body[field] = new_text
                 fixes.append("fixed double braces {{X}} → {X}")
 
     return fixes
@@ -634,22 +640,91 @@ def validate_bingxue_entry(data: dict) -> list[str]:
     return errors
 
 
-def validate_entry_quality(data: dict) -> list[str]:
+def _int_like(value):
+    """Coerce YAML int-like values (7.0, '5'); reject bool and non-integral floats."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value == int(value):
+        return int(value)
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def validate_hero_entry(data: dict) -> list[str]:
+    """Validate a single hero's LLM output structure."""
+    errors = []
+    if not isinstance(data, dict):
+        return ["not a dict"]
+
+    if not data.get("name"):
+        errors.append("name missing")
+
+    rarity = _int_like(data.get("rarity"))
+    if rarity not in (1, 2, 3, 4, 5):
+        errors.append("rarity must be int 1-5")
+    else:
+        data["rarity"] = rarity
+
+    cost = _int_like(data.get("cost"))
+    if cost is None:
+        errors.append("cost must be int")
+    else:
+        data["cost"] = cost
+
+    for field in ("faction", "clan"):
+        if not data.get(field):
+            errors.append(f"{field} missing")
+
+    if data.get("gender") not in ("男", "女"):
+        errors.append("gender must be 男 or 女")
+
+    stats = data.get("stats")
+    if not isinstance(stats, dict):
+        errors.append("stats missing")
+    else:
+        for key in ("lea", "val", "int", "pol", "cha", "spd"):
+            if key not in stats:
+                errors.append(f"stats.{key} missing")
+
+    if "unique_skill" not in data:
+        errors.append("unique_skill missing")
+
+    traits = data.get("traits")
+    if traits is None:
+        data["traits"] = []
+    elif not isinstance(traits, list):
+        errors.append("traits not a list")
+    else:
+        for i, trait in enumerate(traits):
+            if not isinstance(trait, dict) or not trait.get("name") or not trait.get("description"):
+                errors.append(f"traits[{i}] needs name and description")
+
+    return errors
+
+
+def validate_entry_quality(data: dict, *, log: bool = True) -> list[str]:
     """Post-LLM quality checks on text section. Auto-fixes what it can, returns hard errors only."""
     text = data.get("text", {})
     if not isinstance(text, dict):
         return []
 
-    # Auto-fix known issues first
-    fixes = autofix_frontend(text)
-    if fixes:
+    # Auto-fix known issues first (pass parent so vars-aware fixes apply)
+    fixes = autofix_frontend(data)
+    if fixes and log:
         tqdm.write(f"    [autofix] {'; '.join(fixes)}")
 
     errors = []
     desc = text.get("description", "")
     cmd_desc = text.get("commander_description", "")
+    if not isinstance(desc, str):
+        desc = ""
+    if not isinstance(cmd_desc, str):
+        cmd_desc = ""
     full_text = f"{desc} {cmd_desc}"
-    vars_dict = data.get("vars", {})
+    vars_dict = data.get("vars") if isinstance(data.get("vars"), dict) else {}
 
     # 1. English words in CHT description (var names leaking through)
     english_words = re.findall(r'(?<!\{var:)(?<!\{status:)(?<!\{scale:)(?<!\{dmg:)(?<!\{stat:)\b[a-zA-Z_]{3,}\b', full_text)

@@ -6,7 +6,8 @@ Supports:
   - Modify existing skills via natural language instructions
   - Recompile override skills from their raw_text
 
-Uses OpenRouter LLM to validate modifications and format new entries.
+Default LLM driver is headless OMP (`@smol`). Pass `--backend openrouter`
+to use OpenRouter instead.
 
 Usage:
     python script/override.py                 # quick add (skills/heroes/mixed)
@@ -19,9 +20,15 @@ import re
 import sys
 import yaml
 
+from llm_backend import (
+    DEFAULT_BACKEND,
+    prepare_task_dir,
+    resolve_backend,
+    resolve_model,
+    run_omp_agent,
+)
 from llm_core import (
     COMMON_RULES, SKILL_OUTPUT_FORMAT,
-    DEFAULT_MODEL,
     call_llm, parse_llm_output, autofix_frontend, load_overrides,
     validate_skill_entry, validate_entry_quality,
 )
@@ -31,6 +38,10 @@ from paths import (
 )
 
 BACK_CMD = "<"
+
+def _omp_parse(kind: str, raw_input: str, task_body: str, model: str, timeout: int = 600) -> dict:
+    task_dir = prepare_task_dir(kind, raw_input, task_body)
+    return run_omp_agent(task_dir=task_dir, model=model, timeout=timeout)
 
 
 def save_overrides(data: dict):
@@ -173,7 +184,7 @@ The user wants to modify this skill with the following instruction:
 {MODIFY_TASK_RULES}"""
 
 
-def do_modify_skill(model: str):
+def do_modify_skill(model: str, backend: str):
     skills = load_existing_skills()
     if not skills:
         print("[error] No translated skills found. Run llm_translate.py first.")
@@ -218,17 +229,27 @@ def do_modify_skill(model: str):
     )
     prompt = _build_modify_prompt(skill_yaml, instruction)
 
-    print("\n[llm] Processing modification...")
+    raw = ""
     try:
-        raw = call_llm(prompt, model=model)
-        result = parse_llm_output(raw)
+        if backend == "omp":
+            print(f"\n[llm] Processing via omp {model}…")
+            task_body = (
+                prompt
+                + "\n\nWrite the result to output.yaml in this task directory as kind `patch`."
+            )
+            result = _omp_parse("patch", skill_yaml, task_body, model)
+        else:
+            print("\n[llm] Processing modification...")
+            raw = call_llm(prompt, model=model)
+            result = parse_llm_output(raw)
     except Exception as e:
         print(f"[error] LLM call failed: {e}")
         return
 
     if result is None:
         print("[error] Failed to parse LLM response.")
-        print(f"  Raw output:\n{raw[:500]}")
+        if raw:
+            print(f"  Raw output:\n{raw[:500]}")
         return
 
     if result.get("_rejected"):
@@ -416,7 +437,7 @@ def _reclassify_traits_as_skills(
     return new_keys, new_values, new_flags, sum(len(v) for v in traits_by_hero.values())
 
 
-def do_quick_add(model: str):
+def do_quick_add(model: str, backend: str):
     print("\n=== Quick Add ===")
     print("  1. Skills (default)")
     print("  2. Heroes")
@@ -541,17 +562,28 @@ Remember: the output has EXACTLY two top-level keys (`skills`, `heroes`). Any tr
 as a top-level key or as a skill is an error."""
         system = OVERRIDE_SYSTEM_PROMPT
 
-    print(f"\n[llm] Processing...")
+    kind = {"1": "skill", "2": "hero", "3": "mixed"}[mode]
+    raw_resp = ""
     try:
-        raw_resp = call_llm(user, system_prompt=system, model=model, timeout=300)
-        parsed = parse_llm_output(raw_resp)
+        if backend == "omp":
+            print(f"\n[llm] Processing via omp {model}…")
+            task_body = (
+                f"{system}\n\n{user}\n\n"
+                f"Write the result to output.yaml in this task directory as kind `{kind}`."
+            )
+            parsed = _omp_parse(kind, raw_paste, task_body, model)
+        else:
+            print("\n[llm] Processing...")
+            raw_resp = call_llm(user, system_prompt=system, model=model, timeout=300)
+            parsed = parse_llm_output(raw_resp)
     except Exception as e:
         print(f"[error] LLM call failed: {e}")
         return
 
     if parsed is None:
         print("[error] Failed to parse LLM response.")
-        print(f"  Raw output:\n{raw_resp[:500]}")
+        if raw_resp:
+            print(f"  Raw output:\n{raw_resp[:500]}")
         return
 
     # Mode 3 expects a structured `{skills: {...}, heroes: {...}}` response.
@@ -639,8 +671,15 @@ Fix these errors. Re-parse these skills from the original input:
 Only output the failed skills: {', '.join(name for name, _, _ in bad_skills)}"""
 
         try:
-            raw_resp = call_llm(retry_user, system_prompt=system, model=model, timeout=300)
-            retry_parsed = parse_llm_output(raw_resp)
+            if backend == "omp":
+                retry_body = (
+                    f"{system}\n\n{retry_user}\n\n"
+                    "Write the result to output.yaml in this task directory as kind `skill`."
+                )
+                retry_parsed = _omp_parse("skill", raw_paste, retry_body, model)
+            else:
+                raw_resp = call_llm(retry_user, system_prompt=system, model=model, timeout=300)
+                retry_parsed = parse_llm_output(raw_resp)
         except Exception as e:
             print(f"  [retry failed] {e}")
             retry_parsed = None
@@ -786,7 +825,7 @@ The input is already in Traditional Chinese — do NOT translate, just extract a
 {SKILL_OUTPUT_FORMAT}"""
 
 
-def do_recompile(model: str, name_filter: str | None = None, dry_run: bool = False):
+def do_recompile(model: str, name_filter: str | None = None, dry_run: bool = False, backend: str = DEFAULT_BACKEND):
     """Recompile override skills from raw_text into current structured format."""
     overrides = load_overrides()
     skills = overrides.get("skills", {})
@@ -843,16 +882,27 @@ Each already has a Chinese description — do NOT translate, just reformat.
 ---
 Output YAML: each skill name as a top-level key, containing `vars`, `text`, and `battle` sections."""
 
-    print(f"[llm] Sending {len(targets)} skills...")
+    raw = ""
     try:
-        raw = call_llm(user, system_prompt=OVERRIDE_SYSTEM_PROMPT, model=model, timeout=300)
-        parsed = parse_llm_output(raw)
+        if backend == "omp":
+            print(f"[llm] Processing via omp {model}…")
+            task_body = (
+                f"{OVERRIDE_SYSTEM_PROMPT}\n\n{user}\n\n"
+                "Write the result to output.yaml in this task directory as kind `skill`."
+            )
+            parsed = _omp_parse("skill", user, task_body, model)
+        else:
+            print(f"[llm] Sending {len(targets)} skills...")
+            raw = call_llm(user, system_prompt=OVERRIDE_SYSTEM_PROMPT, model=model, timeout=300)
+            parsed = parse_llm_output(raw)
     except Exception as e:
         print(f"[error] LLM call failed: {e}")
         return
 
     if not parsed:
         print("[error] Failed to parse LLM output")
+        if raw:
+            print(f"  Raw output:\n{raw[:500]}")
         return
 
     parsed_values = list(parsed.values())
@@ -866,10 +916,10 @@ Output YAML: each skill name as a top-level key, containing `vars`, `text`, and 
             print(f"  MISSING: {key}")
             continue
 
-        # Auto-fix
+        # Auto-fix (pass parent so vars-aware fixes apply)
         text = entry.get("text", {})
         if isinstance(text, dict):
-            fixes = autofix_frontend(text)
+            fixes = autofix_frontend(entry)
             if fixes:
                 print(f"  [autofix] {key}: {'; '.join(fixes)}")
 
@@ -922,17 +972,22 @@ def main():
     p.add_argument("--recompile", action="store_true", help="Recompile override skills from raw_text")
     p.add_argument("--dry-run", action="store_true", help="Preview recompile without saving")
     p.add_argument("--name", help="Filter by name (for --recompile)")
-    p.add_argument("--model", default=DEFAULT_MODEL, help="OpenRouter model to use")
+    p.add_argument("--backend", choices=("omp", "openrouter"), default=None,
+                   help="LLM driver (default: omp; auto openrouter if --model is vendor/name)")
+    p.add_argument("--model", default=None,
+                   help="OMP role/id (default @smol) or OpenRouter model")
     args = p.parse_args()
+    backend = resolve_backend(args.backend, args.model)
+    model = resolve_model(backend, args.model)
 
     if args.recompile:
-        do_recompile(args.model, name_filter=args.name, dry_run=args.dry_run)
+        do_recompile(model, name_filter=args.name, dry_run=args.dry_run, backend=backend)
         return
 
     if args.modify_skill:
-        do_modify_skill(args.model)
+        do_modify_skill(model, backend)
     else:
-        do_quick_add(args.model)
+        do_quick_add(model, backend)
 
 
 if __name__ == "__main__":
