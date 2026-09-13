@@ -69,7 +69,7 @@
           </button>
         </el-tooltip>
         <a
-          href="https://forms.gle/mnMAqAzP595ygCrJ9"
+          href="https://forms.gle/7owhUXByanWwvSNH6"
           target="_blank"
           rel="noopener"
           class="footer-link"

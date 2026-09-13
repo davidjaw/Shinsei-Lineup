@@ -39,6 +39,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.1',
+    date: '2026-09-13',
+    entries: [
+      { tag: 'misc', text: '更新建議/回報表單連結' },
+    ],
+  },
+
+  {
     version: '0.5.0',
     date: '2026-09-11',
     entries: [
