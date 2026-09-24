@@ -63,3 +63,6 @@ supabase/.branches/
 .env
 .env.*
 !.env.example
+
+# Local review dumps (do not land on the public tree)
+reviews/

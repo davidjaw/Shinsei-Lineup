@@ -246,6 +246,50 @@
   category: activation_modifier
   description: 增加指定戰法類型發動機率
 
+# === Named effects (lexicon_miss reflux) ===
+霸王:
+  id: overlord
+  name: 霸王
+  category: combat_enhancement
+  description: 自身回復兵力時，對敵軍單體造成回復量轉換的兵力損失
+
+魔王:
+  id: demon_king
+  name: 魔王
+  category: combat_enhancement
+  description: 自身行動後，敵軍各武將兵力首次低於閾值時，使其隨機損失兵力
+
+公家嗜好:
+  id: courtly_taste
+  name: 公家嗜好
+  category: combat_enhancement
+  description: 使敵軍大將攜帶的家寶效果失效，自身獲得其效果
+
+物外軒:
+  id: mugai_ken
+  name: 物外軒
+  category: activation_modifier
+  description: 戰鬥前數回合提高主動、突擊戰法發動機率
+
+金城鐵壁:
+  id: impregnable
+  name: 金城鐵壁
+  category: healing
+  description: 受到普通攻擊時，若敵方處於負面狀態，機率恢復兵力
+
+老狐狸:
+  id: old_fox
+  name: 老狐狸
+  category: combat_enhancement
+  description: 與自身勢力不同的兩名同勢力武將組隊時，自身轉變為其勢力
+
+雷電化身:
+  id: thunder_incarnate
+  name: 雷電化身
+  category: combat_enhancement
+  description: 受到普通攻擊時，低機率對攻擊者施加麻痺
+
+
 # === Special (for {dmg:xxx} and {stat:xxx}) ===
 _damage_types:
   physical:

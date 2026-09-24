@@ -2757,6 +2757,29 @@ skills:
           scale: 統率
     is_event_skill: true
     _action: add
+  背水之陣:
+    name: 背水之陣
+    type: 評定眾
+    description: 指定部隊與玩家戰鬥中受到傷害降低（依士氣），士氣消耗速度提高
+    _action: add
+  別動奇襲:
+    name: 別動奇襲
+    type: 評定眾
+    description: 與玩家交戰戰平時，使敵軍部隊受到傷害提高
+    _action: add
+  成果加俸·優:
+    name: 成果加俸·優
+    type: 評定眾
+    description: 上陣部隊中每有一名武將等級大於40級，戰鬥獲得經驗提高
+    _action: add
+  習熟練達:
+    name: 習熟練達
+    description: 賽季效果。依武將等級提高戰鬥獲得經驗；未達等級則不生效
+    _action: add
+  武田精銳:
+    name: 武田精銳
+    description: 賽季效果。隊伍會心增加
+    _action: add
 heroes:
   お江:
     traits:

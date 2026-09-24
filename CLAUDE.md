@@ -113,4 +113,4 @@ All prompts share `COMMON_RULES` from `llm_core.py` which enforces:
 - Hero names: JP in `name_jp`, CHT in `name`
 - Skill names: JP key in YAML, CHT `name` field in translated data
 - Data files in `data/` are gitignored except `overrides.yaml` and `statuses.yaml`
-- Changelog (`src/constants/changelog.ts`): unreleased work stays on **one** unshipped version. Do not bump `0.x.y` for each feature; fold new entries into the current top version until that version is deployed. Bump only at deploy.
+- Changelog (`src/constants/changelog.ts`): released versions are frozen — never append entries to them. After a release, start the next unreleased batch by adding 1 to the patch (`0.4.8` → `0.4.9`). Fold all subsequent unreleased work into that one unshipped version. Do not bump per session, per feature, or per commit; do not jump minor (`0.5.0`) unless asked.
