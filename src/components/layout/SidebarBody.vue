@@ -15,6 +15,22 @@
     </RouterLink>
 
     <div class="mt-4 flex-1 overflow-y-auto">
+      <!-- Owner's notice: buying accounts, contact over Discord -->
+      <div
+        class="mb-3 flex items-center gap-2 rounded-lg border border-brand/40 bg-brand/5"
+        :class="collapsed ? 'justify-center p-1' : 'px-2.5 py-2'"
+      >
+        <div v-if="!collapsed" class="min-w-0 flex-1 leading-tight">
+          <div class="text-[12px] font-bold text-ink">站長收滿紅帳號 <span class="text-brand">20w TWD</span></div>
+          <div class="mt-0.5 text-[11px] text-ink-mute">請 DC 聯絡，點右側複製 ID</div>
+        </div>
+        <el-tooltip :content="collapsed ? `${BUY_NOTICE}，${DISCORD_HINT}` : DISCORD_HINT" :placement="collapsed ? 'right' : 'top'" :show-after="200">
+          <button type="button" class="notice-dc" @click="copyDiscord" aria-label="複製 Discord ID">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path :d="DISCORD_ICON" /></svg>
+          </button>
+        </el-tooltip>
+      </div>
+
       <SidebarSection v-if="!collapsed" label="主要功能" />
       <SidebarLink
         v-for="item in primaryNav"
@@ -63,7 +79,7 @@
             <el-icon :size="13"><Message /></el-icon>
           </a>
         </el-tooltip>
-        <el-tooltip content="Discord：neko.vision（點擊複製）" placement="top" :show-after="200">
+        <el-tooltip :content="DISCORD_HINT" placement="top" :show-after="200">
           <button type="button" class="footer-icon" @click="copyDiscord" aria-label="Discord">
             <el-icon :size="13"><ChatDotRound /></el-icon>
           </button>
@@ -122,12 +138,18 @@ const emit = defineEmits<{
 
 const { showOwnedOnly, ownedHeroes, ownedSkills } = useInventory()
 
+const DISCORD_ID = 'neko.vision'
+const DISCORD_HINT = `Discord：${DISCORD_ID}（點擊複製）`
+const BUY_NOTICE = '站長收滿紅帳號 20w TWD'
+// Discord logo (Simple Icons, 24x24 viewBox).
+const DISCORD_ICON = 'M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z'
+
 const copyDiscord = async () => {
   try {
-    await navigator.clipboard.writeText('neko.vision')
-    ElMessage.success('已複製 Discord：neko.vision')
+    await navigator.clipboard.writeText(DISCORD_ID)
+    ElMessage.success(`已複製 Discord：${DISCORD_ID}`)
   } catch {
-    ElMessage.warning('無法存取剪貼簿，請手動複製：neko.vision')
+    ElMessage.warning(`無法存取剪貼簿，請手動複製：${DISCORD_ID}`)
   }
 }
 
@@ -196,6 +218,24 @@ const wishNav: readonly NavItem[] = [
 .footer-link:hover {
   color: rgb(var(--color-focus));
   background: rgb(var(--color-highlight));
+}
+
+.notice-dc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #fff;
+  background: #5865F2;
+  border: none;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.notice-dc:hover {
+  filter: brightness(1.1);
 }
 
 .footer-icon {
