@@ -32,6 +32,11 @@ const SKILL_TYPE_MARKS: Record<string, string> = {
   '突撃': '突',
 }
 
+/** Whether a skill of this type can be put on a hero; 評定眾 and 賽季效果 entries are only names the data knows. */
+export function isEquippableSkillType(type?: string | null): boolean {
+  return !!type && type in SKILL_TYPE_MARKS
+}
+
 export function skillTypeMark(type?: string | null): string {
   if (!type) return ''
   return SKILL_TYPE_MARKS[type] ?? type.charAt(0)

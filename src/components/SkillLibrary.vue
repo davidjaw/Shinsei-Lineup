@@ -153,7 +153,7 @@
 <script setup lang="ts">
 import { ref, computed, PropType, watch } from 'vue'
 import { useData } from '../composables/useData'
-import { TRANSPARENT_GIF, formatRate as _formatRate } from '../constants/gameData'
+import { TRANSPARENT_GIF, formatRate as _formatRate, isEquippableSkillType } from '../constants/gameData'
 import SkillDescription from './SkillDescription.vue'
 import BriefDescription from './BriefDescription.vue'
 import SkillTypeMark from './SkillTypeMark.vue'
@@ -224,6 +224,7 @@ const filteredSkills = computed(() => {
   return skills.value.filter(s => {
     if (!s?.name) return false
     if (s.is_fixed) return false
+    if (!isEquippableSkillType(s.type)) return false
 
     if (debouncedSearchQuery.value && !s.name.includes(debouncedSearchQuery.value)) return false
     if (filterType.value && s.type !== filterType.value) return false

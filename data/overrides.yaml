@@ -2774,10 +2774,12 @@ skills:
     _action: add
   習熟練達:
     name: 習熟練達
+    type: 賽季效果
     description: 賽季效果。依武將等級提高戰鬥獲得經驗；未達等級則不生效
     _action: add
   武田精銳:
     name: 武田精銳
+    type: 賽季效果
     description: 賽季效果。隊伍會心增加
     _action: add
 heroes:
