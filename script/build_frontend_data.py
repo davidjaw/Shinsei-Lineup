@@ -251,13 +251,14 @@ def _detect_override_cfg_conflicts(overrides_dict: dict, cfg_fields_fn) -> list[
                 })
     return conflicts
 
-# LLM skill name corrections (wrong CHT → correct CHT). Active only when
-# CFG_AUTHORITATIVE=0 (rollback path); cfg.json supplies these names directly
-# in the default cfg-on path. Phase 5 retires these alongside the flag.
+# LLM skill name corrections (wrong CHT → correct CHT). Always applied in
+# postprocess(); cfg.json supplies most names directly in the default cfg-on
+# path, so these cover the rollback path and skills cfg fails to match.
 SKILL_NAME_FIXES = {
     "血戰奮鬥": "浴血奮戰",
     "所向無敵": "所向披靡",
     "歸還的凱歌": "振旅凱歌",
+    "百戰錬磨": "百戰磨煉",  # official cfg zh-hant name; old name kept as override alias
 }
 
 # LLM alias → spec canonical name

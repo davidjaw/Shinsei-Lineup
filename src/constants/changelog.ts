@@ -39,6 +39,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.2',
+    date: '2026-10-10',
+    entries: [
+      { tag: 'data', text: '戰法「百戰錬磨」更名為遊戲內的正式名稱「百戰磨煉」' },
+    ],
+  },
+
+  {
     version: '0.5.1',
     date: '2026-09-13',
     entries: [
