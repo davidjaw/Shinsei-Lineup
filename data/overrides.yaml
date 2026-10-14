@@ -2026,8 +2026,8 @@ skills:
         max: 0.25
       duration: 2
       damage_1:
-        base: 0.58
-        max: 1.16
+        base: 0.68
+        max: 1.36
       extra_trigger_chance:
         base: 0.325
         max: 0.65
@@ -2036,8 +2036,8 @@ skills:
         max: 0.15
       max_stacks: 2
       damage_2:
-        base: 0.49
-        max: 0.98
+        base: 0.59
+        max: 1.18
     _action: modify
   剛毅木訥:
     name: 剛毅木訥
@@ -2782,6 +2782,59 @@ skills:
     type: 賽季效果
     description: 賽季效果。隊伍會心增加
     _action: add
+  同気連枝:
+    vars:
+      trigger_rate:
+        base: 0.25
+        max: 0.5
+    _action: modify
+  風姿綽約:
+    description: 戰鬥中，使友軍群體（2人）武勇提升{var:valor_buff_rate}（{scale:智略}），該效果每回合疊加1層，最多疊加{var:stack_max}層。 每回合行動前，有{var:confusion_chance}機率（{scale:智略}）對敵軍單體施加混亂、封擊、無策、疲弊狀態中的一種（不會重複施加），每個狀態持續{var:status_duration}回合。
+    vars:
+      valor_buff_rate:
+        base: 0.023
+        max: 0.055
+      confusion_chance:
+        base: 0.25
+        max: 0.5
+      stack_max: 3
+    _action: modify
+  一心一徳:
+    commander_description: 治療時，額外使目標武勇與智略增加{var:commander_stat_bonus}（{scale:智略}）
+    vars:
+      commander_stat_bonus:
+        base: 3
+        max: 6
+    _action: modify
+  破陣乱舞:
+    description: 使自身及友軍武勇最高單體獲得{var:status_rate}（{scale:武勇}）{status:破陣}狀態，持續{var:duration}回合，且自身下次普通攻擊後對目標造成一次額外兵刃傷害（傷害率{var:extra_dmg_rate}），該戰法發動後會進入{var:cooldown}回合冷卻。
+    vars:
+      status_rate:
+        base: 0.24
+        max: 0.48
+      extra_dmg_rate:
+        base: 1.27
+        max: 2.54
+      cooldown: 1
+    _action: modify
+bingxue:
+  強靭:
+    vars:
+      buff_rate:
+        base: 0.03
+        max: 0.06
+  離間の計:
+    text:
+      description: 主動戰法發動後，附加{var:effect_rate}{status:離反}、{status:攻心}效果（最多可重疊4次）
+    vars:
+      effect_rate: 0.0125
+  気勢崩し:
+    vars:
+      valor_penalty: 18
+      intelligence_penalty: 18
+  返り討ちの計:
+    vars:
+      damage_rate: 0.85
 heroes:
   お江:
     traits:
@@ -3337,6 +3390,55 @@ heroes:
     - name: 防護II
       description: 受到兵刃傷害減少2.2%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 手当の心得
+        - 鼓舞激励
+        - 達人大観
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 仁愛
+        - 天時
+        - 内助
     _action: add
   浦上宗景:
     name: 浦上宗景
@@ -3996,6 +4098,55 @@ heroes:
     - name: 智慧II
       description: 智略提高2.5%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 慧眼
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 手当の心得
+        - 鼓舞激励
+        - 達人大観
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 仁愛
+        - 天時
+        - 内助
     _action: add
   龍造寺隆信:
     name: 龍造寺隆信
@@ -4028,6 +4179,55 @@ heroes:
     - name: 馬弓術I
       description: 部隊的騎兵、弓兵等級+1
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 右往左往
+        - 先陣誘導
+        - 気勢崩し
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 乱戦
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 大勇
+        - 早駆
+        - 神秘
+        - 強靭
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 協同
+        - 地利
+        - 天時
+        - 機動
+        - 明鏡
+        - 不惑
     _action: add
   石川數正:
     name: 石川數正
@@ -4060,6 +4260,55 @@ heroes:
     - name: 攻勢I
       description: 我軍全體造成傷害增加1%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 臨機応変
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 多謀
+        - 強靭
+      機略:
+        major:
+        - 手当の心得
+        - 鼓舞激励
+        - 達人大観
+        minor:
+        - 協同
+        - 地利
+        - 仁愛
+        - 天時
+        - 内助
+        - 不惑
     _action: add
   吉岡妙林:
     name: 吉岡妙林
@@ -4092,6 +4341,55 @@ heroes:
     - name: 破敵II
       description: 造成傷害增加1.6%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 破陣の勢い
+        - 詭計百出
+        - 軍律擾乱
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 多謀
+        - 強靭
+      機略:
+        major:
+        - 心頭滅却
+        - 達人大観
+        - 脱兎の如し
+        minor:
+        - 協同
+        - 地利
+        - 天時
+        - 機動
+        - 明鏡
+        - 不惑
     _action: add
   相良義陽:
     name: 相良義陽
@@ -4124,6 +4422,55 @@ heroes:
     - name: 武威II
       description: 武勇提高2.5%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 舟中敵国
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 突貫
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 強靭
+      機略:
+        major:
+        - 搦手の策
+        - 心頭滅却
+        - 達人大観
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 地利
+        - 明鏡
+        - 天時
     _action: add
   種子島時堯:
     name: 種子島時堯
@@ -4156,6 +4503,55 @@ heroes:
     - name: 奮戰II
       description: 本回合未受到普通攻擊時，非自帶主動戰法的發動機率+2.5%
       active: true
+    bingxue:
+      陣立:
+        major:
+        - 陽動の策
+        - 気勢崩し
+        - 生々流転
+        minor:
+        - 俊才
+        - 才気
+        - 逆境
+        - 不敵
+        - 兵心
+        - 恩顧
+      武略:
+        major:
+        - 表裏一体
+        - 当意即妙
+        - 冷静沈着
+        minor:
+        - 剛力
+        - 豪勇
+        - 妙策
+        - 奇謀
+        - 胆力
+        - 活路
+      臨戦:
+        major:
+        - 離間の計
+        - 軍律擾乱
+        - 破陣の勢い
+        minor:
+        - 神算
+        - 鬼気
+        - 早駆
+        - 神秘
+        - 練磨
+        - 多謀
+      機略:
+        major:
+        - 手当の心得
+        - 達人大観
+        - 脱兎の如し
+        minor:
+        - 果敢
+        - 機動
+        - 協同
+        - 不惑
+        - 明鏡
+        - 天時
     _action: add
   高橋紹運:
     bingxue:

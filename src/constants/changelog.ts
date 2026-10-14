@@ -39,6 +39,15 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.3',
+    date: '2026-10-14',
+    entries: [
+      { tag: 'data', text: '同步公告修改：戰法「同氣連枝」「風姿綽約」「一心一德」「破陣亂舞」「勇猛無前」，兵學「強韌」「離間之計」「氣勢崩摧」「反討之計」' },
+      { tag: 'data', text: '增加吉岡妙林、相良義陽、島津義久、堀直政、龍造寺隆信、石川數正、種子島時堯兵學' },
+    ],
+  },
+
+  {
     version: '0.5.2',
     date: '2026-10-10',
     entries: [

@@ -992,8 +992,14 @@ def main():
     # can display without knowing about the swap. Done BEFORE writing heroes.json
     # so a single write produces the final file.
     bingxue_data = yaml.safe_load(BINGXUE_CANONICAL.read_text("utf-8")) if BINGXUE_CANONICAL.exists() else {}
+    bingxue_data = bingxue_data or {}
+    for jp_name, ov in (overrides.get("bingxue") or {}).items():
+        if jp_name not in bingxue_data:
+            print(f"[warn] bingxue override for unknown option {jp_name!r} ignored")
+            continue
+        bingxue_data[jp_name] = deep_merge(bingxue_data[jp_name], ov)
     bingxue_out = {}
-    for jp_name, entry in (bingxue_data or {}).items():
+    for jp_name, entry in bingxue_data.items():
         raw = entry.get("raw", {})
         jp_dir = raw.get("direction", "")
         cht_dir = BINGXUE_JP_TO_CHT_DIR.get(jp_dir, jp_dir)
