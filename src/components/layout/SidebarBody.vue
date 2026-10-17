@@ -7,7 +7,7 @@
       :class="collapsed && 'justify-center'"
       @click="$emit('nav')"
     >
-      <div class="w-8 h-8 rounded-full border border-brand text-brand flex items-center justify-center font-brand font-bold text-[15.4px] leading-none shrink-0">猫</div>
+      <BrandCatIcon />
       <div v-if="!collapsed" class="flex flex-col justify-center h-8 leading-none">
         <div class="font-brand font-bold text-ink text-[15.4px]">真戰配將</div>
         <div class="text-[11px] text-ink-mute tracking-wide mt-1">SHINSEI · v{{ latestVersion }}</div>
@@ -125,6 +125,7 @@ import {
 import { ElMessage } from 'element-plus'
 import { LATEST_VERSION } from '../../constants/changelog'
 import { useInventory } from '../../composables/useInventory'
+import BrandCatIcon from './BrandCatIcon.vue'
 import SidebarLink from './SidebarLink.vue'
 import SidebarSection from './SidebarSection.vue'
 
