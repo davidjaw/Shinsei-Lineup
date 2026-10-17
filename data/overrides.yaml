@@ -8,6 +8,11 @@ skills:
     aliases:
     - 百戰錬磨
     - 百戰煉磨
+  薙ぎ払い:
+    cfg_id: 29606
+    aliases:
+    - 揮砍
+    - 橫掃
 
   同盟姻親:
     name: 同盟姻親

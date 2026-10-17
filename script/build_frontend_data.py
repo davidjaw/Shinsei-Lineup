@@ -259,6 +259,7 @@ SKILL_NAME_FIXES = {
     "所向無敵": "所向披靡",
     "歸還的凱歌": "振旅凱歌",
     "百戰錬磨": "百戰磨煉",  # official cfg zh-hant name; old name kept as override alias
+    "揮砍": "斬斷",  # official in-game name (cfg show_name); old names kept as override aliases
 }
 
 # LLM alias → spec canonical name
