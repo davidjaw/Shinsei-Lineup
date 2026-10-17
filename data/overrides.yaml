@@ -1,6 +1,8 @@
 skills:
   回山倒海:
     rarity: A
+  槍弾正:
+    rarity: A
   百戦錬磨:
     cfg_id: 20116
     aliases:

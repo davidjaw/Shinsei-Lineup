@@ -1,9 +1,11 @@
 <template>
   <!-- Brand glyph. Easter egg: roughly once a minute the circled 猫 shatters
        into pixels that regroup into a pixel cat, idles for 15s, then
-       morphs back. Skipped entirely under prefers-reduced-motion. -->
+       morphs back. Five quick clicks play it now and restart the countdown.
+       Skipped entirely under prefers-reduced-motion. -->
   <div
     ref="root"
+    @click="onClick"
     class="relative w-8 h-8 rounded-full border text-brand flex items-center justify-center font-brand font-bold text-[15.4px] leading-none shrink-0"
     :class="phase === 'text' ? 'border-brand' : 'border-transparent'"
   >
@@ -36,6 +38,8 @@ const CAT_HOLD_MS = 15_000
 const SHATTER_MS = 120
 const MOVE_MS = 650
 const EASE = 'cubic-bezier(.45,-0.3,.25,1.35)'
+const CLICKS_TO_TRIGGER = 5
+const CLICK_GAP_MS = 800  // max pause between clicks of one streak
 
 const root = ref<HTMLElement>()
 const phase = ref<'text' | 'morph' | 'cat'>('text')
@@ -49,13 +53,18 @@ const currentFrame = computed(() => {
   return s.frames[s.timeline[tick.value % s.timeline.length] ?? 0] ?? []
 })
 
+const enabled = !matchMedia('(prefers-reduced-motion: reduce)').matches
 let alive = true
+let busy = false
+let clicks = 0
+let lastClick = 0
 let timer: ReturnType<typeof setTimeout> | undefined
+let hold: ReturnType<typeof setTimeout> | undefined
 let ticker: ReturnType<typeof setInterval> | undefined
 let anims: Animation[] = []
 let glyphCells: [number, number][] | null = null
 
-const sleep = (ms: number) => new Promise<void>(r => { timer = setTimeout(r, ms) })
+const sleep = (ms: number) => new Promise<void>(r => { hold = setTimeout(r, ms) })
 
 function glyphSources(el: HTMLElement) {
   if (!glyphCells) {
@@ -103,22 +112,40 @@ async function playOnce(el: HTMLElement) {
   phase.value = 'text'
 }
 
-async function loop() {
-  while (alive) {
-    const [lo, hi] = IDLE_GAP_MS
-    await sleep(lo + Math.random() * (hi - lo))
-    if (alive && root.value && !document.hidden) await playOnce(root.value)
-  }
+function scheduleNext() {
+  clearTimeout(timer)
+  const [lo, hi] = IDLE_GAP_MS
+  timer = setTimeout(trigger, lo + Math.random() * (hi - lo))
+}
+
+async function trigger() {
+  clearTimeout(timer)
+  if (!alive) return
+  if (busy || !root.value || document.hidden) return scheduleNext()
+  busy = true
+  await playOnce(root.value)
+  busy = false
+  if (alive) scheduleNext()
+}
+
+function onClick() {
+  if (!enabled || busy) return
+  const now = performance.now()
+  clicks = now - lastClick > CLICK_GAP_MS ? 1 : clicks + 1
+  lastClick = now
+  if (clicks < CLICKS_TO_TRIGGER) return
+  clicks = 0
+  trigger()
 }
 
 onMounted(() => {
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  loop()
+  if (enabled) scheduleNext()
 })
 
 onBeforeUnmount(() => {
   alive = false
   clearTimeout(timer)
+  clearTimeout(hold)
   clearInterval(ticker)
   anims.forEach(a => a.cancel())
 })
