@@ -1,1 +1,1 @@
-cfg 1777454501829 vs 1777454501829: no count changes; 0 blocker(s), 0 warning(s)
+cfg 1791965404939 vs 1787384993825: hero +2, skill +17, multi_lang +50; 1 blocker(s), 0 warning(s)
