@@ -2,9 +2,25 @@ import { defineConfig, type PluginOption, type ViteDevServer } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 import { spawn } from 'node:child_process'
+import { statSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { fetchSialiaSnapshot, SNAPSHOT_ID_RE } from './src/lib/handbookSialia'
 
+
+// Root-level files are watched; of the top-level folders only these are.
+// data/ is not: the `d` shortcut below rebuilds .build/ from it explicitly.
+const ROOT = path.dirname(fileURLToPath(import.meta.url))
+const WATCHED_DIRS = new Set(['src', '.build', 'public'])
+
+function isUnwatched(file: string): boolean {
+  const rel = path.relative(ROOT, file)
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false
+  const top = rel.split(path.sep)[0]
+  if (WATCHED_DIRS.has(top)) return false
+  return top !== rel || !!statSync(file, { throwIfNoEntry: false })?.isDirectory()
+}
 
 // Press `d` in the dev terminal to re-run the Python data build and reload.
 // Avoids having to ctrl+c and `npm run dev` again after editing data/scripts.
@@ -149,6 +165,15 @@ export default defineConfig({
     alias: {
       '@': '/src'
     }
+  },
+  // Watch only what the app is built from. A local checkout can hold large
+  // untracked folders next to src/; walking them (or scanning their .html as
+  // dep entries) hangs the dev server until it runs out of memory.
+  server: {
+    watch: { ignored: isUnwatched },
+  },
+  optimizeDeps: {
+    entries: ['index.html'],
   },
   build: {
     target: 'esnext',
