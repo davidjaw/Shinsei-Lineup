@@ -1,11 +1,7 @@
 # /// script
 # dependencies = ["pyyaml"]
 # ///
-"""Dump one skill's descriptions (JP + CHT) and meta. NO battle DSL output.
-
-Used to feed battle-engine design/extraction subagents. The legacy `battle`
-section is intentionally NOT printed — the old engine encoding is deprecated
-and must never reach an engine worker's context.
+"""Dump one skill's descriptions (JP + CHT) and meta.
 
 Usage: uv run script/dump_skill.py <key>
 """

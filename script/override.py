@@ -310,7 +310,7 @@ def _collect_raw_input() -> str:
 
 
 def _flatten_skill_entry(entry: dict) -> dict:
-    """Flatten LLM output (vars/text/battle) into override format."""
+    """Flatten LLM output (vars/text) into override format."""
     text = entry.get("text", {})
     result = {}
     if isinstance(text, dict):
@@ -318,8 +318,6 @@ def _flatten_skill_entry(entry: dict) -> dict:
             result[k] = v
     if entry.get("vars"):
         result["vars"] = entry["vars"]
-    if entry.get("battle"):
-        result["battle"] = entry["battle"]
     return result
 
 
@@ -457,7 +455,7 @@ def do_quick_add(model: str, backend: str):
     if mode == "1":
         user = f"""\
 The following is raw skill data (already in Traditional Chinese).
-Parse ALL skills and output each as a separate top-level YAML key with `vars`, `text`, and `battle` sections.
+Parse ALL skills and output each as a separate top-level YAML key with `vars` and `text` sections.
 
 IMPORTANT: In the `text` section, include a `raw_text` field containing the EXACT original text
 from the input that describes this skill (copy verbatim, do not paraphrase or reformat).
@@ -465,7 +463,7 @@ from the input that describes this skill (copy verbatim, do not paraphrase or re
 ---
 {raw_paste}
 ---
-Output YAML: each skill name as a top-level key, containing `vars`, `text` (with `raw_text`), and `battle` sections.
+Output YAML: each skill name as a top-level key, containing `vars` and `text` (with `raw_text`) sections.
 Parse ALL skills in the input above."""
         system = OVERRIDE_SYSTEM_PROMPT
     elif mode == "2":
@@ -495,7 +493,6 @@ skills:
   <skill CHT name>:
     vars: ...
     text: ...   # include raw_text (exact original skill text, verbatim)
-    battle: ...
   # ... one entry per full skill ...
 heroes:
   <hero CHT name>:
@@ -518,7 +515,7 @@ heroes:
 ### How to classify each input item:
 
 **SKILL** — has rarity marker `(S)/(A)/(B)` AND fields `種類:`, `發動機率:`, `效果:`.
-  Place under `skills:` with the full `vars`/`text`/`battle` structure.
+  Place under `skills:` with the full `vars`/`text` structure.
 
 **HERO** — introduced by `武將名:` followed by stats (稀有度/Cost/勢力/氏族/性別/統率/武勇/智略/政務/魅力/速度)
   and skill refs (固有戰法/傳承戰法/評定衆戰法).
@@ -539,7 +536,7 @@ If the input contains:
 
 WRONG output (弓槍術II emitted as a skill):
   skills:
-    弓槍術II: {{vars: ..., text: ..., battle: ...}}    # ← WRONG, this is a trait
+    弓槍術II: {{vars: ..., text: ...}}    # ← WRONG, this is a trait
   heroes:
     阿初: {{traits: []}}                                # ← missing the trait
 
@@ -744,7 +741,7 @@ Only output the failed skills: {', '.join(name for name, _, _ in bad_skills)}"""
         print(f"\n--- [{seq+1}/{len(good)}] {name} ---")
 
         # Always ask for metadata (even under yy)
-        if mode in ("1", "3") and isinstance(entry, dict) and "battle" in entry:
+        if mode in ("1", "3") and isinstance(entry, dict) and "text" in entry:
             if not _ask_skill_metadata(name, result):
                 print(f"  [skipped]")
                 continue
@@ -880,7 +877,7 @@ Each already has a Chinese description — do NOT translate, just reformat.
 {chr(10).join(blocks)}
 
 ---
-Output YAML: each skill name as a top-level key, containing `vars`, `text`, and `battle` sections."""
+Output YAML: each skill name as a top-level key, containing `vars` and `text` sections."""
 
     raw = ""
     try:
@@ -947,11 +944,9 @@ Output YAML: each skill name as a top-level key, containing `vars`, `text`, and 
         if isinstance(text, dict):
             for tk, tv in text.items():
                 new_skill[tk] = tv
-        # Keep vars and battle at top level
+        # Keep vars at top level
         if entry.get("vars"):
             new_skill["vars"] = entry["vars"]
-        if entry.get("battle"):
-            new_skill["battle"] = entry["battle"]
 
         overrides["skills"][key] = new_skill
         updated += 1

@@ -248,7 +248,7 @@ def _diff_internal(cfg: dict, report: Report) -> None:
             "info", "internal_consistency",
             f"{len(inconsistencies)} multi_lang↔skill.name mismatches "
             f"(roman-numeral or character variants). Suggested entries for "
-            f"data/cfg_aliases.yaml are listed in the report.",
+            f"data/source_corrections.yaml (skill_name_alias) are listed in the report.",
         ))
         # Stash the suggestions in metadata via a magic anomaly entry
         for ml_name, skill_name in inconsistencies[:50]:

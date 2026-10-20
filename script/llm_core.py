@@ -269,21 +269,7 @@ def parse_llm_output(raw: str) -> dict | None:
         data = yaml.safe_load(text)
         return clean_strings(data)
     except yaml.YAMLError:
-        # Try parsing frontend sections only (battle often has unquoted colons)
-        try:
-            parts = re.split(r"\nbattle:\s*\n", text, maxsplit=1)
-            fe_data = yaml.safe_load(parts[0])
-            result = clean_strings(fe_data) if fe_data else {}
-            if len(parts) > 1:
-                try:
-                    bt_data = yaml.safe_load("battle:\n" + parts[1])
-                    if bt_data:
-                        result.update(clean_strings(bt_data))
-                except yaml.YAMLError:
-                    pass
-            return result if result else None
-        except yaml.YAMLError:
-            return None
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -352,15 +338,13 @@ def autofix_frontend(fe: dict) -> list[str]:
 # ---------------------------------------------------------------------------
 
 SKILL_OUTPUT_FORMAT = """\
-For EACH skill, output a YAML document under that skill's name as the top-level key, containing THREE sections:
+For EACH skill, output a YAML document under that skill's name as the top-level key, containing TWO sections:
 
 ## `vars` — Shared variables (SINGLE source of numeric truth)
-- Extract ALL numeric values referenced in both text and battle into ONE shared `vars` dict.
+- Extract ALL numeric values referenced in the text into ONE shared `vars` dict.
 - Scaling values: use nested {base, max, scale} (e.g. {base: 0.30, max: 0.60, scale: 武勇}).
 - Fixed values: use plain int/float (e.g. duration: 2).
-- CRITICAL: `text.description` uses {var:key} to reference these vars.
-  `battle.do` uses $key to reference these vars. Both reference the SAME vars dict.
-  Do NOT duplicate vars between text and battle.
+- CRITICAL: `text.description` and `text.commander_description` use {var:key} to reference these vars.
 
 ## `text` — Formatted description for frontend rendering
 - REQUIRED fields: `name` (CHT skill name), `type`, `rarity`, `target`, `activation_rate`, `description`, `brief_description`, `tags`
@@ -373,18 +357,6 @@ For EACH skill, output a YAML document under that skill's name as the top-level 
   Put the 大將技 effect text HERE, using the SAME {var:}/{scale:}/{status:} syntax as `description`.
   Do NOT leave the 大將技 sentence inline in `description`, and do NOT prefix it with 「大將技：」
   (the frontend renders the 大將技 label itself). `description` must contain only the base effect.
-
-## `battle` — Structured extraction for battle engine
-- ALL text (including `bonus.commander.description`) must be in Traditional Chinese (繁體中文)
-- Use $key to reference the shared vars dict — do NOT include a `vars` field here
-- NEVER use {var:}, {status:}, or {scale:} in battle — those are text-only. Battle uses $key for vars and plain Chinese for statuses (e.g. 會心, not {status:會心})
-- `bonus.commander.description` follows the SAME $key rule: write $atk_debuff, NOT {var:atk_debuff}. Write （受統率影響）, NOT （{scale:統率}）.
-- Map effects to `do` blocks: trigger/when/to/do
-- Effect types: damage, heal, buff, debuff, applyStatus, removeStatus, addStack, roll, sequence, conditional
-- Trigger types: always, battleStart, turnStart, beforeAction, afterAction, beforeAttack, afterAttack, onDamaged, onHeal
-- Target types: self, allySingle, allyMultiple, allyAll, enemySingle, enemyMultiple, enemyAll
-- 大将技 → put the text form in `text.commander_description` (frontend, {var:} syntax) AND the
-  structured form in `battle.bonus.commander` (battle engine, $key syntax). Never inline 大將技 in `text.description`.
 
 ### Reference examples (correct format):
 
@@ -413,34 +385,6 @@ Example 1 (主動, damage + status + commander):
     commander_description: 額外使敵軍普通攻擊傷害降低{var:atk_debuff}（{scale:統率}），持續{var:duration}回合。
     brief_description: 複數兵刃傷害並施加挑釁
     tags: [兵刃傷害, 群體傷害, 施加狀態, 減益, 主動發動, 大將技]
-  battle:
-    type: 主動
-    trigger: beforeAction
-    rate: 0.35
-    do:
-      - to: enemyMultiple
-        count: 2
-        do:
-          - type: damage
-            damage_type: 兵刃傷害
-            value: $dmg_rate
-          - type: applyStatus
-            status: 挑釁
-            duration: $duration
-          - type: debuff
-            stat: assault_damage
-            value: $assault_debuff
-            scale: 統率
-            duration: $duration
-    bonus:
-      commander:
-        description: 額外使敵軍普通攻擊傷害降低$atk_debuff（受統率影響）
-        do:
-          - type: debuff
-            stat: normal_attack_damage
-            value: $atk_debuff
-            scale: 統率
-            duration: $duration
 
 Example 2 (被動, multi-status + HP conditional):
 以戰養戰:
@@ -466,30 +410,6 @@ Example 2 (被動, multi-status + HP conditional):
       自身兵力低於50%時，額外獲得{var:crit_rate}{status:會心}。
     brief_description: 獲得離反，低兵力時獲得會心
     tags: [增益, 施加狀態, 被動觸發, 武勇系, 條件觸發]
-  battle:
-    type: 被動
-    trigger: always
-    do:
-      - trigger: battleStart
-        to: self
-        do:
-          - type: applyStatus
-            status: 離反
-            value: $rebel_rate
-      - trigger: turnStart
-        when: turn == 5
-        to: self
-        do:
-          - type: applyStatus
-            status: 離反
-            value: $extra_rebel_rate
-      - trigger: always
-        when: hp_rate <= 0.5
-        to: self
-        do:
-          - type: applyStatus
-            status: 會心
-            value: $crit_rate
 
 Example 3 (突擊, scaling activation_rate + 謀略傷害 + debuff):
 五里霧中:
@@ -519,27 +439,7 @@ Example 3 (突擊, scaling activation_rate + 謀略傷害 + debuff):
       並有{var:confusion_chance}機率施加{status:混亂}狀態。
       同時降低目標智略{var:stat_debuff}點，持續{var:debuff_duration}回合。
     brief_description: 謀略傷害並機率施加混亂
-    tags: [謀略傷害, 單體傷害, 施加狀態, 控制, 降低屬性, 突擊觸發, 智略系]
-  battle:
-    type: 突擊
-    trigger: afterAttack
-    rate: $activation_rate
-    do:
-      - to: enemySingle
-        do:
-          - type: damage
-            damage_type: 謀略傷害
-            value: $dmg_rate
-            scale: 智略
-          - type: roll
-            chance: $confusion_chance
-            on_success:
-              - type: applyStatus
-                status: 混亂
-          - type: debuff
-            stat: 智略
-            value: $stat_debuff
-            duration: $debuff_duration"""
+    tags: [謀略傷害, 單體傷害, 施加狀態, 控制, 降低屬性, 突擊觸發, 智略系]"""
 
 
 # ---------------------------------------------------------------------------
@@ -563,12 +463,6 @@ def validate_skill_entry(data: dict) -> list[str]:
         if not text.get("description"):
             errors.append("text.description missing")
 
-    bt = data.get("battle")
-    if not bt:
-        errors.append("missing battle")
-    elif not isinstance(bt, dict):
-        errors.append("battle not a dict")
-
     return errors
 
 
@@ -589,22 +483,12 @@ def validate_trait_entry(data: dict) -> list[str]:
         if not text.get("description"):
             errors.append("text.description missing")
 
-    kind = data.get("kind")
-    if not kind:
-        errors.append("missing kind")
-    elif kind == "passive":
-        if not data.get("passive"):
-            errors.append("kind=passive but missing passive section")
-        if data.get("battle"):
-            errors.append("kind=passive but has battle section (should not)")
-    elif kind == "triggered":
-        bt = data.get("battle")
-        if not bt:
-            errors.append("kind=triggered but missing battle section")
-        elif not isinstance(bt, dict):
-            errors.append("battle not a dict")
-    else:
-        errors.append(f"unknown kind '{kind}' (must be passive or triggered)")
+    # Only `passive.affinity` is merged; other keys (passive.buffs, battle, kind) are ignored.
+    passive = data.get("passive") or {}
+    if not isinstance(passive, dict):
+        errors.append("passive not a dict")
+    elif "affinity" in passive and not isinstance(passive["affinity"], dict):
+        errors.append("passive.affinity not a dict")
 
     return errors
 
@@ -615,7 +499,6 @@ def validate_bingxue_entry(data: dict) -> list[str]:
     Unlike skills/traits, bingxue only needs:
       - text.description (CHT with template syntax)
       - vars (when effect has Lv1/Lv2 or scaling values)
-    No battle/passive sections — those are deferred to a later phase.
     The name field is NOT validated here because it's hand-maintained
     in data/bingxue.yaml and LLM is told not to emit it.
     """
@@ -764,14 +647,7 @@ def validate_entry_quality(data: dict, *, log: bool = True) -> list[str]:
         if not has_scaling_var:
             errors.append("activation_rate has scaling (→) but no vars use base/max")
 
-    # 7. {var:} or {status:} leaked into battle section (should use $key)
-    battle = data.get("battle", {})
-    if isinstance(battle, dict):
-        battle_str = str(battle)
-        if re.search(r'\{(var|status|scale):', battle_str):
-            errors.append("{var:}/{status:}/{scale:} found in battle (use $key)")
-
-    # 8. {status:X} references non-canonical status names
+    # 7. {status:X} references non-canonical status names
     status_refs = re.findall(r'\{status:([^}]+)\}', full_text)
     for sr in status_refs:
         if sr not in _CANONICAL_STATUS_SET:

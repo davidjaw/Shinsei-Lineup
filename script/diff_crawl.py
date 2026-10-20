@@ -256,7 +256,7 @@ _COMPARABLE_FIELDS = {
 # llm_translate treats the JP entry as already translated.
 TRANSLATION_OWNED_SKILL_FIELDS = {
     "name", "description", "commander_description", "brief_description",
-    "tags", "vars", "battle",
+    "tags", "vars",
 }
 
 # Crawl/cfg-owned fields: drop from the override, the crawl base wins.

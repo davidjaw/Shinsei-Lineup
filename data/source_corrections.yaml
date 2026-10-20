@@ -66,3 +66,23 @@ game8_skill_reattributions:
       太田資正's true unique born_skill is 三楽犬 (cfg id=20053).
     noted: 2026-05-07
     verified_by: user
+
+# ---------------------------------------------------------------------------
+# Manual cfg name aliases (merge_sources.py resolver, Strategy 5)
+# ---------------------------------------------------------------------------
+# Used only when a user-side JP key maps to a cfg.skill / cfg.hero whose name
+# the automatic strategies (multi_lang id, zh-hans/zh-hant/jp norm) can't
+# reconcile. cfg_diff.py surfaces candidates after each cfg refresh.
+# Format: jp_key (or zh-hans literal) -> cfg.skill.name / cfg.hero.name.
+skill_name_alias: {}
+
+hero_name_alias: {}
+
+# ---------------------------------------------------------------------------
+# Trait key normalization (merge_sources.py merge_traits)
+# ---------------------------------------------------------------------------
+# `<wrong_key>: <correct_key>` for crawled trait keys that mix CHT glyphs or
+# ASCII roman numerals into the JP key (e.g. 鐵炮大將 -> 鉄炮大将, 剛猛I -> 剛猛Ⅰ).
+# Non-destructive: the source yaml keeps the wrong key. Suggestions land in
+# .build/key_normalization_candidates.yaml after each run.
+trait_key_alias: {}

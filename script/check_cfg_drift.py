@@ -3,8 +3,7 @@ Match-rate floor check: every kind in data/prototype/*_proto.yaml must
 keep at least its baseline cfg-match coverage. Catches regressions where
 a cfg refresh removed entries the build expects.
 
-Run alone (`uv run script/check_cfg_drift.py`) or as part of
-`check_data_integrity.py`.
+Run alone (`uv run script/check_cfg_drift.py`) or as part of `npm run data`.
 """
 
 from __future__ import annotations

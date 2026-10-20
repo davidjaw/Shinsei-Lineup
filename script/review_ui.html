@@ -740,7 +740,7 @@ function linkBar(kind, jpKey, opts = {}) {
    bar (P2). Collision cards ignore this (they always default to "keep"). */
 const TRANSLATION_OWNED_FIELDS = new Set(
   ["name", "description", "commander_description", "brief_description",
-   "tags", "vars", "battle"]);
+   "tags", "vars"]);
 const NEEDS_CHOICE_FIELDS = new Set(["is_unique", "unique_hero"]);
 // CRAWL_OWNED = type/rarity/target/activation_rate/source_hero + any other
 // field not classified above → crawl base wins, default "adopt".

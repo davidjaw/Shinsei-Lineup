@@ -38,9 +38,7 @@ data/*
 !data/overrides.yaml
 !data/statuses.yaml
 # Refactor: cfg-pipeline manual files + version archive are committed.
-!data/cfg_aliases.yaml
 !data/source_corrections.yaml
-!data/key_normalization.yaml
 !data/cfg/
 data/cfg/cfg_current.json
 !data/.cfg_history/

@@ -61,7 +61,7 @@ def _quality(entry: dict) -> list[str]:
     if not isinstance(entry, dict):
         return []
     if _is_flat_frontend(entry):
-        wrapped = {"text": entry, "vars": entry.get("vars", {}), "battle": entry.get("battle", {})}
+        wrapped = {"text": entry, "vars": entry.get("vars", {})}
         return validate_entry_quality(wrapped, log=False)
     return validate_entry_quality(entry, log=False)
 

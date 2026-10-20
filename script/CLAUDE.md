@@ -24,8 +24,8 @@ All prompts share `COMMON_RULES` from `llm_core.py` which enforces:
 ### Prompt caching (OpenRouter / Anthropic)
 
 - `llm_core.py` uses raw `httpx` (NOT OpenAI SDK) with per-block `cache_control` in the system message content array — the only method that actually works for prompt caching via OpenRouter
-- Anthropic cache thresholds: Haiku 4096 tokens, Sonnet 2048 tokens. System prompts are sized to exceed these
+- Anthropic cache thresholds: Haiku 4096 tokens, Sonnet 2048 tokens. The skill/trait system prompts (~6.9k / ~5.9k chars after the `battle` DSL removal) may now fall under the Haiku threshold; re-check cache hits on `--backend openrouter` before relying on it
 - `_run_batches_parallel()` runs batch 1 alone to warm the cache, then dispatches the rest in parallel — avoids multiple cache writes
-- `text.description` uses `{var:}` / `{status:}` / `{scale:}` template syntax; `battle` section uses `$key` for vars and plain Chinese for statuses/scaling — this distinction is a common LLM error source
-- Trait validation uses `validate_trait_entry()` (not `validate_skill_entry()`) — passive traits have `passive` section, no `battle`
+- LLM output is only `vars` + `text` (templated with `{var:}` / `{status:}` / `{scale:}`); there is no structured battle section. `build_frontend_data.py` drops stray `battle` / `passive` keys from skills (`raw_text` is kept for downstream consumers)
+- Trait validation uses `validate_trait_entry()` (not `validate_skill_entry()`) — the only extra trait section is `passive.affinity` (troop levels, read by `_affinity_from_canon`)
 - See `ai-doc/openrouter-cache.md` for tested caching methods and what does NOT work

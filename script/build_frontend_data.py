@@ -531,8 +531,15 @@ def normalize_skill_type(t: str) -> str:
     return cleaned if cleaned in VALID_SKILL_TYPES else t
 
 
+# Legacy source sections nothing reads; dropped so they can't reach the bundle.
+# `raw_text` is kept for downstream consumers of skills.json.
+SKILL_DROP_KEYS = ("battle", "passive")
+
+
 def postprocess_skill(skill: dict) -> dict:
     """Normalize a single skill entry after all merges/overrides."""
+    for key in SKILL_DROP_KEYS:
+        skill.pop(key, None)
     skill["name"] = fix_skill_name(skill.get("name", ""))
     skill["is_event_skill"] = bool(skill.get("is_event_skill", False))
     if skill.get("type"):
@@ -591,7 +598,7 @@ def infer_trait_rank(name: str) -> str:
 
 def _flatten_trait(jp_name: str, tr: dict) -> dict:
     """Flatten a canonical or legacy trait entry into the frontend JSON shape."""
-    # Canonical shape has text/vars/kind/passive sub-keys
+    # Canonical shape has text/vars(/passive.affinity) sub-keys
     if "text" in tr:
         text = tr["text"]
         cht_name = text.get("name", jp_name)
@@ -822,29 +829,9 @@ def split_commander_description(desc: str) -> tuple[str, str]:
     return desc, ""
 
 
-def _extract_commander_desc(tr: dict, battle: dict) -> str:
-    """Try multiple sources for commander description."""
-    # 1. Explicit field in frontend
-    if tr.get("commander_description"):
-        return tr["commander_description"]
-    # 2. bonus.commander in frontend
-    bonus = tr.get("bonus", {})
-    if isinstance(bonus, dict):
-        cmd = bonus.get("commander", {})
-        if isinstance(cmd, dict) and cmd.get("description"):
-            return cmd["description"]
-    # 3. bonus.commander in battle
-    bonus = battle.get("bonus", {})
-    if isinstance(bonus, dict):
-        cmd = bonus.get("commander", {})
-        if isinstance(cmd, dict) and cmd.get("description"):
-            return cmd["description"]
-    return ""
-
-
 def build_skills(skills_data: dict, proto_by_jp: dict | None = None) -> list[dict]:
     """Build frontend skill list from canonical data dict.
-    Each entry has raw/vars/text/battle sub-keys.
+    Each entry has raw/vars/text sub-keys.
     proto_by_jp: optional {jp_key: proto_entry} keyed on both eff and orig
     JP. When CFG_AUTHORITATIVE, cfg fields override LLM names + metadata."""
     proto_by_jp = proto_by_jp or {}
@@ -853,7 +840,6 @@ def build_skills(skills_data: dict, proto_by_jp: dict | None = None) -> list[dic
     for key, entry in skills_data.items():
         cr = entry.get("raw", {})
         tr = entry.get("text", {})
-        bt = entry.get("battle", {})
         vars_dict = entry.get("vars", {})
         cfg = (proto_by_jp.get(key) or {}).get("cfg") or {}
 
@@ -861,7 +847,7 @@ def build_skills(skills_data: dict, proto_by_jp: dict | None = None) -> list[dic
         raw_desc = tr_desc or cr.get("description", "")
         description, commander_description = split_commander_description(raw_desc)
         if not commander_description:
-            commander_description = _extract_commander_desc(tr, bt)
+            commander_description = tr.get("commander_description") or ""
 
         name_cht = tr.get("name") or key
         skill_type = cr.get("type", tr.get("type", ""))

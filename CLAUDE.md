@@ -30,8 +30,8 @@ Sialia cfg.json ─┘                              │
 - **Source of truth (crawled)**: `data/heroes_crawled.yaml`, `skills_crawled.yaml`,
   `traits_crawled.yaml`, `assembly_skills_crawled.yaml`, `bingxue_crawled.yaml`.
 - **Official config**: `data/cfg/cfg_current.json` (versioned archive in `data/.cfg_history/`).
-- **Deterministic merge**: `data/prototype/*_proto.yaml`, using the tracked match files
-  `data/cfg_aliases.yaml`, `data/source_corrections.yaml`, `data/key_normalization.yaml`.
+- **Deterministic merge**: `data/prototype/*_proto.yaml`, using the tracked match file
+  `data/source_corrections.yaml` (upstream corrections + cfg/trait-key alias maps).
 - **Canonical output**: `data/skills.yaml`, `data/traits.yaml`, `data/bingxue.yaml`,
   `data/heroes_translated.yaml` (gitignored).
 - **Manual overrides**: `data/overrides.yaml` (tracked, applied last, highest priority) and
@@ -125,8 +125,8 @@ cloud sync/short shares/proposals/gacha are silently disabled. The client uses d
 
 - All game text in Traditional Chinese (繁體中文); code and comments in English.
 - Hero names: JP in `name_jp`, CHT in `name`. Skill names: JP key in YAML, CHT `name` in translated data.
-- `data/` is gitignored except `overrides.yaml`, `statuses.yaml`, `cfg_aliases.yaml`,
-  `source_corrections.yaml`, `key_normalization.yaml`, the cfg archive and `cfg/last_diff_summary.txt`.
+- `data/` is gitignored except `overrides.yaml`, `statuses.yaml`, `source_corrections.yaml`, the cfg archive and
+  `cfg/last_diff_summary.txt`.
 - Never hand-edit `.build/` or `dist/`; regenerate them.
 - Changelog (`src/constants/changelog.ts`): released versions are frozen — never append entries to them. After a
   release, start the next unreleased batch by adding 1 to the patch (`0.4.8` → `0.4.9`). Fold all subsequent

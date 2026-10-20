@@ -688,7 +688,7 @@ def save_outputs(
 def sync_canonical(hero_list: list[dict], skills_db: dict[str, dict], bingxue_db: dict[str, dict]):
     """Update canonical files' raw sections with freshly crawled data.
 
-    Preserves existing text/vars/battle/passive sections — only overwrites raw.
+    Preserves existing text/vars/passive sections — only overwrites raw.
     New entries (not yet in canonical) get a raw-only stub so llm_translate
     picks them up on the next run.
     """

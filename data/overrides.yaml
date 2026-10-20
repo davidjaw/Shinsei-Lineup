@@ -33,24 +33,6 @@ skills:
         base: 0.1
         max: 0.2
       duration: 2
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.4
-      do:
-      - to: allyMultiple
-        count: 2
-        do:
-        - type: buff
-          stat: damage_reduction
-          value: $damage_reduction
-          scale: 智略
-          duration: $duration
-        - type: buff
-          stat: damage_share
-          value: $damage_share
-          scale: 智略
-          duration: $duration
     is_event_skill: true
     _action: add
   離心背道:
@@ -74,22 +56,6 @@ skills:
         base: 0.25
         max: 0.5
       debuff_duration: 2
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.35
-      prepTurns: 1
-      do:
-      - to: enemySingle
-        targetRole: commander
-        do:
-        - type: damage
-          damage_type: 兵刃傷害
-          value: $damage_rate
-        - type: debuff
-          stat: damage_output
-          value: $damage_debuff
-          duration: $debuff_duration
     is_event_skill: true
     _action: add
   疑兵盜城:
@@ -118,27 +84,6 @@ skills:
         max: 1.06
       debuff_duration: 2
       target_count: 3
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.35
-      do:
-      - to: self
-        do:
-        - type: buff
-          stat: 智略
-          value: $intelligence_buff
-          scale: 智略
-          duration: $buff_duration
-      - to: enemyMultiple
-        countMin: 2
-        countMax: 3
-        do:
-        - type: debuff
-          stat: next_mou_damage_taken
-          value: $extra_damage_rate
-          scale: 智略
-          duration: $debuff_duration
     is_event_skill: true
     _action: add
   乘虛而入:
@@ -166,35 +111,6 @@ skills:
         base: 0.175
         max: 0.35
       dodge_duration: 1
-    battle:
-      type: 突擊
-      trigger: afterAttack
-      rate: 0.35
-      do:
-      - to: enemySingle
-        do:
-        - type: debuff
-          stat: 武勇
-          value: $stat_debuff
-          duration: $debuff_duration
-        - type: debuff
-          stat: 智略
-          value: $stat_debuff
-          duration: $debuff_duration
-        - type: conditional
-          condition: target_has_status(挑釁) || target_has_status(牽制)
-          on_true:
-          - type: applyStatus
-            status: 閃避
-            value: $dodge_rate
-            duration: $dodge_duration
-          on_false:
-          - type: applyStatus
-            status: 挑釁
-            duration: $debuff_duration
-          - type: applyStatus
-            status: 牽制
-            duration: $debuff_duration
     is_event_skill: true
     _action: add
   大器之蘊:
@@ -216,18 +132,6 @@ skills:
         max: 1.08
       start_turn: 5
       target_count: 2
-    battle:
-      type: 指揮
-      trigger: turnStart
-      when: turn >= 5
-      rate: 1.0
-      do:
-      - to: allyMultiple
-        count: 2
-        do:
-        - type: heal
-          value: $heal_rate
-          scale: 智略
     is_event_skill: true
     _action: add
   立身之志:
@@ -248,22 +152,6 @@ skills:
         base: 0.225
         max: 0.55
       buff_duration: 2
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.4
-      do:
-      - to: enemyAll
-        do:
-        - type: applyStatus
-          status: 挑釁
-          duration: $buff_duration
-      - to: self
-        do:
-        - type: buff
-          stat: 統率
-          value: $leadership_buff
-          duration: $buff_duration
     is_event_skill: true
     _action: add
   專橫專斷:
@@ -289,36 +177,6 @@ skills:
         base: 0.06
         max: 0.12
       debuff_trigger_count: 3
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.4
-      do:
-      - to: self
-        do:
-        - type: addStack
-          stack_name: damage_buff
-          value: $damage_buff_base
-      - type: sequence
-        triggerAfterAttack: true
-        do:
-        - type: conditional
-          condition: stack(damage_buff) > 0
-          on_true:
-          - type: buff
-            stat: 兵刃傷害
-            value: $damage_buff_base
-            duration: 1
-          - type: addStack
-            stack_name: damage_buff
-            value: $damage_buff_increment
-        - type: conditional
-          condition: stack_count % $debuff_trigger_count == 0
-          on_true:
-          - type: applyStatus
-            status: 無策
-            to: enemySingle
-            duration: 1
     is_event_skill: true
     _action: add
   家中整飭:
@@ -340,19 +198,6 @@ skills:
         base: 0.68
         max: 1.36
       debuff_duration: 2
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.35
-      do:
-      - to: enemySingle
-        do:
-        - type: damage
-          damage_type: 謀略傷害
-          value: $damage_rate
-        - type: applyStatus
-          status: 封擊
-          duration: $debuff_duration
     is_event_skill: true
     _action: add
   破天轟鳴:
@@ -381,24 +226,6 @@ skills:
         type: flat
       debuff_duration: 2
       target_count: 2
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.35
-      prepTurns: 1
-      do:
-      - to: enemyMultiple
-        count: 2
-        do:
-        - type: applyStatus
-          status: 火傷
-          value: $fire_damage_rate
-          scale: 智略
-          duration: $debuff_duration
-        - type: debuff
-          stat: 統率
-          value: $leadership_debuff
-          duration: $debuff_duration
     is_event_skill: true
     _action: add
   斬雷神:
@@ -434,45 +261,6 @@ skills:
         max: 60
         type: flat
       extra_stack_threshold: 2
-    battle:
-      type: 被動
-      trigger: turnStart
-      rate: 1.0
-      do:
-      - to: self
-        do:
-        - type: addStack
-          stack_name: 蓄勢
-          value: 1
-      - type: conditional
-        condition: stack(蓄勢) >= $stack_threshold && !self_has_status(威壓)
-        on_true:
-        - to: self
-          do:
-          - type: applyStatus
-            status: 會心
-            value: $crit_rate_at_threshold
-            duration: $buff_duration
-          - type: buff
-            stat: 武勇
-            value: $valor_buff_at_threshold
-            duration: $buff_duration
-          - type: addStack
-            stack_name: 蓄勢
-            value: -999
-        - type: conditional
-          condition: prev_stack > $extra_stack_threshold
-          on_true:
-          - to: self
-            do:
-            - type: applyStatus
-              status: 會心
-              value: $extra_crit_rate
-              duration: $buff_duration
-            - type: buff
-              stat: 武勇
-              value: $extra_valor_buff
-              duration: $buff_duration
     is_event_skill: true
     _action: add
   南蠻東渡:
@@ -498,26 +286,6 @@ skills:
         base: 0.86
         max: 1.72
       target_count: 3
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.5
-      prepTurns: 1
-      do:
-      - to: allyMultiple
-        countMin: 2
-        countMax: 3
-        do:
-        - type: conditional
-          condition: target_is_barbarian_preference || target_is_barbarian_faith
-          on_true:
-          - type: heal
-            value: $enhanced_heal_rate
-            scale: 智略
-          on_false:
-          - type: heal
-            value: $heal_rate
-            scale: 智略
     is_event_skill: true
     _action: add
   疑心暗鬼:
@@ -542,26 +310,6 @@ skills:
         max: 30
         type: flat
       buff_duration: 2
-    battle:
-      type: 被動
-      trigger: always
-      rate: 1.0
-      do:
-      - to: self
-        do:
-        - type: buff
-          stat: prep_strategy_activation_rate
-          value: $prep_strategy_rate
-          scale: 智略
-      - trigger: onPrepStart
-        when: is_prep_active_strategy
-        to: self
-        do:
-        - type: buff
-          stat: 智略
-          value: $intelligence_buff
-          scale: 智略
-          duration: $buff_duration
     is_event_skill: true
     _action: add
   直言極諫:
@@ -586,28 +334,6 @@ skills:
       max_stacks: 2
       activation_rate_multiplier: 2
       multiplier_duration: 2
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.3
-      do:
-      - to: allyMultiple
-        count: 2
-        do:
-        - type: buff
-          stat: damage_reduction
-          value: $damage_reduction
-          scale: 智略
-          duration: $reduction_duration
-          maxStacks: $max_stacks
-      - trigger: turnStart
-        when: turn == 1
-        to: self
-        do:
-        - type: buff
-          stat: activation_rate_buff_multiplier
-          value: $activation_rate_multiplier
-          duration: $multiplier_duration
     is_event_skill: true
     _action: add
   合盟之陣:
@@ -641,38 +367,6 @@ skills:
       lower_hp_damage_reduction:
         base: 0.09
         max: 0.18
-    battle:
-      type: 陣法
-      trigger: always
-      rate: 1.0
-      condition: commander_strategy_type_is(主動 || 突擊) && all_three_affiliations_different
-      do:
-      - to: self
-        targetRole: commander
-        do:
-        - type: buff
-          stat: strategy_activation_rate
-          value: $strategy_rate_buff
-      - trigger: turnStart
-        to: allyMultiple
-        targetRole: deputy
-        do:
-        - type: conditional
-          condition: target_hp > other_deputy_hp
-          on_true:
-          - type: buff
-            stat: damage_output
-            value: $higher_hp_damage_buff
-          - type: buff
-            stat: damage_reduction
-            value: $higher_hp_damage_reduction
-          on_false:
-          - type: buff
-            stat: damage_output
-            value: $lower_hp_damage_buff
-          - type: buff
-            stat: damage_reduction
-            value: $lower_hp_damage_reduction
     is_event_skill: true
     _action: add
   出奇制勝:
@@ -702,30 +396,6 @@ skills:
         base: 0.02
         max: 0.04
       crit_stack_max: 4
-    battle:
-      type: 被動
-      trigger: always
-      do:
-      - trigger: beforeAction
-        when: ability_type == "主動"
-        to: self
-        do:
-        - type: buff
-          stat: damage
-          value: $damage_buff
-          scale: 智略
-      - trigger: afterAction
-        when: ability_triggered_success && ability_type == "主動"
-        to: self
-        do:
-        - type: roll
-          chance: $crit_chance
-          on_success:
-          - type: applyStatus
-            status: 會心
-            value: $crit_effect
-            scale: 智略
-            max_stack: $crit_stack_max
     is_event_skill: true
     _action: add
   三河武士:
@@ -761,35 +431,6 @@ skills:
         base: 0.41
         max: 0.82
       tokugawa_stat_scale: true
-    battle:
-      type: 兵種
-      trigger: always
-      do:
-      - trigger: battleStart
-        to: allyAll
-        do:
-        - type: buff
-          stat: 統率
-          value: $stat_buff
-      - trigger: afterAction
-        when: normal_attack_count >= 3
-        to: allyAll
-        do:
-        - type: heal
-          value: $recovery_rate
-          scale: 統率
-        - type: addStack
-          stack_name: 不屈次數
-          count: 1
-      - trigger: turnStart
-        when: 不屈次數 == 4
-        to: allyAll
-        do:
-        - type: damage
-          damage_type: 真實傷害
-          value: $damage_rate
-          target_type: enemySingle
-          target_selection: random
     is_event_skill: true
     _action: add
   甲斐弓騎兵·拓:
@@ -817,21 +458,6 @@ skills:
       prep_skill_rate_increase:
         base: 0.06
         max: 0.12
-    battle:
-      type: 兵種
-      trigger: battleStart
-      do:
-      - to: allyAll
-        do:
-        - type: buff
-          stat: speed
-          value: $speed_increase
-        - type: buff
-          stat: skill_activation_rate
-          value: $skill_rate_increase
-        - type: buff
-          stat: prepared_skill_activation_rate
-          value: $prep_skill_rate_increase
     is_event_skill: true
     _action: add
 
@@ -864,29 +490,6 @@ skills:
       recovery_rate:
         base: 0.39
         max: 0.78
-    battle:
-      type: 兵種
-      trigger: always
-      do:
-      - trigger: battleStart
-        to: allyAll
-        do:
-        - type: buff
-          stat: 速度
-          value: $speed_buff
-      - trigger: beforeAction
-        when: turn >= 2
-        to: allySingle
-        do:
-        - type: roll
-          chance: $activation_rate
-          scale:
-          - 武勇
-          - 速度
-          on_success:
-          - type: heal
-            value: $recovery_rate
-            scale: 武勇
     is_event_skill: true
     _action: add
   追亡逐北:
@@ -908,20 +511,6 @@ skills:
       dmg_rate:
         base: 0.73
         max: 1.46
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.35
-      do:
-      - to: enemySingle
-        do:
-        - type: damage
-          damage_type: 謀略傷害
-          value: $dmg_rate
-          scale: 智略
-        - type: applyStatus
-          status: 畏縮
-          duration: 1
     is_event_skill: true
     _action: add
   伊達風采:
@@ -955,80 +544,6 @@ skills:
         base: 0.67
         max: 1.34
       wind_essence_duration: 1
-    battle:
-      type: 指揮
-      trigger: battleStart
-      do:
-      - to: self
-        do:
-        - type: addStack
-          stack_name: 風采
-          value: 5
-      - trigger: beforeAction
-        to: self
-        when: stack_風采 > 0
-        do:
-        - type: sequence
-          steps:
-          - type: addStack
-            stack_name: 風采
-            value: -1
-          - to: enemySingle
-            do:
-            - type: damage
-              damage_type: 兵刃傷害
-              value: $dmg_rate
-              scale: 武勇
-            - type: damage
-              damage_type: 謀略傷害
-              value: $dmg_rate
-              scale: 智略
-            - type: roll
-              chance: 0.5
-              on_success:
-              - type: addStack
-                stack_name: 傷害計數
-                value: 1
-          - type: conditional
-            condition: stack_傷害計數 >= 4
-            on_true:
-            - type: buff
-              stat: 武勇
-              value: $stat_buff
-              scale: 武勇
-              duration: 999
-            - type: buff
-              stat: 智略
-              value: $stat_buff
-              scale: 智略
-              duration: 999
-            - type: addStack
-              stack_name: 屬性提升
-              value: 1
-            - type: addStack
-              stack_name: 傷害計數
-              value: -4
-            - type: conditional
-              condition: stack_屬性提升 >= $buff_stack_max
-              on_true:
-              - type: addStack
-                stack_name: 風采
-                value: 1
-              - type: addStack
-                stack_name: 屬性提升
-                value: -$buff_stack_max
-      bonus:
-        commander:
-          description: 屬性提高效果疊滿後，下次消耗風采時額外分別對敵軍單體造成$commander_dmg_rate兵刃傷害及謀略傷害（受武勇/智略影響）
-          do:
-          - type: damage
-            damage_type: 兵刃傷害
-            value: $commander_dmg_rate
-            scale: 武勇
-          - type: damage
-            damage_type: 謀略傷害
-            value: $commander_dmg_rate
-            scale: 智略
     unique_hero: 伊達政宗
     is_unique: true
     _action: add
@@ -1070,62 +585,6 @@ skills:
       commander_fill_chance:
         base: 0.2
         max: 0.4
-    battle:
-      type: 兵種
-      trigger: battleStart
-      do:
-      - to: allyAll
-        do:
-        - type: buff
-          stat: move_speed
-          value: $move_speed_buff
-          duration: 999
-      - trigger: turnStart
-        to: allyAll
-        do:
-        - type: conditional
-          condition: ammo == 0
-          on_true:
-          - type: roll
-            chance: $double_ammo_chance
-            scale: 武勇,速度
-            on_success:
-            - type: addStack
-              stack_name: 彈丸
-              value: 2
-            on_failure:
-            - type: addStack
-              stack_name: 彈丸
-              value: 1
-        - type: conditional
-          condition: ammo > 0
-          on_true:
-          - type: roll
-            chance: $ammo_consume_chance
-            scale: 速度
-            on_success:
-            - type: sequence
-              steps:
-              - type: addStack
-                stack_name: 彈丸
-                value: -1
-              - to: enemySingle
-                do:
-                - type: damage
-                  damage_type: 混合傷害
-                  value: $dmg_rate
-                  scale: 武勇或智略
-      - trigger: afterAction
-        to: allyAll
-        when: leader == 伊達政宗
-        do:
-        - type: roll
-          chance: $commander_fill_chance
-          scale: 武勇,智略
-          on_success:
-          - type: addStack
-            stack_name: 彈丸
-            value: 1
     source_hero: 伊達政宗
     _action: add
   神出鬼沒:
@@ -1146,21 +605,6 @@ skills:
         base: 1.49
         max: 2.98
       duration: 2
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.5
-      do:
-      - to: self
-        do:
-        - type: applyStatus
-          status: 閃避
-          value: high
-          duration: 99
-        - type: buff
-          stat: next_attack_damage
-          value: $damage_rate
-          duration: $duration
     unique_hero: 藤林正保
     is_unique: true
     _action: add
@@ -1195,41 +639,6 @@ skills:
         max: 1.02
       exhausted_duration: 1
       leader_scale: 速度
-    battle:
-      type: 兵種
-      trigger: battleStart
-      do:
-      - to: allyAll
-        do:
-        - type: buff
-          stat: 武勇
-          value: $ally_valor_speed_buff
-        - type: buff
-          stat: 速度
-          value: $ally_valor_speed_buff
-        - type: addStack
-          stack_name: 密報
-          value: $intel_stacks_per_enemy
-          per_target: enemy
-      - trigger: afterAttack
-        to: enemySingle
-        when: has_intel_stack
-        do:
-        - type: roll
-          chance: $trigger_chance
-          on_success:
-          - type: addStack
-            stack_name: 密報
-            value: -1
-          - type: damage
-            damage_type: 兵刃傷害
-            value: $damage_rate
-          - type: conditional
-            when: intel_stacks == 0
-            do:
-            - type: applyStatus
-              status: 疲弊
-              duration: $exhausted_duration
     source_hero: 藤林正保
     _action: add
   風流武者:
@@ -1262,46 +671,6 @@ skills:
       buff_duration: 2
       max_stacks: 2
       reset_turn_pattern: 奇數
-    battle:
-      type: 被動
-      trigger: always
-      do:
-      - trigger: beforeAction
-        when: skill_type in [主動, 突擊] AND action_count % 2 == 1
-        to: self
-        do:
-        - type: roll
-          chance: $trigger_chance
-          scale: 智略
-          on_success:
-          - type: heal
-            heal_type: 百分比
-            value: $heal_rate
-            scale: 智略
-            to: allyMultiple
-            count: 2
-      - trigger: beforeAction
-        when: skill_type in [主動, 突擊] AND action_count % 2 == 0
-        to: self
-        do:
-        - type: roll
-          chance: $trigger_chance
-          scale: 智略
-          on_success:
-          - type: buff
-            stat: 謀略傷害
-            value: $damage_buff
-            scale: 智略
-            to: allyMultiple
-            count: 2
-            duration: $buff_duration
-            max_stacks: $max_stacks
-      - trigger: turnStart
-        when: turn % 2 == 1
-        to: self
-        do:
-        - type: resetCounter
-          counter: action_count
     unique_hero: 三好實休
     is_unique: true
     _action: add
@@ -1330,22 +699,6 @@ skills:
         max: 0.42
       debuff_duration: 2
       max_debuff_stacks: 4
-    battle:
-      type: 突擊
-      trigger: afterAttack
-      rate: 0.35
-      do:
-      - to: enemySingle
-        do:
-        - type: damage
-          damage_type: 兵刃傷害
-          value: $damage_rate
-        - type: debuff
-          stat: outgoing_damage
-          value: $damage_debuff
-          scale: 武勇
-          duration: $debuff_duration
-          max_stacks: $max_debuff_stacks
     source_hero: 三好實休
     _action: add
   傳馬疾馳:
@@ -1374,35 +727,6 @@ skills:
         base: 0.51
         max: 1.02
       buff_duration: 1
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.45
-      do:
-      - to: allySingle
-        do:
-        - type: buff
-          stat: 武勇
-          value: $valor_speed_buff
-          scale: 智略
-          duration: $buff_duration
-        - type: buff
-          stat: 速度
-          value: $valor_speed_buff
-          scale: 智略
-          duration: $buff_duration
-        - trigger: beforeAction
-          to: enemySingle
-          do:
-          - type: damage
-            damage_type: 兵刃傷害
-            value: $damage_rate
-            scale: 智略
-        - trigger: onBuffExpire
-          do:
-          - type: transferBuff
-            target: allySingle
-            exclude_original: true
     unique_hero: 大久保長安
     is_unique: true
     _action: add
@@ -1423,17 +747,6 @@ skills:
       production_buff:
         base: 0.015
         max: 0.03
-    battle:
-      type: 指揮
-      trigger: always
-      when: is_assembly_member
-      do:
-      - to: self
-        do:
-        - type: buff
-          stat: 兵糧增產
-          value: $production_buff
-          scale: 政務
     source_hero: 大久保長安
     _action: add
   上州黃斑:
@@ -1476,50 +789,6 @@ skills:
         max: 0.05
       debuff_duration: 3
       fatigue_duration: 1
-    battle:
-      type: 指揮
-      trigger: always
-      rate: 1.0
-      do:
-      - trigger: turnStart
-        when: prev_turn_attacked_by_normal
-        to: enemySingle
-        do:
-        - type: applyStatus
-          status: 消沉
-          chance: $trigger_rate
-          scale: 統率
-          duration: $debuff_duration
-          damage_rate: $debuff_rate
-          scale_damage: 智略
-      - trigger: turnStart
-        when: not prev_turn_attacked_by_normal
-        to: enemyMultiple
-        count: 2
-        do:
-        - type: conditional
-          condition: not has_status_消沉
-          on_true:
-          - type: applyStatus
-            status: 消沉
-            chance: $random_rate
-            scale: 統率
-            duration: $debuff_duration
-            damage_rate: $debuff_rate
-            scale_damage: 智略
-          on_false:
-          - type: applyStatus
-            status: 疲弊
-            chance: 1.0
-            scale: 統率
-            duration: $fatigue_duration
-      bonus:
-        commander:
-          description: 使疲弊狀態的基礎機率增加$fatigue_bonus
-          do:
-          - type: buff
-            stat: fatigue_base_rate
-            value: $fatigue_bonus
     unique_hero: 長野業正
     is_unique: true
     _action: add
@@ -1546,36 +815,6 @@ skills:
       heal_rate:
         base: 0.41
         max: 0.82
-    battle:
-      type: 指揮
-      trigger: always
-      rate: 1.0
-      do:
-      - trigger: turnStart
-        to: allySingle
-        do:
-        - type: conditional
-          condition: self_not_lowest_hp
-          on_true:
-          - type: sequence
-            do:
-            - type: roll
-              chance: $heal_trigger_rate
-              scale: 統率
-              on_success:
-              - type: heal
-                target: allyAll
-                value: $heal_rate
-                scale: 統率
-          on_false:
-          - type: roll
-            chance: $heal_trigger_rate
-            scale: 統率
-            on_success:
-            - type: heal
-              target: allySingle
-              value: $heal_rate
-              scale: 統率
     source_hero: 長野業正
     _action: add
   鬼義重:
@@ -1612,31 +851,6 @@ skills:
         max: 0.15
       debuff_duration: 1
       pressure_duration: 1
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.35
-      do:
-      - to: enemyMultiple
-        count: 2
-        do:
-        - type: damage
-          damage_type: 兵刃傷害
-          value: $dmg_rate
-        - type: debuff
-          stat: 統率
-          value: $stat_debuff
-          scale: 武勇
-          duration: $debuff_duration
-      bonus:
-        commander:
-          description: 相同武將被累計選中2次及以上時，則有$pressure_rate機率（受武勇影響）對其施加威壓狀態，持續$pressure_duration回合。
-          do:
-          - type: applyStatus
-            status: 威壓
-            value: $pressure_rate
-            scale: 武勇
-            duration: $pressure_duration
     unique_hero: 佐竹義重
     is_unique: true
     _action: add
@@ -1670,29 +884,6 @@ skills:
       duration: 1
       target_range_min: 2
       target_range_max: 3
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.45
-      do:
-      - to: allyMultiple
-        count_min: $target_range_min
-        count_max: $target_range_max
-        do:
-        - type: applyStatus
-          status: 回生
-          value: $revive_count
-          heal_rate: $heal_rate
-          scale: 智略
-          duration: $duration
-        - type: conditional
-          when: revive_remaining > 0
-          on_true:
-          - type: buff
-            stat: damage_output
-            value: $dmg_boost
-            scale: 智略
-            duration: $duration
     unique_hero: 堀直政
     is_unique: true
     _action: add
@@ -1721,22 +912,6 @@ skills:
         base: 0.2
         max: 0.4
       duration: 1
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.4
-      do:
-      - to: enemyMultiple
-        count: 2
-        do:
-        - type: damage
-          damage_type: 謀略傷害
-          value: $dmg_rate
-          scale: 智略
-        - type: debuff
-          stat: heal_received
-          value: $heal_reduction
-          duration: $duration
     source_hero: 堀直政
     _action: add
   天神山殘照:
@@ -1781,46 +956,6 @@ skills:
       commander_reduction: 0.2
       base_rounds: 4
       base_reduction: 0.25
-    battle:
-      type: 被動
-      trigger: always
-      do:
-      - trigger: afterAttack
-        to: enemySingle
-        do:
-        - type: roll
-          chance: $normal_atk_chance
-          on_success:
-          - type: damage
-            damage_type: 謀略傷害
-            value: $normal_atk_dmg
-            scale: 智略
-      - trigger: turnStart
-        when: turn <= 4
-        to: self
-        do:
-        - type: buff
-          stat: 武勇
-          value: $stat_buff
-          scale: 智略
-          duration: $duration
-        - type: buff
-          stat: 智略
-          value: $stat_buff
-          scale: 智略
-          duration: $duration
-        - type: applyStack
-          stack: stat_buff_decay
-          value: $stat_reduction
-      - trigger: turnStart
-        when: turn == 5
-        to: allyMultiple
-        order_by: 智略
-        count: 1
-        do:
-        - type: applyStatus
-          status: 混亂
-          duration: 1
     unique_hero: 浦上宗景
     is_unique: true
     _action: add
@@ -2122,39 +1257,6 @@ skills:
       extra_heal_chance: 0.5
       duration: 2
       cooldown: 1
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.5
-      cooldown: $cooldown
-      do:
-      - to: allyAll
-        do:
-        - type: buff
-          stat: 統率
-          value: $lea_buff
-          scale: 智略
-          duration: $duration
-      - to: allyMultiple
-        count: 2
-        do:
-        - type: buff
-          stat: on_damage_heal
-          hits: $hit_count
-          chance: $heal_chance
-          value: $heal_rate
-          extra_chance: $extra_heal_chance
-          extra_count: 1
-          scale: 智略
-          duration: $duration
-      bonus:
-        commander:
-          description: 使額外恢復1人的機率受智略影響
-          do:
-          - type: buff
-            stat: extra_heal_chance
-            value: $extra_heal_chance
-            scale: 智略
     unique_hero: 島津義久
     is_unique: true
     _action: add
@@ -2183,30 +1285,6 @@ skills:
         max: 1.64
       chance_gain: 0.05
       chance_gain_max: 3
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.45
-      do:
-      - to: enemyMultiple
-        countMin: 1
-        countMax: 2
-        do:
-        - type: damage
-          damage_type: 謀略傷害
-          value: $dmg_rate
-          scale: 智略
-        - type: roll
-          chance: $heal_chance
-          on_success:
-          - to: self
-            do:
-            - type: heal
-              value: $heal_rate
-      - type: addStack
-        stack_name: 運籌決勝
-        value: 1
-        max: $chance_gain_max
     source_hero: 島津義久
     _action: add
   肥前之熊:
@@ -2241,39 +1319,6 @@ skills:
       commander_dmg_bonus:
         base: 0.07
         max: 0.14
-    battle:
-      type: 被動
-      trigger: battleStart
-      do:
-      - to: self
-        do:
-        - type: buff
-          stat: damage_taken
-          value: $dmg_reduction
-          scale: 統率
-          duration: $front_turns
-      - trigger: onDamaged
-        when: damage_type == 兵刃傷害
-        to: self
-        do:
-        - type: roll
-          chance: $counter_chance
-          scale: 統率
-          on_success:
-          - to: enemyMultiple
-            count: 2
-            do:
-            - type: damage
-              damage_type: 兵刃傷害
-              value: $dmg_rate
-              scale: 統率
-      bonus:
-        commander:
-          description: 傷害率增加$commander_dmg_bonus
-          do:
-          - type: buff
-            stat: damage_rate
-            value: $commander_dmg_bonus
     unique_hero: 龍造寺隆信
     is_unique: true
     _action: add
@@ -2305,35 +1350,6 @@ skills:
         base: 0.08
         max: 0.16
       max_stacks: 3
-    battle:
-      type: 被動
-      trigger: battleStart
-      do:
-      - to: self
-        do:
-        - type: buff
-          stat: 反擊
-          value: $counter_rate
-      - trigger: onDamaged
-        when: damage_source == normal_attack && self.role != commander
-        to: self
-        do:
-        - type: buff
-          stat: 反擊
-          value: $counter_rate_sub
-        - type: addStack
-          stack_name: 堅忍不拔
-          value: 1
-        - type: conditional
-          condition: stack_堅忍不拔 % $attack_count == 0 && stack_堅忍不拔_lea < $max_stacks
-          on_true:
-          - type: buff
-            stat: 統率
-            value: $lea_buff
-            duration: 999
-          - type: addStack
-            stack_name: 堅忍不拔_lea
-            value: 1
     source_hero: 龍造寺隆信
     _action: add
   懷刀謀臣:
@@ -2363,45 +1379,6 @@ skills:
       heal_rate:
         base: 0.69
         max: 1.38
-    battle:
-      type: 指揮
-      trigger: always
-      rate: 1.0
-      do:
-      - trigger: turnStart
-        do:
-        - type: roll
-          chance: $trigger_rate
-          scale: 智略
-          on_success:
-          - to: allySingle
-            filter: highest_lea_or_int
-            do:
-            - type: applyStatus
-              status: 牽制
-              target: enemyMultiple
-              countMin: 2
-              countMax: 3
-              duration: $duration
-            - type: conditional
-              condition: target.int > target.lea
-              on_true:
-              - type: buff
-                stat: physical_damage_taken
-                value: $dmg_reduction
-                scale: 智略
-                duration: $duration
-              on_false:
-              - type: buff
-                stat: tactic_damage_taken
-                value: $dmg_reduction
-                scale: 智略
-                duration: $duration
-            - type: heal
-              to: allyAll
-              prioritize: self
-              value: $heal_rate
-              scale: 智略
     unique_hero: 石川數正
     is_unique: true
     _action: add
@@ -2438,38 +1415,6 @@ skills:
         base: 0.62
         max: 1.24
       betray_duration: 1
-    battle:
-      type: 指揮
-      trigger: battleStart
-      do:
-      - trigger: turnStart
-        when: turn == 1
-        to: enemyMultiple
-        count: 2
-        do:
-        - type: heal
-          value: $heal_rate
-          scale: 智略
-        - type: debuff
-          stat: physical_damage
-          value: $phys_debuff
-          scale: 智略
-          duration: $debuff_duration
-      - trigger: turnStart
-        when: turn >= $start_turn
-        do:
-        - type: roll
-          chance: $betray_chance
-          scale: 智略
-          on_success:
-          - to: enemySingle
-            do:
-            - type: applyStatus
-              status: 叛逃
-              value: $betray_rate
-              scale: 武勇或智略
-              ignore_defense: true
-              duration: $betray_duration
     unique_hero: 吉岡妙林
     is_unique: true
     _action: add
@@ -2498,25 +1443,6 @@ skills:
       dmg_rate:
         base: 0.92
         max: 1.84
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.35
-      do:
-      - to: enemyMultiple
-        count: 2
-        do:
-        - type: mark
-          name: 乘敵不虞
-          on_damaged_by_target:
-          - type: debuff
-            stat: all
-            value: $stat_debuff
-            duration: $debuff_duration
-          on_target_action_end_if_no_damage:
-          - type: damage
-            damage_type: 兵刃傷害
-            value: $dmg_rate
     source_hero: 吉岡妙林
     _action: add
   義無反顧:
@@ -2553,40 +1479,6 @@ skills:
       aoe_chance:
         base: 0.12
         max: 0.24
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.4
-      do:
-      - to: self
-        do:
-        - type: debuff
-          stat: next_damage_taken
-          hits: $hit_count
-          value: $self_taken_up
-          duration: $duration
-      - to: enemyMultiple
-        count: 2
-        do:
-        - type: debuff
-          stat: next_damage_taken
-          hits: $hit_count
-          value: $enemy_taken_up
-          scale: 武勇或智略
-          duration: $duration
-        - type: damage
-          damage_type: 混合傷害
-          value: $dmg_rate
-          scale: 武勇或智略
-      bonus:
-        commander:
-          description: 目標有$aoe_chance機率變為敵軍全體
-          do:
-          - type: roll
-            chance: $aoe_chance
-            on_success:
-            - type: retarget
-              to: enemyAll
     unique_hero: 相良義陽
     is_unique: true
     _action: add
@@ -2613,29 +1505,6 @@ skills:
         base: 0.76
         max: 1.52
       cooldown: 1
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.6
-      cooldown: $cooldown
-      do:
-      - to: allySingle
-        targetRole: commander
-        do:
-        - type: buff
-          stat: cooldown_unique_skill_rate
-          value: $rate_buff
-          scale: 智略
-          until: next_cast
-          on_cast:
-          - to: enemyMultiple
-            count: 2
-            source: self
-            do:
-            - type: damage
-              damage_type: 謀略傷害
-              value: $dmg_rate
-              scale: 智略
     unique_hero: 種子島時堯
     is_unique: true
     _action: add
@@ -2656,17 +1525,6 @@ skills:
       production_buff:
         base: 0.005
         max: 0.01
-    battle:
-      type: 指揮
-      trigger: always
-      when: is_assembly_member
-      do:
-      - to: self
-        do:
-        - type: buff
-          stat: 擴張農場
-          value: $production_buff
-          scale: 政務
     source_hero: 種子島時堯
     _action: add
   誘敵深入:
@@ -2694,28 +1552,6 @@ skills:
       dmg_rate:
         base: 0.87
         max: 1.74
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.4
-      do:
-      - to: enemyAll
-        do:
-        - type: debuff
-          stat: 速度
-          value: $speed_debuff
-          duration: $duration
-      - delay: 1
-        trigger: turnStart
-        then:
-        - to: allyMultiple
-          do:
-          - type: damage
-            damage_type: 混合傷害
-            value: $dmg_rate
-            scale: 武勇或智略
-            target_type: enemySingle
-            target_selection: random
     is_event_skill: true
     _action: add
   以逸待勞:
@@ -2741,27 +1577,6 @@ skills:
       heal_rate:
         base: 0.94
         max: 1.88
-    battle:
-      type: 主動
-      trigger: beforeAction
-      rate: 0.35
-      prepTurns: 1
-      do:
-      - to: enemyMultiple
-        count: 2
-        do:
-        - type: debuff
-          stat: damage_output
-          value: $damage_debuff
-          scale: 統率
-          duration: $duration
-      - to: allyMultiple
-        countMin: 2
-        countMax: 3
-        do:
-        - type: heal
-          value: $heal_rate
-          scale: 統率
     is_event_skill: true
     _action: add
   背水之陣:

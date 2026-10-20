@@ -1,9 +1,8 @@
 """
-LLM-based skill translator and battle engine extractor.
+LLM-based translator (JP → CHT) for skills, traits, heroes and 兵學.
 
-Reads crawled YAML, sends skills in batches for:
-  1. Translation (JP → CHT) for frontend display
-  2. Battle engine structured extraction (vars, triggers, effects)
+Reads crawled YAML and sends entries in batches; output is the templated
+`text` + shared `vars` the frontend renders (traits may add `passive.affinity`).
 
 Default driver is headless OMP (`@smol`). Pass `--backend openrouter` for OpenRouter.
 
@@ -59,8 +58,6 @@ _error_counts: dict[str, int] = {}
 
 def _normalize_error(err: str) -> str:
     """Normalize error string to a stable category for counting."""
-    if "found in battle" in err:
-        return "template_in_battle"
     if "Japanese kana" in err:
         return "untranslated_name"
     if "not in vars" in err:
@@ -188,7 +185,7 @@ def _write_failure_manifest():
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = f"""\
-You are a game data translator and structured extractor for 信長之野望：真戰 (Nobunaga's Ambition: Shinsei).
+You are a game data translator for 信長之野望：真戰 (Nobunaga's Ambition: Shinsei).
 
 {COMMON_RULES}
 
@@ -238,23 +235,9 @@ Example output:
       普通攻擊傷害提高{{var:damage_per_stack}}（{{scale:武勇}}），最多疊{{var:max_charge}}次。
     brief_description: 犧牲亂舞，友軍蓄力提升普攻傷害
     tags: [增益, 被動觸發, 武勇系]
-  battle:
-    type: 被動
-    trigger: always
-    do:
-      - trigger: afterAllyAction
-        to: self
-        do:
-          type: roll
-          chance: $charge_trigger_rate
-          on_success:
-            - type: addStack
-              key: god_of_war_charge
-              value: 1
-              max: $max_charge
 
 ---
-Output the YAML with skill name as top-level key, containing `vars`, `text`, and `battle`."""
+Output the YAML with skill name as top-level key, containing `vars` and `text`."""
     return (SYSTEM_PROMPT, user)
 
 
@@ -282,8 +265,8 @@ Input ({len(skills)} skills):
 {joined}
 
 ---
-Output YAML: each skill name as a top-level key, each containing `vars`, `text`, and `battle` sections.
-`vars` is the SINGLE shared variable dict — do NOT put vars inside text or battle.
+Output YAML: each skill name as a top-level key, each containing `vars` and `text` sections.
+`vars` is the SINGLE shared variable dict — do NOT put vars inside text.
 Process ALL {len(skills)} skills above."""
     return (SYSTEM_PROMPT, user)
 
@@ -295,52 +278,30 @@ Process ALL {len(skills)} skills above."""
 ALLOWED_TROOP_TYPES_STR = "足輕, 弓兵, 騎兵, 鐵炮, 器械"
 
 TRAIT_SYSTEM_PROMPT = f"""\
-You are a game data translator and structured extractor for 信長之野望：真戰 (Nobunaga's Ambition: Shinsei).
+You are a game data translator for 信長之野望：真戰 (Nobunaga's Ambition: Shinsei).
 
 {COMMON_RULES}
-
-For EACH trait (特性), first determine its `kind`:
-
-- `kind: passive` — always-on effect with NO engine trigger. Includes:
-  - Troop affinity (兵種レベル): buffs a troop type level (output `passive.affinity`)
-  - Flat stat/damage buffs: e.g. "造成兵刃傷害增加2.2%" (output `passive.buffs`)
-- `kind: triggered` — activates on an engine event (battleStart, turnStart, afterAttack, etc.).
-  Has a `battle` section with `trigger` + `do` blocks, same shape as a triggered skill.
 
 Output YAML with the trait name as top-level key, containing these sections:
 
 ## `vars` — Shared variables (SINGLE source, same rules as skills)
-- Only if the trait has numeric values. Both text and battle/passive reference this.
+- Only if the trait has numeric values. `text.description` references them with {{var:key}}.
 
 ## `text` — Translation (JP → Traditional Chinese 繁體中文)
 - `name`: translated trait name
 - `description`: translated description, use {{var:key}} for numeric values
 
-## For `kind: passive` → output `passive` section (NO `battle`):
-- `passive.affinity` — for troop_affinity traits:
-  - `troop_types`: MUST be a YAML list. Allowed values ONLY: {ALLOWED_TROOP_TYPES_STR}
-    IMPORTANT: 兵器→器械, 槍兵→足輕, 鐵砲→鐵炮 (use the correct CHT names)
-  - `level`: integer
-  - `level_cap_bonus`: integer (0 if not mentioned; detect 等級上限増加N)
-- `passive.buffs` — for flat %buff traits:
-  - list of {{target, stat, type: pct|flat, value: $var_ref}}
-
-## For `kind: triggered` → output `battle` section (NO `passive`):
-- `trigger`: when it activates (battleStart, turnStart, beforeAction, afterAttack, etc.)
-- `do`: structured effects
-- Effect types: damage, heal, buff, debuff, applyStatus, removeStatus, addStack, roll, sequence, conditional
-- Target types: self, allySingle, allyMultiple, allyAll, enemySingle, enemyMultiple, enemyAll
+## `passive.affinity` — ONLY for troop affinity traits (兵種レベル); omit `passive` otherwise:
+- `troop_types`: MUST be a YAML list. Allowed values ONLY: {ALLOWED_TROOP_TYPES_STR}
+  IMPORTANT: 兵器→器械, 槍兵→足輕, 鐵砲→鐵炮 (use the correct CHT names)
+- `level`: integer
+- `level_cap_bonus`: integer (0 if not mentioned; detect 等級上限増加N)
 
 ### COMMON TRAIT MISTAKES — DO NOT DO THESE:
 | Wrong | Right | Why |
 | troop_types: [槍兵] | troop_types: [足輕] | 槍兵→足輕 |
 | troop_types: [鐵砲] | troop_types: [鐵炮] | 砲→炮 |
 | troop_types: [兵器] | troop_types: [器械] | 兵器→器械 |
-| kind: passive + battle: | kind: triggered + battle: | passive has NO battle |
-| kind: triggered + passive: | kind: triggered + battle: | triggered has NO passive |
-| battle: {{status:威壓}} | battle: status: 威壓 | battle uses plain text |
-| battle: {{var:rate}} | battle: $rate | battle uses $key |
-| battle: （{{scale:武勇}}） | battle: scale: 武勇 | battle uses plain field |
 | {{base: 0.5, max: 0.5}} | 0.5 | same value = fixed |
 | {{base: 1.0}} (no max) | {{base: 0.5, max: 1.0}} | scaling needs both |
 | 知略 | 智略 | JP→CHT kanji |
@@ -353,124 +314,45 @@ Troop type mapping (MUST follow these, common mistake source):
 - 鐵砲 → 鐵炮
 Allowed troop types: {ALLOWED_TROOP_TYPES_STR} — NO other values.
 
-Kind determination:
-- `kind: passive` — always-on, NO trigger. Troop affinity OR flat stat/damage buffs.
-- `kind: triggered` — has a trigger event. Output `battle` section, NOT `passive`.
-- NEVER output both `passive` and `battle` in the same trait.
-
 Template syntax reminder:
 - `text.description`: use {{var:key}} for vars, {{status:name}} for statuses, （{{scale:stat}}） for scaling
-- `battle` section (including all description fields): use $key for vars, plain Chinese for statuses and scaling (e.g. 會心 not {{status:會心}}, 受統率影響 not {{scale:統率}})
 - vars with base/max MUST have BOTH fields. Same value at all levels = plain number, not {{base: X, max: X}}.
 
 JP→CHT kanji (apply everywhere): 知略→智略, 撃→擊, 竜→龍, 発→發, 効→效, 覚→覺, 戦→戰, 総→總, 関→關, 豊→豐, 県→縣, 鉄→鐵, 条→條
 
 Status effects — use ONLY canonical names: {CANONICAL_STATUSES}
 
-Example passive (troop affinity):
+Example (troop affinity):
 馬術Ⅲ:
   text:
     name: 馬術Ⅲ
     description: 部隊的騎兵等級增加3
-  kind: passive
   passive:
     affinity:
       troop_types: [騎兵]
       level: 3
       level_cap_bonus: 0
 
-Example passive (%buff):
-攻勢Ⅱ:
-  vars:
-    dmg_bonus: 0.013
-  text:
-    name: 攻勢Ⅱ
-    description: 自軍全體造成傷害提高{{var:dmg_bonus}}
-  kind: passive
-  passive:
-    buffs:
-      - target: armyAll
-        stat: damage_dealt
-        type: pct
-        value: $dmg_bonus
-
-Example triggered (simple debuff):
-赤備え:
-  vars:
-    reduction: 18
-  text:
-    name: 赤備
-    description: 首次普通攻擊後，使攻擊目標的統率降低{{var:reduction}}（可疊加）
-  kind: triggered
-  battle:
-    trigger: afterNormalAttack
-    do:
-      - when: firstTime
-        to: enemySingle
-        do: debuff
-        stat: 統率
-        value: $reduction
-        stackable: true
-
-Example triggered (damage + status + scaling vars):
-槍衾:
-  vars:
-    dmg_rate:
-      base: 0.36
-      max: 0.72
-    debuff_value:
-      base: 0.10
-      max: 0.20
-    duration: 2
-  text:
-    name: 槍衾
-    description: >
-      對敵軍單體造成{{var:dmg_rate}}兵刃傷害（{{scale:武勇}}），
-      並降低目標造成傷害{{var:debuff_value}}，持續{{var:duration}}回合。
-    name: 槍衾
-  kind: triggered
-  battle:
-    trigger: afterAttack
-    do:
-      - to: enemySingle
-        do:
-          - type: damage
-            damage_type: 兵刃傷害
-            value: $dmg_rate
-            scale: 武勇
-          - type: debuff
-            stat: damage_dealt
-            value: $debuff_value
-            duration: $duration
-
-Example passive (multiple troop types + level cap):
+Example (multiple troop types + level cap):
 砲術指南Ⅱ:
   text:
     name: 砲術指南Ⅱ
     description: 部隊的鐵炮等級增加2，鐵炮等級上限增加1
-  kind: passive
   passive:
     affinity:
       troop_types: [鐵炮]
       level: 2
       level_cap_bonus: 1
 
-Example passive (conditional buff with var):
-豪傑Ⅲ:
+Example (%buff, no affinity):
+攻勢Ⅱ:
   vars:
-    atk_bonus: 0.033
+    dmg_bonus: 0.013
   text:
-    name: 豪傑Ⅲ
-    description: 自身造成兵刃傷害提高{{var:atk_bonus}}
-  kind: passive
-  passive:
-    buffs:
-      - target: self
-        stat: blade_damage_dealt
-        type: pct
-        value: $atk_bonus
+    name: 攻勢Ⅱ
+    description: 自軍全體造成傷害提高{{var:dmg_bonus}}
 
-Example triggered (status effect — note: battle uses plain text, NOT {{status:}}):
+Example (status effect with scaling vars):
 威圧射撃:
   vars:
     intimidate_chance:
@@ -480,20 +362,7 @@ Example triggered (status effect — note: battle uses plain text, NOT {{status:
   text:
     name: 威壓射擊
     description: >
-      普通攻擊後，有{{var:intimidate_chance}}機率對目標施加{{status:威壓}}，持續{{var:duration}}回合。
-  kind: triggered
-  battle:
-    trigger: afterNormalAttack
-    do:
-      - to: enemySingle
-        do:
-          - type: roll
-            chance: $intimidate_chance
-            on_success:
-              - type: applyStatus
-                status: 威壓
-                duration: $duration
-        stackable: true"""
+      普通攻擊後，有{{var:intimidate_chance}}機率對目標施加{{status:威壓}}，持續{{var:duration}}回合。"""
 
 
 def build_trait_single_prompt(trait: dict) -> tuple[str, str]:
@@ -507,7 +376,7 @@ description: |
 
 ---
 Output YAML with trait name as top-level key.
-Include `kind`, `vars` (if any), `text`, and either `passive` or `battle` (not both)."""
+Include `vars` (if any), `text`, and `passive.affinity` (troop affinity traits only)."""
     return (TRAIT_SYSTEM_PROMPT, user)
 
 
@@ -530,7 +399,7 @@ Input ({len(traits)} traits):
 
 ---
 Output YAML: each trait name as top-level key.
-Each must include `kind`, `vars` (if any), `text`, and either `passive` or `battle`.
+Each must include `vars` (if any), `text`, and `passive.affinity` (troop affinity traits only).
 Process ALL {len(traits)} traits above."""
     return (TRAIT_SYSTEM_PROMPT, user)
 
@@ -623,8 +492,7 @@ description: |
 commander_bonus: {raw.get('commander_bonus', '') or 'none'}
 
 ---
-Output corrected YAML with skill name as top-level key, containing `vars`, `text`, and `battle`.
-In `battle`, use $key to reference vars (NOT {{var:key}}).
+Output corrected YAML with skill name as top-level key, containing `vars` and `text`.
 In `text`, use {{var:key}} to reference vars."""
     return (SYSTEM_PROMPT, user)
 
@@ -656,7 +524,6 @@ Skill {i} — {name}:
 Fix the following {len(items)} skills. Each had errors in the previous translation.
 
 COMMON REMINDERS:
-- In `battle` section, use $key to reference vars (NOT {{var:key}})
 - In `text` section, use {{var:key}} to reference vars
 - Translate ALL names to Traditional Chinese (no Japanese kana)
 - activation_rate with scaling must have corresponding vars with base/max
@@ -664,7 +531,7 @@ COMMON REMINDERS:
 {joined}
 
 ---
-Output corrected YAML: each skill name as top-level key with `vars`, `text`, and `battle`.
+Output corrected YAML: each skill name as top-level key with `vars` and `text`.
 Fix ALL {len(items)} skills above."""
     return (SYSTEM_PROMPT, user)
 
@@ -690,8 +557,7 @@ description: |
 
 ---
 Output corrected YAML with trait name as top-level key.
-Include `kind`, `vars` (if any), `text`, and either `passive` or `battle` (not both).
-In `battle`, use $key to reference vars (NOT {{var:key}})."""
+Include `vars` (if any), `text`, and `passive.affinity` (troop affinity traits only)."""
     return (TRAIT_SYSTEM_PROMPT, user)
 
 
@@ -702,7 +568,6 @@ In `battle`, use $key to reference vars (NOT {{var:key}})."""
 # LLM job: translate description → CHT with {var:}/{status:}/{scale:} templates,
 # and emit vars for any numeric values (especially Lv1/Lv2 X%/Y% on minors).
 # Name + cht_direction are HAND-MAINTAINED in data/bingxue.yaml — DO NOT translate.
-# Battle/passive engine sections are out of scope for this phase.
 
 BINGXUE_SYSTEM_PROMPT = f"""\
 You are a game data translator for 信長之野望：真戰 (Nobunaga's Ambition: Shinsei).
@@ -736,7 +601,6 @@ For each option, output YAML with the JP name as top-level key. Include ONLY:
 ### DO NOT OUTPUT
 
 - `text.name` — NEVER. Names are hand-maintained.
-- `kind`, `battle`, `passive` — OUT OF SCOPE for this phase.
 - `text.type`, `text.rarity`, `text.target`, `text.activation_rate`, `text.tags` — bingxue
   options are always passive-style; no need for these fields.
 - `brief_description` — not needed.
@@ -834,7 +698,7 @@ effect: |
 ---
 Output YAML with the JP key as top-level key.
 Include ONLY `text.description` and `vars` (if any).
-DO NOT output text.name, kind, battle, or passive."""
+DO NOT output text.name."""
     return (BINGXUE_SYSTEM_PROMPT, user)
 
 
@@ -886,7 +750,7 @@ effect: |
 
 ---
 Output corrected YAML with the JP key as top-level key.
-Include ONLY `text.description` and `vars` (if any). No text.name, no battle, no passive."""
+Include ONLY `text.description` and `vars` (if any). No text.name."""
     return (BINGXUE_SYSTEM_PROMPT, user)
 
 
@@ -1034,7 +898,7 @@ def process_batch(
                 tqdm.write(f"  PARSE FAIL: {uncached[0][0]}")
                 return results, failed
 
-        # For single skill, output might be nested under skill name or directly have text/battle
+        # For single skill, output might be nested under skill name or directly have text
         if len(uncached) == 1:
             name = uncached[0][0]
             if "text" in parsed or "frontend" in parsed:
@@ -1251,8 +1115,6 @@ def process_skills(
         entry = canonical.setdefault(name, {})
         if data.get("text"):
             entry["text"] = data["text"]
-        if data.get("battle"):
-            entry["battle"] = data["battle"]
         if data.get("vars") is not None:
             if preserve_vars and entry.get("vars"):
                 # Keep existing vars, check for conflicts
@@ -1370,12 +1232,9 @@ def process_traits(
             data["text"] = data.pop("frontend")
         if data.get("text"):
             entry["text"] = data["text"]
-        if data.get("kind"):
-            entry["kind"] = data["kind"]
-        if data.get("battle"):
-            entry["battle"] = data["battle"]
-        if data.get("passive"):
-            entry["passive"] = data["passive"]
+        affinity = (data.get("passive") or {}).get("affinity")
+        if affinity:
+            entry["passive"] = {"affinity": affinity}
         if data.get("vars") is not None:
             if preserve_vars and entry.get("vars"):
                 new_keys = set(data["vars"].keys())

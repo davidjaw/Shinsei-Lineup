@@ -230,7 +230,7 @@ def _merge_dict_kind(
 
 
 def _sync_canonical_raw(path: Path, names: list[str], source: dict) -> None:
-    """Overwrite `raw` for the given entries, preserving text/vars/battle.
+    """Overwrite `raw` for the given entries, preserving text/vars.
     New entries get a raw-only stub (same semantics as crawl sync_canonical)."""
     if not names:
         return
@@ -312,13 +312,13 @@ def _reconcile_add_override(overrides: dict, section: str, ov_key: str, jp_key: 
     return trimmed
 
 
-# Skill fields that live under skills.yaml[jp].text (vars/battle are siblings).
+# Skill fields that live under skills.yaml[jp].text (vars is a sibling).
 _SKILL_TEXT_FIELDS = ("name", "description", "commander_description",
                       "brief_description", "tags")
 
 
 def _seed_canonical_skill(jp_key: str, entry: dict) -> None:
-    """Write the curated CHT into skills.yaml[jp].text/vars/battle so
+    """Write the curated CHT into skills.yaml[jp].text/vars so
     build_frontend_data has a translation immediately, without waiting on
     the next llm_translate run."""
     canonical = _load_yaml(SKILLS_CANONICAL, {})
@@ -327,9 +327,8 @@ def _seed_canonical_skill(jp_key: str, entry: dict) -> None:
     for f in _SKILL_TEXT_FIELDS:
         if f in entry:
             text[f] = entry[f]
-    for f in ("vars", "battle"):
-        if f in entry:
-            node[f] = entry[f]
+    if "vars" in entry:
+        node["vars"] = entry["vars"]
     _save_yaml(SKILLS_CANONICAL, canonical)
 
 
@@ -340,9 +339,8 @@ def _seed_skill_llm_cache(jp_key: str, entry: dict) -> None:
     text = {f: entry[f] for f in _SKILL_TEXT_FIELDS if f in entry}
     if text:
         cache_entry["text"] = text
-    for f in ("vars", "battle"):
-        if f in entry:
-            cache_entry[f] = entry[f]
+    if "vars" in entry:
+        cache_entry["vars"] = entry["vars"]
     save_llm_cache(f"skill_{jp_key}", cache_entry, cache_dir=LLM_CACHE_DIR)
 
 

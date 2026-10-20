@@ -8,9 +8,9 @@
 
 ## 功能
 
-- 147+ 位武將資料（數值、特性、技能、頭像）
-- 227+ 個戰法翻譯（日文 → 繁體中文），含模板化數值顯示
-- 38 種狀態效果定義
+- 160+ 位武將資料（數值、特性、技能、頭像）
+- 260+ 個戰法翻譯（日文 → 繁體中文），含模板化數值顯示
+- 48 種狀態效果定義
 - 互動式編隊器（5 隊編制，主將/副將配置）
 - 武將庫（依 Cost / 勢力多選篩選）
 - 戰法庫（依類型 / 稀有度篩選）
@@ -25,7 +25,7 @@
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/)（Python 套件管理）
 - Node.js 20+
-- [OpenRouter API Key](https://openrouter.ai/)（LLM 翻譯用）
+- LLM 翻譯：預設 OMP backend（`omp` 在 `PATH` 或設定 `OMP_BIN`），或 [OpenRouter API Key](https://openrouter.ai/)（`--backend openrouter`）
 
 ### 安裝
 
@@ -38,7 +38,7 @@ uv sync          # 從 pyproject.toml 安裝 Python 依賴（自動建立 .venv�
 
 ```bash
 cp .env.example .env
-# 填入 OPENROUTER_API_KEY (爬蟲/翻譯必要)
+# 使用 OpenRouter backend 時填入 OPENROUTER_API_KEY
 # 可選：填入 VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY 啟用帳號系統
 ```
 
@@ -66,7 +66,7 @@ uv run script/crawl_heroes.py --detail --name 信長    # 篩選名稱
 
 ### 2. LLM 翻譯
 
-透過 OpenRouter 呼叫 Claude Haiku，使用 Anthropic prompt caching 機制，全量翻譯（196 技能 + 133 特性 + 145 武將）費用 < 2 USD。
+預設使用 OMP backend（`@smol`）；`--backend openrouter`（或 `--model vendor/name`）改走 OpenRouter（預設 Claude Haiku 4.5，含 Anthropic prompt caching）。
 
 ```bash
 uv run script/llm_translate.py --batch-size 10 --parallel 3   # 翻譯全部（技能+特性+武將名）
@@ -77,16 +77,15 @@ uv run script/llm_translate.py --heroes                       # 僅翻譯武將�
 ### 3. 手動 Override
 
 ```bash
-uv run script/override.py                            # 互動式選單
-uv run script/override.py --quick-add                # 自然語言快速新增戰法
-uv run script/override.py --add-hero                 # 新增武將
+uv run script/override.py                            # 自然語言快速新增戰法 / 武將（互動式）
 uv run script/override.py --modify-skill             # 修改既有戰法
+uv run script/override.py --recompile [--dry-run]    # 從 raw_text 重新編譯 override 戰法
 ```
 
 ### 4. 建構前端資料
 
 ```bash
-npm run data       # build_frontend_data.py + check_data_integrity.py
+npm run data       # merge_sources → build_frontend_data → check_build / check_coverage / check_cfg_drift
 ```
 
 ## 帳號系統 / Supabase
@@ -165,10 +164,10 @@ npm run data       # build_frontend_data.py + check_data_integrity.py
 ```
 script/
   crawl_heroes.py          # 網頁爬蟲（game8.jp）
-  llm_translate.py         # OpenRouter 批次翻譯（預設 Claude Haiku）
+  llm_translate.py         # LLM 批次翻譯（預設 OMP，可選 OpenRouter）
   llm_core.py              # LLM 共用基礎設施（httpx API client、prompt caching、解析）
   build_frontend_data.py   # YAML → JSON 建構 + 後處理
-  check_data_integrity.py  # 資料完整性驗證
+  check_*.py               # 建構後資料驗證（npm run data 內執行）
   override.py              # 互動式 Override CLI
 
 data/
@@ -191,7 +190,7 @@ dist/                      # Vite 產出（gitignored）
 
 - **前端**: Vue 3 + Element Plus + TailwindCSS + Vite
 - **後端 Pipeline**: Python + PyYAML + BeautifulSoup4
-- **LLM**: OpenRouter API（預設 Claude Haiku 4.5，支援 prompt caching）
+- **LLM**: OMP（預設）或 OpenRouter API（Claude Haiku 4.5，支援 prompt caching）
 - **帳號 / 雲端同步**: Supabase（GoTrue + PostgREST + RLS，無 SDK，直連 fetch）
 - **部署**: 單檔 SPA（`vite-plugin-singlefile`）
 

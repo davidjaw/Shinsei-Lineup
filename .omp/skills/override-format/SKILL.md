@@ -1,6 +1,6 @@
 ---
 name: override-format
-description: Format TW/JP hero and skill paste into nested YAML (vars/text/battle or heroes) and iterate with script/check_llm_entry.py until ok.
+description: Format TW/JP hero and skill paste into nested YAML (vars/text or heroes) and iterate with script/check_llm_entry.py until ok.
 ---
 
 1. Read `TASK.md` and `input.txt` in the task directory named in the user message.

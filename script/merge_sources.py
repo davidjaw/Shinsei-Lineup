@@ -1,7 +1,7 @@
 """
 Merge game8 (data/*_crawled.yaml) and Sialia cfg (data/cfg/cfg_current.json)
-into lossless prototype YAMLs under data/prototype/, applying the three
-manual files (cfg_aliases, source_corrections, key_normalization).
+into lossless prototype YAMLs under data/prototype/, applying the manual
+file data/source_corrections.yaml (corrections + alias maps).
 
 This stage is purely deterministic — no LLM. Match confidence is logged so
 later stages (llm_fill, build) can decide what to trust.
@@ -32,10 +32,8 @@ from paths import (
     ASSEMBLY_CRAWLED,
     BINGXUE_CRAWLED,
     BUILD_DIR,
-    CFG_ALIASES_PATH,
     CFG_CURRENT_JSON,
     HEROES_CRAWLED,
-    KEY_NORMALIZATION_PATH,
     PROTOTYPE_DIR,
     SKILLS_CRAWLED,
     SOURCE_CORRECTIONS_PATH,
@@ -151,9 +149,7 @@ def load_inputs() -> dict:
         "traits_crawled": _load_yaml(TRAITS_CRAWLED, {}),
         "bingxue_crawled": _load_yaml(BINGXUE_CRAWLED, {}),
         "assembly_crawled": _load_yaml(ASSEMBLY_CRAWLED, {}),
-        "aliases": _load_yaml(CFG_ALIASES_PATH, {}),
         "corrections": _load_yaml(SOURCE_CORRECTIONS_PATH, {}),
-        "key_norm": _load_yaml(KEY_NORMALIZATION_PATH, {}),
     }
 
 
@@ -165,9 +161,9 @@ def load_inputs() -> dict:
 class Resolver:
     """Find a cfg.skill / cfg.hero entry from a JP-side user key."""
 
-    def __init__(self, cfg: dict, aliases: dict):
+    def __init__(self, cfg: dict, corrections: dict):
         self.cfg = cfg
-        self.aliases = aliases or {}
+        self.corrections = corrections or {}
 
         ml = cfg.get("multi_lang", [])
         self.ml_by_ja = {e["ja"]: e for e in ml if "ja" in e}
@@ -230,8 +226,8 @@ class Resolver:
         if hit:
             return Match(hit, "jp_norm", None, "low")
 
-        # Strategy 5: manual alias from cfg_aliases.yaml.
-        alias_map = self.aliases.get("skill_name_alias", {}) or {}
+        # Strategy 5: manual alias (source_corrections.yaml skill_name_alias).
+        alias_map = self.corrections.get("skill_name_alias", {}) or {}
         target = alias_map.get(jp_key)
         if target:
             s = self.cfg_skill_by_name.get(target)
@@ -263,7 +259,7 @@ class Resolver:
         if cands:
             return Match(cands[0], "jp_norm", None, "low")
 
-        alias_map = self.aliases.get("hero_name_alias", {}) or {}
+        alias_map = self.corrections.get("hero_name_alias", {}) or {}
         target = alias_map.get(jp_key)
         if target and target in self.cfg_hero_by_name:
             return Match(self.cfg_hero_by_name[target], "manual_alias", None, "high")
@@ -546,14 +542,14 @@ def merge_heroes(
 def merge_traits(
     resolver: Resolver,
     traits_crawled: dict,
-    key_norm: dict,
+    corrections: dict,
     stats: MergeStats,
 ) -> dict:
     out: dict[str, dict] = {}
     confidence = Counter()
     via_counter = Counter()
 
-    alias = (key_norm.get("trait_key_alias") or {})
+    alias = (corrections.get("trait_key_alias") or {})
 
     for jp_key, entry in traits_crawled.items():
         effective_key = alias.get(jp_key, jp_key)
@@ -807,7 +803,7 @@ def print_stats(stats: MergeStats) -> None:
 
 def main() -> int:
     inputs = load_inputs()
-    resolver = Resolver(inputs["cfg"], inputs["aliases"])
+    resolver = Resolver(inputs["cfg"], inputs["corrections"])
     stats = MergeStats()
 
     skills = merge_skills(
@@ -817,7 +813,7 @@ def main() -> int:
         resolver, inputs["heroes_crawled"], inputs["corrections"], stats,
     )
     traits = merge_traits(
-        resolver, inputs["traits_crawled"], inputs["key_norm"], stats,
+        resolver, inputs["traits_crawled"], inputs["corrections"], stats,
     )
     bingxue = merge_bingxue(resolver, inputs["bingxue_crawled"], stats)
     assembly = merge_assembly(resolver, inputs["assembly_crawled"], stats)

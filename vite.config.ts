@@ -22,7 +22,7 @@ function isUnwatched(file: string): boolean {
   return top !== rel || !!statSync(file, { throwIfNoEntry: false })?.isDirectory()
 }
 
-// Press `d` in the dev terminal to re-run the Python data build and reload.
+// Press `d` in the dev terminal to re-run `npm run data` (the one data entry point) and reload.
 // Avoids having to ctrl+c and `npm run dev` again after editing data/scripts.
 function rebuildDataShortcut(): PluginOption {
   return {
@@ -36,12 +36,8 @@ function rebuildDataShortcut(): PluginOption {
           return
         }
         running = true
-        server.config.logger.info('\n[data] rebuilding (build_frontend_data + check_data_integrity)...')
-        const proc = spawn(
-          'sh',
-          ['-c', 'uv run script/build_frontend_data.py && uv run script/check_data_integrity.py'],
-          { stdio: 'inherit' }
-        )
+        server.config.logger.info('\n[data] rebuilding (npm run data)...')
+        const proc = spawn('npm', ['run', 'data'], { stdio: 'inherit' })
         proc.on('exit', (code) => {
           running = false
           if (code === 0) {
