@@ -2,115 +2,133 @@
 
 ## Project Overview
 
-A data pipeline + SPA for **信長之野望：真戰** (Nobunaga's Ambition: Shinsei). Crawls game data from game8.jp, translates JP→CHT via LLM (OpenRouter), and serves a Vue 3 lineup builder.
+A data pipeline + single-file SPA for **信長之野望：真戰** (Nobunaga's Ambition: Shinsei). It merges the game8.jp
+crawl with the official Sialia cfg, translates JP → CHT through an LLM, and serves a Vue 3 lineup builder with
+inventory profiles, team groups, shares, a variant feed and a gacha log.
 
-## Architecture
+Current build (2026-10-18): **161 heroes, 263 skills, 48 status effects, 60 兵學 options**. Data is Traditional
+Chinese; code, comments and documentation are English.
+
+## Data Flow
 
 ```
-game8.jp → crawl_heroes.py → llm_translate.py → build_frontend_data.py → Vite SPA
-                                                  ↑ overrides.yaml (manual additions)
+game8.jp crawl ─┐
+                 ├─ merge_sources.py → data/prototype/*_proto.yaml
+Sialia cfg.json ─┘                              │
+                                                ├─ LLM translate / reconcile
+                                                ↓
+                          data/skills.yaml, traits.yaml, bingxue.yaml, heroes_translated.yaml
+                                                │
+                    data/overrides.yaml ────────┤ (highest priority, applied last)
+                    data/statuses.yaml ─────────┤
+                                                ↓
+                          build_frontend_data.py → .build/{heroes,skills,statuses,bingxue}.json
+                                                ↓
+                                   Vite + vite-plugin-singlefile → dist/index.html
 ```
 
-### Pipeline Scripts (in `script/`)
-
-| Script | Purpose | Run |
-|--------|---------|-----|
-| `crawl_heroes.py` | Crawl game8.jp for heroes/skills/traits | `uv run script/crawl_heroes.py --detail` |
-| `llm_translate.py` | Batch translate JP→CHT via Gemini CLI | `uv run script/llm_translate.py --batch-size 5` |
-| `llm_core.py` | Shared LLM infra (httpx OpenRouter client, prompt caching, parsing, kana detection) | Imported by other scripts |
-| `build_frontend_data.py` | Merge crawled+translated+overrides → JSON | `uv run script/build_frontend_data.py` |
-| `check_data_integrity.py` | Validate references, scan for untranslated JP kana, cross-check crawled vs translated keys | `uv run script/check_data_integrity.py` |
-| `override.py` | Interactive CLI for manual skill/hero additions | `uv run script/override.py` |
-| `apply_bingxue_override.py` | Apply per-hero 兵學 pools into `overrides.yaml` | See [doc/bingxue-override.md](doc/bingxue-override.md) |
-
-### Data Flow
-
-- **Source of truth**: `data/heroes_crawled.yaml`, `data/skills_crawled.yaml`, `data/traits_crawled.yaml`, `data/assembly_skills_crawled.yaml`
-- **LLM output**: `data/skills.yaml`, `data/traits.yaml` (canonical unified files — raw + vars + text + battle/passive per entry), `data/heroes_translated.yaml`
-- **Manual overrides**: `data/overrides.yaml` (committed to git, highest priority)
-- **Static definitions**: `data/statuses.yaml` (hand-maintained canonical status effects)
-- **Build output**: `.build/heroes.json`, `.build/skills.json`, `.build/statuses.json` (gitignored)
-- **Translation failure manifest**: `.build/translation_failures.json` — written by `llm_translate.py` with `ok` flag, per-kind summary, and copy/paste `suggested_actions` for the admin
-
-### Frontend (Vue 3 + Element Plus + TailwindCSS)
-
-- Single-file SPA via `vite-plugin-singlefile` — all data inlined into `dist/index.html`
-- Key composables: `useData.ts` (data loading), `useTemplateParser.ts` (template rendering), `useLineups.ts`, `useInventory.ts`
-- Template syntax in descriptions: `{var:name}`, `{status:name}`, `{scale:stat}`, `{dmg:type}`, `{stat:key}`
+- **Source of truth (crawled)**: `data/heroes_crawled.yaml`, `skills_crawled.yaml`,
+  `traits_crawled.yaml`, `assembly_skills_crawled.yaml`, `bingxue_crawled.yaml`.
+- **Official config**: `data/cfg/cfg_current.json` (versioned archive in `data/.cfg_history/`).
+- **Deterministic merge**: `data/prototype/*_proto.yaml`, using the tracked match files
+  `data/cfg_aliases.yaml`, `data/source_corrections.yaml`, `data/key_normalization.yaml`.
+- **Canonical output**: `data/skills.yaml`, `data/traits.yaml`, `data/bingxue.yaml`,
+  `data/heroes_translated.yaml` (gitignored).
+- **Manual overrides**: `data/overrides.yaml` (tracked, applied last, highest priority) and
+  `data/statuses.yaml` (tracked, hand-maintained status effects).
+- **Build output**: `.build/heroes.json`, `skills.json`, `statuses.json`, `bingxue.json`
+  (gitignored); `dist/index.html` is the single-file bundle.
+- **Translation failure manifest**: `.build/translation_failures.json` — `ok` flag, per-kind summary and
+  copy/paste `suggested_actions`.
 
 ## Key Commands
 
 ```bash
-npm run dev          # Build data + start dev server
-npm run build        # Build data + production build
-npm run data         # Build data only (build_frontend_data + check_data_integrity)
+npm install
+uv sync
 
-# Pipeline
-uv run script/crawl_heroes.py --detail                    # Full crawl
-uv run script/llm_translate.py --batch-size 10 --parallel 3  # Translate all (skills+traits+heroes)
-uv run script/llm_translate.py --skills --force            # Re-translate ALL skills (ignores cache). With --name/--limit, --force only refreshes the matching subset and never truncates the YAML.
-uv run script/llm_translate.py --heroes                    # Translate hero names only
-uv run script/override.py                                  # Interactive override CLI
-uv run script/build_frontend_data.py                       # Build frontend JSON
+# Refresh inputs and build
+npm run refresh          # game8 crawl + cfg fetch + cfg diff (refresh_sources.py)
+npm run refresh:cfg      # cfg only (--skip-crawl)
+npm run data             # merge_sources + build + check_build + check_coverage + check_cfg_drift
+npm run dev              # data + Vite dev server (`d` in the terminal rebuilds data)
+npm run build            # data + production single-file build → dist/index.html
+
+# Crawl review flow (staged updates)
+uv run script/crawl_heroes.py --detail --staging
+uv run script/review_server.py            # http://127.0.0.1:8765
+uv run script/merge_crawl.py decisions.json
+
+# Translation (kinds: skills, traits, heroes, bingxue)
+uv run script/llm_translate.py --batch-size 10 --parallel 3
+uv run script/llm_translate.py --skills --force
+uv run script/llm_translate.py --heroes
+uv run script/llm_translate.py --bingxue --limit 10
+
+# Manual data edits
+uv run script/override.py                 # interactive override CLI
+uv run script/apply_bingxue_override.py paste.txt   # 兵學 table → overrides.yaml
 ```
 
-## Post-processing (build_frontend_data.py)
+### LLM backend
 
-The `postprocess()` function runs after all merges and normalizes:
-- `STATUS_ALIASES` — LLM status name aliases → canonical names
-- `SCALE_ALIASES` — fixes `知略→智略`, English→Chinese stat names
-- `SKILL_NAME_FIXES` — CHT skill name corrections
-- `normalize_status_refs()` — fixes `{status:}` and `{scale:}` templates + plain text `知略→智略`
-- `normalize_vars()` — fixes `vars.*.scale` aliases
-- `ensure_str()` — ensures `activation_rate` is always a string
-- Sort heroes by rarity desc, cost desc
+`llm_translate.py` and `override.py` default to the **OMP backend** (`@smol`; requires `omp` on `PATH`, or
+`OMP_BIN`). Use `--backend openrouter` (or just `--model vendor/name`) for OpenRouter; the OpenRouter default is
+`anthropic/claude-haiku-4.5`. Other useful flags: `--provider`, `--preserve-vars`, `--force-vars`.
 
 ## Override System
 
 `data/overrides.yaml` supports:
-- `_action: add` — add new skill/hero
-- `_action: modify` (default) — deep merge fields into existing entry
-- `_action: delete` — remove entry
 
-Skill overrides may set `is_event_skill: true` to mark event-only skills; the frontend renders this as a small "事件戰法" label in the skill card title row.
+- `_action: add` — add an entry; `_replaces: <JP name>` folds an old entry (legacy `_replaces` lists are
+  normalized).
+- `_action: modify` (default) — deep-merge fields into the existing entry.
+- `_action: replace` — drop the existing entry and write the override wholesale.
+- `_action: delete` — remove the entry.
 
-Applied as last step in `build_frontend_data.py`, highest priority.
+Skill overrides may set `is_event_skill: true`; the frontend renders an "事件戰法" label. Applied as the last step
+in `build_frontend_data.py`.
 
 ### Hero 兵學 (bingxue) overrides
 
-When the user pastes a hero's 兵學 table (often messy OCR/AI text): normalize → run `apply_bingxue_override.py` → on conflict/`ERROR`, ask before `--force`. Details: [doc/bingxue-override.md](doc/bingxue-override.md).
+When the user pastes a hero's 兵學 table (often messy OCR/AI text): normalize it → run
+`apply_bingxue_override.py` → on conflict/`ERROR`, ask before `--force`. Details:
+[doc/bingxue-override.md](doc/bingxue-override.md).
 
-## LLM Prompts
+## Frontend
 
-All prompts share `COMMON_RULES` from `llm_core.py` which enforces:
-- Canonical status effect names
-- Template syntax rules (`{var:}`, `{status:}`, `{scale:}`)
-- Chinese stat names in `{scale:}`
-- Status intensity percentages kept as plain text
-- `activation_rate` as string format
-- `brief_description` (15-25 char summary) and `tags` (from fixed `SKILL_TAGS` set)
+Vue 3 + Element Plus + TailwindCSS + Vite, hash router, built as one self-contained `dist/index.html`.
+Description template syntax: `{var:name}`, `{status:name}`, `{scale:stat}`, `{dmg:type}`, `{stat:key}`.
 
-### Prompt caching (OpenRouter / Anthropic)
+Views:
 
-- `llm_core.py` uses raw `httpx` (NOT OpenAI SDK) with per-block `cache_control` in the system message content array — the only method that actually works for prompt caching via OpenRouter
-- Anthropic cache thresholds: Haiku 4096 tokens, Sonnet 2048 tokens. System prompts are sized to exceed these
-- `_run_batches_parallel()` runs batch 1 alone to warm the cache, then dispatches the rest in parallel — avoids multiple cache writes
-- `text.description` uses `{var:}` / `{status:}` / `{scale:}` template syntax; `battle` section uses `$key` for vars and plain Chinese for statuses/scaling — this distinction is a common LLM error source
-- Trait validation uses `validate_trait_entry()` (not `validate_skill_entry()`) — passive traits have `passive` section, no `battle`
-- See `ai-doc/openrouter-cache.md` for tested caching methods and what does NOT work
+- `/` **編隊** — lineup builder (inventory / free modes), drag-and-drop skill assignment, 兵學, team conflict checks.
+- `/profiles` **角色管理** — named inventory profiles (hero + skill ownership).
+- `/groups` **我的編組** — up to 10 teams per group, with cross-team uniqueness.
+- `/shares` **我的分享** — named/pinned share links.
+- `/proposals` **精選隊伍** — public variant feed, voting, fork/import.
+- `/gacha-log` **抽卡紀錄** — per-banner draw log, pity progress and share snapshots.
+- `/settings` **設定** — language, appearance, account.
+
+Supabase is optional and feature-detected (`isSupabaseConfigured()`). Without it, local editing still works and
+cloud sync/short shares/proposals/gacha are silently disabled. The client uses direct `fetch` + PostgREST/GoTrue
+(no `supabase-js`). A handbook snapshot proxy runs as the `handbook-snapshot` edge function.
 
 ## Environment
 
-- Python 3.10+ managed via [uv](https://docs.astral.sh/uv/) (`uv sync` to install deps from `pyproject.toml`)
-- Node 20+ with Vue 3, Element Plus, TailwindCSS
-- OpenRouter API for LLM calls (default: `anthropic/claude-haiku-4.5`, free test: `google/gemma-4-31b-it:free`) — requires `OPENROUTER_API_KEY` in `.env`
-- Supabase: two projects (dev `pptoljoymqbflmucyxzo`, prod `ebmamfpeffgkmhpyoyul`). Link / push / admin / ban SQL: [doc/supabase.md](doc/supabase.md)
+- `.env`: `OPENROUTER_API_KEY` (required for the OpenRouter backend), optional `ANTHROPIC_API_KEY`,
+  optional `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY`.
+- Supabase projects: dev `pptoljoymqbflmucyxzo`, prod `ebmamfpeffgkmhpyoyul`. Link, push, admin/ban SQL:
+  [doc/supabase.md](doc/supabase.md).
 
 ## Conventions
 
-- All game text in Traditional Chinese (繁體中文)
-- Code and comments in English
-- Hero names: JP in `name_jp`, CHT in `name`
-- Skill names: JP key in YAML, CHT `name` field in translated data
-- Data files in `data/` are gitignored except `overrides.yaml` and `statuses.yaml`
-- Changelog (`src/constants/changelog.ts`): released versions are frozen — never append entries to them. After a release, start the next unreleased batch by adding 1 to the patch (`0.4.8` → `0.4.9`). Fold all subsequent unreleased work into that one unshipped version. Do not bump per session, per feature, or per commit; do not jump minor (`0.5.0`) unless asked.
+- All game text in Traditional Chinese (繁體中文); code and comments in English.
+- Hero names: JP in `name_jp`, CHT in `name`. Skill names: JP key in YAML, CHT `name` in translated data.
+- `data/` is gitignored except `overrides.yaml`, `statuses.yaml`, `cfg_aliases.yaml`,
+  `source_corrections.yaml`, `key_normalization.yaml`, the cfg archive and `cfg/last_diff_summary.txt`.
+- Never hand-edit `.build/` or `dist/`; regenerate them.
+- Changelog (`src/constants/changelog.ts`): released versions are frozen — never append entries to them. After a
+  release, start the next unreleased batch by adding 1 to the patch (`0.4.8` → `0.4.9`). Fold all subsequent
+  unreleased work into that one unshipped version. Do not bump per session, per feature, or per commit; do not jump
+  minor (`0.5.0`) unless asked.
