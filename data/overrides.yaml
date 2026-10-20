@@ -4754,12 +4754,12 @@ heroes:
     clan: 德川家
     gender: 男
     stats:
-      lea: 133.89
-      val: 205.4
-      int: 127.31
-      pol: 57.62
-      cha: 76.54
-      spd: 146.97
+      lea: 134
+      val: 205
+      int: 127
+      pol: 58
+      cha: 77
+      spd: 147
     unique_skill: 無刀取
     teachable_skill: 燕飛
     assembly_skill: ''
@@ -4786,12 +4786,12 @@ heroes:
     clan: 上杉家
     gender: 男
     stats:
-      lea: 132.68
-      val: 219.34
-      int: 139.72
-      pol: 40.19
-      cha: 97.24
-      spd: 121.84
+      lea: 133
+      val: 219
+      int: 140
+      pol: 40
+      cha: 97
+      spd: 122
     unique_skill: 轉
     teachable_skill: 神妙劍
     assembly_skill: ''

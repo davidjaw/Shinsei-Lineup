@@ -43,6 +43,7 @@ export const CHANGELOG: ChangelogVersion[] = [
     date: '2026-10-20',
     entries: [
       { tag: 'data', text: '新增狀態「破壞」：攜帶的特定部位裝備失效' },
+      { tag: 'data', text: '柳生宗嚴、上泉信綱屬性改為整數' },
     ],
   },
 
