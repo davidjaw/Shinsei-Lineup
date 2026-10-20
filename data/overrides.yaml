@@ -2824,6 +2824,139 @@ skills:
         max: 2.54
       cooldown: 1
     _action: modify
+  無刀取:
+    name: 無刀取
+    type: 主動
+    rarity: S
+    target: 敵軍群體（2人）
+    activation_rate: 50%
+    description: 對敵軍群體（2人）施加武器的破壞狀態，並使其造成傷害降低{var:dmg_down}（{scale:武勇}），持續{var:duration}回合；同時對目標施加{var:stacks}層無刀勢（持續{var:stack_duration}回合，可疊加）：目標每次造成傷害前，消耗1層無刀勢使自身對其造成兵刃傷害（傷害率{var:dmg_rate}）或恢復我軍單體兵力（恢復率{var:heal_rate}，{scale:武勇}）。
+    commander_description: 消耗無刀勢時，有{var:both_chance}機率同時觸發兩種效果。
+    brief_description: 群體降傷並施加無刀勢，反打或治療
+    tags:
+    - 兵刃傷害
+    - 群體傷害
+    - 治療
+    - 減益
+    - 施加狀態
+    - 主動發動
+    - 武勇系
+    - 大將技
+    raw_text: 無刀取 (S) 種類： 主動戰法 | 兵刃群體 發動機率： 50% 效果： 對敵軍群體（2人）施加武器的破壞狀態，並使其造成傷害降低7.5%->15%（受武勇影響），持續1回合；同時對目標施加2層無刀勢（持續2回合，可疊加）：目標每次造成傷害前，消耗1層無刀勢使自身對其造成兵刃傷害（傷害率68%->136%）或恢復我軍單體兵力（恢復率64%->128%，受武勇影響） 大將技： 消耗無刀勢時，有7.5%->15%同時觸發兩種效果
+    vars:
+      dmg_down:
+        base: 0.075
+        max: 0.15
+      duration: 1
+      stacks: 2
+      stack_duration: 2
+      dmg_rate:
+        base: 0.68
+        max: 1.36
+      heal_rate:
+        base: 0.64
+        max: 1.28
+      both_chance:
+        base: 0.075
+        max: 0.15
+    unique_hero: 柳生宗嚴
+    is_unique: true
+    _action: add
+  燕飛:
+    name: 燕飛
+    type: 主動
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 40%
+    description: 使敵軍單體統率降低{var:lea_down}點（{scale:武勇}），持續{var:duration}回合，隨後對其造成兵刃傷害（傷害率{var:dmg_rate}）。
+    brief_description: 降低單體統率並造成兵刃傷害
+    tags:
+    - 兵刃傷害
+    - 單體傷害
+    - 減益
+    - 降低屬性
+    - 主動發動
+    - 武勇系
+    raw_text: 燕飛 (S) 種類： 主動戰法 | 兵刃單體 發動機率： 40% 效果： 使敵軍單體統率降低30->60點（受武勇影響），持續2回合，隨後對其造成兵刃傷害（傷害率110%->220%）
+    vars:
+      lea_down:
+        base: 30
+        max: 60
+        type: flat
+      duration: 2
+      dmg_rate:
+        base: 1.1
+        max: 2.2
+    source_hero: 柳生宗嚴
+    _action: add
+  轉:
+    name: 轉
+    type: 指揮
+    rarity: S
+    target: 敵軍群體（2人）
+    activation_rate: 100%
+    description: 行動前，有{var:trigger_rate}機率（{scale:武勇}）選擇敵軍群體（2人），分別降低其中統率與武勇最高的武將的對應屬性{var:stat_down}點（{scale:武勇}），並分別增加自身等量值武勇，最多疊加{var:max_stacks}次，持續{var:duration}回合，之後對其造成兵刃傷害（傷害率{var:dmg_rate}）。
+    commander_description: 傷害率增加{var:commander_dmg_bonus}。
+    brief_description: 機率偷取敵將統率武勇並造成兵刃傷害
+    tags:
+    - 兵刃傷害
+    - 群體傷害
+    - 減益
+    - 降低屬性
+    - 提升屬性
+    - 指揮效果
+    - 武勇系
+    - 大將技
+    raw_text: 轉 (S) 種類： 指揮戰法 | 兵刃群體 效果： 行動前，有22.5%->45%機率（受武勇影響）選擇敵軍群體（2人），分別降低其中統率與武勇最高的武將的對應屬性4->8點（受武勇影響），並分別增加自身等量值武勇，最多疊加4次，持續2回合，之後對其造成兵刃傷害（傷害率51%->102%） 大將技： 傷害率增加7.5%->15%
+    vars:
+      trigger_rate:
+        base: 0.225
+        max: 0.45
+      stat_down:
+        base: 4
+        max: 8
+        type: flat
+      max_stacks: 4
+      duration: 2
+      dmg_rate:
+        base: 0.51
+        max: 1.02
+      commander_dmg_bonus:
+        base: 0.075
+        max: 0.15
+    unique_hero: 上泉信綱
+    is_unique: true
+    _action: add
+  神妙劍:
+    name: 神妙劍
+    type: 被動
+    rarity: S
+    target: 自身
+    activation_rate: 100%
+    description: 戰鬥中開始時，自身受到的兵刃傷害降低{var:phys_reduction}，受到的謀略傷害降低{var:tactic_reduction}（{scale:武勇}），且該效果每回合遞減{var:decay}。第{var:chain_from_round}回合起，每回合有{var:chain_chance}機率獲得{status:連擊}，持續{var:chain_duration}回合。
+    brief_description: 開局遞減減傷，第5回合起機率連擊
+    tags:
+    - 增益
+    - 施加狀態
+    - 被動觸發
+    - 回合觸發
+    - 武勇系
+    raw_text: 神妙劍 (S) 種類： 被動戰法 | 增益 效果： 戰鬥中開始時，自身受到的兵刃傷害降低12%->24%，受到的謀略傷害降低12%->24%（受武勇影響），且該效果每回合遞減25%。第5回合起，每回合有42.5%->85%機率獲得連擊狀態，持續1回合
+    vars:
+      phys_reduction:
+        base: 0.12
+        max: 0.24
+      tactic_reduction:
+        base: 0.12
+        max: 0.24
+      decay: 0.25
+      chain_from_round: 5
+      chain_chance:
+        base: 0.425
+        max: 0.85
+      chain_duration: 1
+    source_hero: 上泉信綱
+    _action: add
 bingxue:
   強靭:
     vars:
@@ -4612,3 +4745,67 @@ heroes:
         - 明鏡
     _action: modify
     _name_jp: 高橋紹運
+  柳生宗嚴:
+    name: 柳生宗嚴
+    portrait: https://i.imgur.com/OZ4d30Y.png
+    rarity: 5
+    cost: 7
+    faction: 德川
+    clan: 德川家
+    gender: 男
+    stats:
+      lea: 133.89
+      val: 205.4
+      int: 127.31
+      pol: 57.62
+      cha: 76.54
+      spd: 146.97
+    unique_skill: 無刀取
+    teachable_skill: 燕飛
+    assembly_skill: ''
+    traits:
+    - name: 無形之位
+      description: 造成傷害後，有60%機率使其受到的傷害提高7%，持續1回合
+      active: true
+    - name: 劍豪
+      description: 使開局時武勇低於自身的武將對自身造成的傷害降低9%，武勇高於自身的武將受到自身的傷害提升9%
+      active: true
+    - name: 槍術Ⅲ
+      description: 部隊的足輕等級上升3級
+      active: true
+    - name: 武威Ⅰ
+      description: 武勇提高2%
+      active: true
+    _action: add
+  上泉信綱:
+    name: 上泉信綱
+    portrait: https://i.imgur.com/BYYEEQR.png
+    rarity: 5
+    cost: 7
+    faction: 上杉
+    clan: 上杉家
+    gender: 男
+    stats:
+      lea: 132.68
+      val: 219.34
+      int: 139.72
+      pol: 40.19
+      cha: 97.24
+      spd: 121.84
+    unique_skill: 轉
+    teachable_skill: 神妙劍
+    assembly_skill: ''
+    traits:
+    - name: 懸待表裡
+      description: 戰鬥中，自身獲得屬性增加、減少、提高或降低狀態時，有30%機率淨化自身一個負面狀態，每回合最多觸發1次
+      active: true
+    - name: 劍豪
+      description: 使開局時武勇低於自身的武將對自身造成的傷害降低9%，武勇高於自身的武將受到自身的傷害提升9%
+      active: true
+    - name: 槍術Ⅲ
+      description: 部隊的足輕等級上升3級
+      active: true
+    - name: 血氣Ⅰ
+      description: 造成的兵刃傷害增加1.6%
+      active: true
+    _action: add

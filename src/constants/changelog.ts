@@ -40,8 +40,9 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 export const CHANGELOG: ChangelogVersion[] = [
   {
     version: '0.5.4',
-    date: '2026-10-18',
+    date: '2026-10-20',
     entries: [
+      { tag: 'data', text: '新增武將柳生宗嚴、上泉信綱，以及戰法「無刀取」「燕飛」「轉」「神妙劍」' },
       { tag: 'data', text: '戰法「揮砍」更名為遊戲內的正式名稱「斬斷」' },
     ],
   },
