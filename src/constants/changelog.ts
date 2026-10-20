@@ -39,6 +39,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.5',
+    date: '2026-10-20',
+    entries: [
+      { tag: 'data', text: '新增狀態「破壞」：攜帶的特定部位裝備失效' },
+    ],
+  },
+
+  {
     version: '0.5.4',
     date: '2026-10-20',
     entries: [

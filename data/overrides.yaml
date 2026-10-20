@@ -2830,7 +2830,7 @@ skills:
     rarity: S
     target: 敵軍群體（2人）
     activation_rate: 50%
-    description: 對敵軍群體（2人）施加武器的破壞狀態，並使其造成傷害降低{var:dmg_down}（{scale:武勇}），持續{var:duration}回合；同時對目標施加{var:stacks}層無刀勢（持續{var:stack_duration}回合，可疊加）：目標每次造成傷害前，消耗1層無刀勢使自身對其造成兵刃傷害（傷害率{var:dmg_rate}）或恢復我軍單體兵力（恢復率{var:heal_rate}，{scale:武勇}）。
+    description: 對敵軍群體（2人）施加武器的{status:破壞}，並使其造成傷害降低{var:dmg_down}（{scale:武勇}），持續{var:duration}回合；同時對目標施加{var:stacks}層無刀勢（持續{var:stack_duration}回合，可疊加）：目標每次造成傷害前，消耗1層無刀勢使自身對其造成兵刃傷害（傷害率{var:dmg_rate}）或恢復我軍單體兵力（恢復率{var:heal_rate}，{scale:武勇}）。
     commander_description: 消耗無刀勢時，有{var:both_chance}機率同時觸發兩種效果。
     brief_description: 群體降傷並施加無刀勢，反打或治療
     tags:

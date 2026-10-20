@@ -227,6 +227,13 @@
   category: targeting_override
   description: 強制目標的技能效果轉向自己
 
+# === Equipment (裝備) ===
+破壞:
+  id: break
+  name: 破壞
+  category: equipment
+  description: 攜帶的特定部位裝備失效
+
 # === Activation Modifier (發動機率) ===
 發動機率增加·主動:
   id: active_boost
