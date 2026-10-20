@@ -235,8 +235,21 @@ const restoreRoleInto = (
     }
   }
 
-  const st = safeL[`${prefix}_st`]
-  if (st) role.stats = { ...(st as RoleData['stats']) }
+  // Re-anchor saved stats on the hero's current base and round only the free-
+  // point bonus. A base that changed after saving (柳生宗嚴 133.89 → 134 in
+  // 0.5.5) otherwise leaves phantom ±0.x bonuses; rounding the absolute value
+  // instead would break heroes whose base is legitimately x.5 (伊達政宗).
+  const st = safeL[`${prefix}_st`] as RoleData['stats'] | undefined
+  if (st) {
+    const base = (h.stats ?? {}) as Record<string, number>
+    role.stats = Object.fromEntries(
+      Object.entries(st).map(([k, v]) => {
+        const b = base[k] ?? 0
+        const bonus = typeof v === 'number' ? Math.round(v - b) : 0
+        return [k, b + (Number.isFinite(bonus) ? bonus : 0)]
+      }),
+    ) as RoleData['stats']
+  }
 
   const bt = safeL[`${prefix}_bt`]
   if (typeof bt === 'number') role.breakthrough = Math.max(0, Math.min(5, bt))
