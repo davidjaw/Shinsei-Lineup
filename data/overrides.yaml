@@ -11,6 +11,16 @@ skills:
   陣前無我:
     vars:
       heal_rate: 2.78
+  知者楽水:
+    # cfg 「9%→18%から12%→24%」 is two level ranges (one per majority branch), not 9%～12%; in-game battle reports print
+    # 18.00 / 24.00 at level 10.
+    vars:
+      phys_reduce:
+        base: 0.09
+        max: 0.18
+      strat_reduce:
+        base: 0.12
+        max: 0.24
   薙ぎ払い:
     cfg_id: 29606
     aliases:
