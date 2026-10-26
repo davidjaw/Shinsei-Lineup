@@ -11,6 +11,12 @@ skills:
   陣前無我:
     vars:
       heal_rate: 2.78
+  軍神:
+    # Buffed in game: the full-stack bonus is 80%→160% (game8, in-game 160% confirmed); the stale data had 70%→140%.
+    vars:
+      max_stack_dmg_bonus:
+        base: 0.8
+        max: 1.6
   知者楽水:
     # cfg 「9%→18%から12%→24%」 is two level ranges (one per majority branch), not 9%～12%; in-game battle reports print
     # 18.00 / 24.00 at level 10.
