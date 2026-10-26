@@ -13,7 +13,11 @@ skills:
       heal_rate: 2.78
   軍神:
     # Buffed in game: the full-stack bonus is 80%→160% (game8, in-game 160% confirmed); the stale data had 70%→140%.
+    # The stack chance is 33%→66% (武勇-scaled), per the game text; the stale data had 30%→60%.
     vars:
+      stack_trigger_chance:
+        base: 0.33
+        max: 0.66
       max_stack_dmg_bonus:
         base: 0.8
         max: 1.6
@@ -1068,7 +1072,7 @@ skills:
     description: 普通攻擊之後，對目標造成{var:dmg1}兵刃傷害，並有{var:silence_prob}幾率施加{status:無策}狀態，持續{var:duration}回合；若目標已處於{status:無策}狀態，則恢復自身兵力（治療率{var:heal}，受{scale:武勇}影響）；隨後有{var:extra_prob}幾率額外對敵軍單體造成一次兵刃傷害（傷害率{var:dmg2}）。該戰法每成功發動一次，使施加{status:無策}的幾率增加{var:prob_inc}，最多增加{var:max_stacks}次。
     vars:
       dmg1:
-        base: 0.58
+        base: 0.54
         max: 1.08
       silence_prob: 0.4
       duration: 1
