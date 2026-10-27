@@ -31,6 +31,13 @@ skills:
       strat_reduce:
         base: 0.12
         max: 0.24
+  豊後の戦陣:
+    # In game the 統率 branch at max level raises 主動 activation by 8% (game8 4%→8%; in-game 已滿級 8%; battle reports
+    # 96 / 96 at 8%); the stale data had 3%→6%.
+    vars:
+      activation_bonus:
+        base: 0.04
+        max: 0.08
   薙ぎ払い:
     cfg_id: 29606
     aliases:
