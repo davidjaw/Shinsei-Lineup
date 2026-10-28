@@ -26,6 +26,23 @@ npx supabase db push --yes
 npx supabase functions deploy handbook-snapshot --no-verify-jwt
 ```
 
+### capture-ingest (battle-report uploads)
+
+Migration `20261028000000_capture_ingest.sql` (schema `capture`, RPC `public.capture_ingest`, service role only).
+The function verifies the user itself, so it also deploys with `--no-verify-jwt`. Set its secrets per project first:
+
+```bash
+npx supabase secrets set CAPTURE_NAME_HMAC_KEY="$(openssl rand -hex 32)"   # once per project; never rotate casually (HMACs stop matching)
+npx supabase secrets set CAPTURE_ALLOWED_ORIGINS="https://example.github.io,http://localhost:5173"   # exact origins, comma-separated
+npx supabase functions deploy capture-ingest --no-verify-jwt
+```
+
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided by the platform (all required, else
+500). A legacy JWT service_role key is sent as `apikey` + bearer; an `sb_secret_` key (not a JWT) as `apikey` only —
+the secret-key path is not yet tested against a hosted project. Anonymous sign-ins get 401. Tests:
+`npx tsx --test supabase/functions/capture-ingest/*.test.ts`. Raw names are kept by the privacy notice; `capture.purge_identity_raw(interval)` is for manual use only (do not schedule).
+(no cron yet).
+
 GRANT/REVOKE in migrations: never quote `"boolean"` (Postgres type name is `bool`). Use unquoted `boolean` / `text` / `uuid` / `jsonb`.
 
 ## SQL Editor

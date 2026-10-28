@@ -7,3 +7,8 @@
 
 [functions.handbook-snapshot]
 verify_jwt = false
+
+# capture-ingest checks the user's bearer token itself (GET /auth/v1/user), so
+# the CORS preflight is not 401'd by the gateway.
+[functions.capture-ingest]
+verify_jwt = false
