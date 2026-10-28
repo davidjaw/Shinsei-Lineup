@@ -1,25 +1,48 @@
-// Pure logic of capture-ingest: payload validation, name normalisation, HMAC and the dedup fingerprint.
-// No Deno APIs here (Web Crypto only), so node can run the tests: npx tsx --test supabase/functions/capture-ingest/*.test.ts
+// Pure logic of capture-ingest: the body size cap, payload validation, name normalisation, HMAC and the dedup fingerprint.
+// No Deno APIs here (Web Crypto and Request only), so node can run the tests: npx tsx --test supabase/functions/capture-ingest/*.test.ts
 
 export const SCHEMA_VERSION = 3
 export const MAX_BATTLES = 200
-export const MAX_BODY_BYTES = 256 * 1024
+// 200 brief battles from real 總覽 reads measure up to ~650 KB (~3.3 KB each, six cards with skills); list battles ~1 KB.
+export const MAX_BODY_BYTES = 1024 * 1024
+/**
+ * The privacy notice version the client consents to (capture/client/src/config.ts UPLOAD.consentVersion). Only this
+ * one is accepted, so a notice bump deploys the function first, then the client.
+ */
+export const CONSENT_VERSION = '2026-10-28'
 
-// Value sets of the capture client (capture/client/src/prefs.ts, cv/listParse.ts, cv/troopIcon.ts, cv/listPixels.ts).
+// Value sets of the capture client (capture/client/src/prefs.ts, cv/listParse.ts, cv/troopIcon.ts, cv/listPixels.ts)
+// and of the 總覽 (brief) read: six cards in screen order, left three blue, right three red; a skill column is 固有,
+// the learned 戰法 (none, one or two), 普通攻擊, so 2..4 blocks, and an empty slot has none.
 const EDITIONS = ['tw', 'hk']
 const SERVER_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
 const RESULTS = ['win', 'loss', 'draw']
 const ROLES = ['attack', 'defend']
-const LEVELS = ['list']
+const LEVELS = ['list', 'brief']
+const GRADES = ['S', 'A', 'B']
+const CARDS = 6
+const MAX_SKILLS = 4
 const TROOP_TYPES = ['足輕', '弓兵', '騎兵', '鐵炮', '攻城車']
 const HERO_LEVEL: [number, number] = [1, 50]
 const RED_MAX = 5
 const HEROES_PER_SIDE = 3
+// Bounds from real reads (14.5k sides, 2.1k cards; max seen: hp 31500, hp_max 36000, wounded 19235, dead 23678,
+// troop_lv 12, card troops 10487, launch 39, kills 30134, rescue 12594), with generous headroom.
+const TROOPS_MAX = 100000
+const TROOP_LV: [number, number] = [0, 50]
+const LAUNCH_MAX = 200
+// Hero cfg_ids are five digits (10001..12019 today). The server has no lexicon, so cfg_id and name are not
+// cross-checked here; the merge job can join them against the hero table.
+const CFG_ID: [number, number] = [1, 99999]
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/
 const MAX_NAME = 64
+/** Hero and skill names (lexicon names, at most 7 characters, CJK / kana plus a middle dot). */
+const MAX_GAME_NAME = 16
+const GAME_NAME_RE = /^[\p{L}\p{M}\p{N}·・]+$/u
+const INVISIBLE_RE = /[\p{Cc}\p{Cf}]/gu
 const MAX_LABEL = 64
 /** Postgres int4: seq and coordinates are int columns. */
 const INT4_MAX = 2147483647
@@ -29,9 +52,12 @@ const HEADER_KEYS = [
   'session_id', 'captured_at', 'anonymous', 'battles',
 ]
 const BATTLE_KEYS = ['seq', 'level', 'date', 'result', 'coord', 'left', 'right']
+const BRIEF_KEYS = [...BATTLE_KEYS, 'cards']
 const SIDE_KEYS = ['role', 'troop_type', 'troop_lv', 'hp', 'hp_max', 'wounded', 'dead', 'heroes']
 const IDENTITY_KEYS = ['player', 'alliance']
 const HERO_KEYS = ['cfg_id', 'name', 'level', 'red']
+const CARD_KEYS = [...HERO_KEYS, 'team', 'pos', 'commander', 'routed', 'troops', 'skills']
+const SKILL_KEYS = ['grade', 'name', 'launch', 'kills', 'rescue']
 const SIDE_NUMBERS = ['hp', 'hp_max', 'wounded', 'dead'] as const
 
 export class Invalid extends Error {}
@@ -54,6 +80,24 @@ export interface Side {
   heroes: Hero[]
 }
 
+export interface Skill {
+  grade: string | null
+  name: string | null
+  launch: number | null
+  kills: number | null
+  rescue: number | null
+}
+
+/** One 總覽 card. `team` / `pos` are fixed by its place (index k: blue for k < 3, pos k % 3 + 1). */
+export interface Card extends Hero {
+  team: string
+  pos: number
+  commander: boolean
+  routed: boolean | null
+  troops: number | null
+  skills: Skill[]
+}
+
 export interface Identity {
   player: string | null
   alliance: string | null
@@ -67,6 +111,8 @@ export interface Battle {
   coord: { x: number; y: number } | null
   left: Side
   right: Side
+  /** Brief battles only. */
+  cards: Card[] | null
   identity: { left: Identity; right: Identity } | null
 }
 
@@ -89,7 +135,8 @@ type Obj = Record<string, unknown>
 function record(v: unknown, path: string, allowed: string[]): Obj {
   if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Invalid(`${path}: object expected`)
   const extra = Object.keys(v).find((k) => !allowed.includes(k))
-  if (extra !== undefined) throw new Invalid(`${path}.${extra}: unknown key`)
+  // The key itself is client text and the reason is stored, so it is not echoed.
+  if (extra !== undefined) throw new Invalid(`${path}: unknown key`)
   return v as Obj
 }
 
@@ -121,14 +168,34 @@ function oneOf(v: unknown, path: string, values: string[]): string {
 const oneOfOrNull = (v: unknown, path: string, values: string[]): string | null =>
   v === null ? null : oneOf(v, path, values)
 
-/** A name as the database keys it: NFKC and trimmed; empty is unread. */
-export function normName(v: string | null): string | null {
-  return v?.normalize('NFKC').trim() || null
+function bool(v: unknown, path: string): boolean {
+  if (typeof v !== 'boolean') throw new Invalid(`${path}: boolean expected`)
+  return v
 }
 
-function nameOrNull(v: unknown, path: string): string | null {
+const boolOrNull = (v: unknown, path: string): boolean | null => (v === null ? null : bool(v, path))
+
+/** A name as the database keys it: NFKC, control / format characters dropped, trimmed; empty is unread. */
+export function normName(v: string | null): string | null {
+  return v?.normalize('NFKC').replace(INVISIBLE_RE, '').trim() || null
+}
+
+/** Length is checked after normalising: NFKC expands some characters (U+FDFA to 18). */
+function nameOrNull(v: unknown, path: string, max = MAX_NAME): string | null {
   if (v === undefined || v === null) return null
-  return normName(str(v, path, MAX_NAME))
+  if (typeof v !== 'string') throw new Invalid(`${path}: string expected`)
+  const name = normName(v)
+  if (name !== null && name.length > max) throw new Invalid(`${path}: at most ${max} characters expected`)
+  return name
+}
+
+/** A hero or skill name: these land in observations (not purged with identities), so letters only. */
+function gameName(v: unknown, path: string): string | null {
+  if (v === undefined || v === null) return null
+  if (typeof v !== 'string') throw new Invalid(`${path}: string expected`)
+  const name = normName(v)
+  // An unreadable name is dropped rather than losing the whole battle's numbers.
+  return name !== null && name.length <= MAX_GAME_NAME && GAME_NAME_RE.test(name) ? name : null
 }
 
 /** The game time as the list prints it (`YYYY-MM-DD HH:MM:SS`, cv/listParse.ts readMeta), and a real calendar time. */
@@ -141,6 +208,32 @@ function dateOrNull(v: unknown, path: string): string | null {
   const same = t.getUTCFullYear() === Y && t.getUTCMonth() === M - 1 && t.getUTCDate() === D
   if (!same || h > 23 || min > 59 || s > 59) throw new Invalid(`${path}: not a calendar time`)
   return v as string
+}
+
+// ---- body ----
+
+/** The body as text, or null when it is over MAX_BODY_BYTES; streamed, so a body without Content-Length stops there too. */
+export async function readBody(req: Request, max = MAX_BODY_BYTES): Promise<string | null> {
+  const declared = Number(req.headers.get('content-length') ?? '0')
+  if (declared > max) return null
+  const chunks: Uint8Array[] = []
+  let size = 0
+  const reader = req.body?.getReader()
+  for (let r = await reader?.read(); r && !r.done; r = await reader!.read()) {
+    size += r.value.byteLength
+    if (size > max) {
+      await reader!.cancel()
+      return null
+    }
+    chunks.push(r.value)
+  }
+  const bytes = new Uint8Array(size)
+  let at = 0
+  for (const c of chunks) {
+    bytes.set(c, at)
+    at += c.byteLength
+  }
+  return new TextDecoder().decode(bytes)
 }
 
 // ---- payload ----
@@ -160,12 +253,13 @@ export function parseHeader(body: unknown): { header: Header; battles: unknown[]
   if (!Array.isArray(o.battles) || o.battles.length === 0 || o.battles.length > MAX_BATTLES) {
     throw new Invalid(`body.battles: 1..${MAX_BATTLES} battles expected`)
   }
+  if (o.consent_version !== CONSENT_VERSION) throw new Invalid(`body.consent_version: ${CONSENT_VERSION} expected`)
   if (o.anonymous && o.battles.some(hasIdentityKeys)) throw new Invalid('body.battles: player/alliance sent in anonymous mode')
   const header: Header = {
     schema_version: SCHEMA_VERSION,
     client_version: str(o.client_version, 'body.client_version'),
     ocr_model: str(o.ocr_model, 'body.ocr_model'),
-    consent_version: str(o.consent_version, 'body.consent_version'),
+    consent_version: CONSENT_VERSION,
     edition: oneOf(o.edition, 'body.edition', EDITIONS),
     server,
     session_id: session.toLowerCase(),
@@ -185,12 +279,15 @@ function hasIdentityKeys(b: unknown): boolean {
 function parseHero(v: unknown, path: string): Hero {
   const o = record(v, path, HERO_KEYS)
   required(o, path, HERO_KEYS)
-  return {
-    cfg_id: intOrNull(o.cfg_id, `${path}.cfg_id`),
-    name: nameOrNull(o.name, `${path}.name`),
+  const h: Hero = {
+    cfg_id: intOrNull(o.cfg_id, `${path}.cfg_id`, ...CFG_ID),
+    name: gameName(o.name, `${path}.name`),
     level: intOrNull(o.level, `${path}.level`, ...HERO_LEVEL),
     red: intOrNull(o.red, `${path}.red`, 0, RED_MAX),
   }
+  // The client sends a cfg_id only for a lexicon name.
+  if (h.cfg_id !== null && h.name === null) throw new Invalid(`${path}.cfg_id: without a name`)
+  return h
 }
 
 function parseSide(v: unknown, path: string, anonymous: boolean): { side: Side; identity: Identity } {
@@ -202,16 +299,69 @@ function parseSide(v: unknown, path: string, anonymous: boolean): { side: Side; 
   const side: Side = {
     role: oneOfOrNull(o.role, `${path}.role`, ROLES),
     troop_type: oneOfOrNull(o.troop_type, `${path}.troop_type`, TROOP_TYPES),
-    troop_lv: intOrNull(o.troop_lv, `${path}.troop_lv`),
-    hp: intOrNull(o.hp, `${path}.hp`),
-    hp_max: intOrNull(o.hp_max, `${path}.hp_max`),
-    wounded: intOrNull(o.wounded, `${path}.wounded`),
-    dead: intOrNull(o.dead, `${path}.dead`),
+    troop_lv: intOrNull(o.troop_lv, `${path}.troop_lv`, ...TROOP_LV),
+    hp: intOrNull(o.hp, `${path}.hp`, 0, TROOPS_MAX),
+    hp_max: intOrNull(o.hp_max, `${path}.hp_max`, 0, TROOPS_MAX),
+    wounded: intOrNull(o.wounded, `${path}.wounded`, 0, TROOPS_MAX),
+    dead: intOrNull(o.dead, `${path}.dead`, 0, TROOPS_MAX),
     heroes: o.heroes.map((h, k) => parseHero(h, `${path}.heroes[${k}]`)),
   }
-  if (side.hp !== null && side.hp_max !== null && side.hp > side.hp_max) throw new Invalid(`${path}.hp: above hp_max`)
+  // Both hold on every real read (hp + wounded + dead <= hp_max too, but a heal could break that, so it is not checked).
+  const { hp, hp_max: max, wounded, dead } = side
+  if (hp !== null && max !== null && hp > max) throw new Invalid(`${path}.hp: above hp_max`)
+  if (wounded !== null && dead !== null && max !== null && wounded + dead > max) {
+    throw new Invalid(`${path}: wounded + dead above hp_max`)
+  }
   const identity = { player: nameOrNull(o.player, `${path}.player`), alliance: nameOrNull(o.alliance, `${path}.alliance`) }
   return { side, identity }
+}
+
+function parseSkill(v: unknown, path: string): Skill {
+  const o = record(v, path, SKILL_KEYS)
+  required(o, path, SKILL_KEYS)
+  return {
+    grade: oneOfOrNull(o.grade, `${path}.grade`, GRADES),
+    name: gameName(o.name, `${path}.name`),
+    launch: intOrNull(o.launch, `${path}.launch`, 0, LAUNCH_MAX),
+    kills: intOrNull(o.kills, `${path}.kills`, 0, TROOPS_MAX),
+    rescue: intOrNull(o.rescue, `${path}.rescue`, 0, TROOPS_MAX),
+  }
+}
+
+function parseCard(v: unknown, k: number): Card {
+  const path = `cards[${k}]`
+  const o = record(v, path, CARD_KEYS)
+  required(o, path, CARD_KEYS)
+  const team = k < HEROES_PER_SIDE ? 'blue' : 'red'
+  const pos = (k % HEROES_PER_SIDE) + 1
+  if (o.team !== team) throw new Invalid(`${path}.team: ${team} expected`)
+  if (o.pos !== pos) throw new Invalid(`${path}.pos: ${pos} expected`)
+  if (!Array.isArray(o.skills) || o.skills.length > MAX_SKILLS) throw new Invalid(`${path}.skills: 0..${MAX_SKILLS} skills expected`)
+  return {
+    ...parseHero({ cfg_id: o.cfg_id, name: o.name, level: o.level, red: o.red }, path),
+    team,
+    pos,
+    commander: bool(o.commander, `${path}.commander`),
+    routed: boolOrNull(o.routed, `${path}.routed`),
+    troops: intOrNull(o.troops, `${path}.troops`, 0, TROOPS_MAX),
+    skills: o.skills.map((s, i) => parseSkill(s, `${path}.skills[${i}]`)),
+  }
+}
+
+const sameHero = (h: Hero, c: Card): boolean => HERO_KEYS.every((f) => h[f as keyof Hero] === c[f as keyof Hero])
+
+/** Six cards in screen order; each side's heroes are its three cards' (left = blue). */
+function parseCards(v: unknown, left: Side, right: Side): Card[] {
+  if (!Array.isArray(v) || v.length !== CARDS) throw new Invalid(`cards: ${CARDS} cards expected`)
+  const cards = v.map(parseCard)
+  for (const team of [0, 1]) {
+    const own = cards.slice(team * HEROES_PER_SIDE, (team + 1) * HEROES_PER_SIDE)
+    if (own.filter((c) => c.commander).length > 1) throw new Invalid(`cards: more than one commander on ${own[0].team}`)
+    const [name, s] = team === 0 ? ['left', left] : ['right', right]
+    const k = own.findIndex((c, i) => !sameHero(s.heroes[i], c))
+    if (k >= 0) throw new Invalid(`${name}.heroes[${k}]: differs from cards[${team * HEROES_PER_SIDE + k}]`)
+  }
+  return cards
 }
 
 function parseCoord(v: unknown, path: string): { x: number; y: number } | null {
@@ -223,18 +373,22 @@ function parseCoord(v: unknown, path: string): { x: number; y: number } | null {
 
 /** One battle; throws Invalid (the battle is rejected, not the batch). */
 export function parseBattle(v: unknown, anonymous: boolean): Battle {
-  const o = record(v, 'battle', BATTLE_KEYS)
-  required(o, 'battle', BATTLE_KEYS)
+  const o = record(v, 'battle', BRIEF_KEYS)
+  const level = oneOf(o.level, 'level', LEVELS)
+  const brief = level === 'brief'
+  if (!brief && Object.hasOwn(o, 'cards')) throw new Invalid('cards: brief battles only')
+  required(o, 'battle', brief ? BRIEF_KEYS : BATTLE_KEYS)
   const left = parseSide(o.left, 'left', anonymous)
   const right = parseSide(o.right, 'right', anonymous)
   return {
     seq: int(o.seq, 'seq', 0, INT4_MAX),
-    level: oneOf(o.level, 'level', LEVELS),
+    level,
     date: dateOrNull(o.date, 'date'),
     result: oneOfOrNull(o.result, 'result', RESULTS),
     coord: parseCoord(o.coord, 'coord'),
     left: left.side,
     right: right.side,
+    cards: brief ? parseCards(o.cards, left.side, right.side) : null,
     identity: anonymous ? null : { left: left.identity, right: right.identity },
   }
 }
@@ -301,7 +455,8 @@ export async function prepare(body: unknown, key: CryptoKey): Promise<Prepared> 
   const { header, battles } = parseHeader(body)
   const rows: Record<string, unknown>[] = []
   const rejected: Prepared['rejected'] = []
-  const seen = new Set<number>()
+  // A brief and its list row share the seq (the client sends the list row's), so the key is (level, seq).
+  const seen = new Set<string>()
   for (const [index, raw] of battles.entries()) {
     let b: Battle
     try {
@@ -310,21 +465,23 @@ export async function prepare(body: unknown, key: CryptoKey): Promise<Prepared> 
       rejected.push({ index, reason: reason(e) })
       continue
     }
-    if (seen.has(b.seq)) {
+    const slot = `${b.level}:${b.seq}`
+    if (seen.has(slot)) {
       rejected.push({ index, reason: 'seq: duplicate in payload' })
       continue
     }
-    seen.add(b.seq)
+    seen.add(slot)
     rows.push(await toRow(b, key))
   }
   return { header, rows, rejected }
 }
 
 async function toRow(b: Battle, key: CryptoKey): Promise<Record<string, unknown>> {
-  const { identity, ...rest } = b
+  const { identity, cards, ...rest } = b
   const identities = identity && {
     left: await identityRow(key, identity.left),
     right: await identityRow(key, identity.right),
   }
-  return { ...rest, ...fingerprint(b), identities }
+  // A list row carries no `cards` key at all, so the RPC reads SQL NULL for it.
+  return { ...rest, ...(cards && { cards }), ...fingerprint(b), identities }
 }

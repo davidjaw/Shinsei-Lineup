@@ -1,4 +1,4 @@
-// Battle-report uploads from the capture web client (contract: schema_version 3).
+// Battle-report uploads from the capture web client (contract: schema_version 3; list and brief battles).
 // Verifies the user with GoTrue, validates the payload (core.ts), then writes through the
 // service-role-only RPC public.capture_ingest, which also enforces bans, rate limits and dedup.
 // Deploy with verify_jwt = false (config.toml / --no-verify-jwt): gateway JWT would 401 the OPTIONS
@@ -7,7 +7,7 @@
 // Env: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (provided by the platform),
 //      CAPTURE_ALLOWED_ORIGINS (comma-separated exact origins), CAPTURE_NAME_HMAC_KEY (secret).
 
-import { hmacKey, Invalid, MAX_BODY_BYTES, prepare } from './core.ts'
+import { hmacKey, Invalid, prepare, readBody } from './core.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
@@ -24,10 +24,10 @@ const corsFor = (origin: string) => ({
   Vary: 'Origin',
 })
 
-const json = (origin: string, body: unknown, status = 200) =>
+const json = (origin: string, body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsFor(origin), 'Content-Type': 'application/json' },
+    headers: { ...corsFor(origin), 'Content-Type': 'application/json', ...extra },
   })
 
 /** The caller's user id, or null when the bearer token is missing, not a live session, or an anonymous sign-in. */
@@ -40,14 +40,6 @@ async function userId(req: Request): Promise<string | null> {
   if (!res.ok) return null
   const user = (await res.json()) as { id?: unknown; is_anonymous?: unknown }
   return typeof user.id === 'string' && user.is_anonymous !== true ? user.id : null
-}
-
-/** The body as text, or null when it is over MAX_BODY_BYTES. */
-async function readBody(req: Request): Promise<string | null> {
-  const declared = Number(req.headers.get('content-length') ?? '0')
-  if (declared > MAX_BODY_BYTES) return null
-  const bytes = new Uint8Array(await req.arrayBuffer())
-  return bytes.byteLength > MAX_BODY_BYTES ? null : new TextDecoder().decode(bytes)
 }
 
 // A legacy service_role key is a JWT and also goes as the bearer; an sb_secret_ key is not a JWT, so it goes as
@@ -64,11 +56,6 @@ async function rpc(args: Record<string, unknown>): Promise<Record<string, unknow
   })
   if (!res.ok) throw new Error(`capture_ingest ${res.status}: ${await res.text()}`)
   return (await res.json()) as Record<string, unknown>
-}
-
-const RPC_ERRORS: Record<string, [string, number]> = {
-  banned: ['account banned', 403],
-  rate_limited: ['rate limit exceeded', 429],
 }
 
 async function handle(req: Request, origin: string): Promise<Response> {
@@ -89,8 +76,13 @@ async function handle(req: Request, origin: string): Promise<Response> {
 
   const { header, rows, rejected } = prepared
   const out = await rpc({ p_user_id: user, p_header: header, p_battles: rows, p_rejected: rejected })
-  const failure = RPC_ERRORS[String(out.error ?? '')]
-  if (failure) return json(origin, { error: failure[0] }, failure[1])
+  if (out.error === 'rate_limited') {
+    // limit: 'hour' (uploads per hour) or 'day' (battles per day), whichever clears later; retry_after_s from the RPC.
+    const wait = Math.max(1, Number(out.retry_after_s) || 1)
+    const body = { error: 'rate limit exceeded', limit: out.limit, retry_after_s: wait }
+    return json(origin, body, 429, { 'Retry-After': String(wait), 'Access-Control-Expose-Headers': 'Retry-After' })
+  }
+  if (out.error === 'banned') return json(origin, { error: 'account banned' }, 403)
   return json(origin, { accepted: out.accepted, duplicates: out.duplicates, rejected })
 }
 

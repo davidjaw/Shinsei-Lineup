@@ -28,7 +28,21 @@ npx supabase functions deploy handbook-snapshot --no-verify-jwt
 
 ### capture-ingest (battle-report uploads)
 
-Migration `20261028000000_capture_ingest.sql` (schema `capture`, RPC `public.capture_ingest`, service role only).
+Migrations `20261028000000_capture_ingest.sql` (schema `capture`, RPC `public.capture_ingest`, service role only; applied
+on prod) and `20261028120000_capture_brief.sql` (brief `cards`, retry key with level, `capture.session_fps` for `fp_ordinal`, RPC body
+replaced). It backfills `session_fps` from `uploads`; an upload committed by the old function while the push runs can
+miss that, so push with no traffic or re-run the migration's backfill `INSERT … ON CONFLICT DO NOTHING` right after. Push the
+migration before deploying the new function (the function reads the RPC's new 429 fields).
+A battle is `level: 'list'` (a 戰報 list row) or `level: 'brief'` (a 總覽 read: the list battle fields plus six `cards`,
+stored in `observations.cards`). A brief carries the seq, date and coord of its list row and joins it on (user, session, seq); its own troop
+numbers usually give the same `fp`, but a brief with an unread number may not. The retry key is (user, session, level, seq). Requests: at most 200 battles and 1 MiB (200 briefs measure ~650 KB;
+a bigger body is 413, with or without Content-Length). Over a rate limit (20 uploads per hour, 2000 battles per day) the
+answer is 429 with `Retry-After` and `{error, limit: 'hour' | 'day', retry_after_s}`.
+
+The function accepts only the current privacy-notice version (`CONSENT_VERSION` in `core.ts`, equal to the client's
+`UPLOAD.consentVersion`; anything else is 400). A notice bump therefore deploys the function first, then the client:
+the other order makes every upload of the new client fail until the function catches up.
+
 The function verifies the user itself, so it also deploys with `--no-verify-jwt`. Set its secrets per project first:
 
 ```bash
@@ -40,7 +54,8 @@ npx supabase functions deploy capture-ingest --no-verify-jwt
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided by the platform (all required, else
 500). A legacy JWT service_role key is sent as `apikey` + bearer; an `sb_secret_` key (not a JWT) as `apikey` only —
 the secret-key path is not yet tested against a hosted project. Anonymous sign-ins get 401. Tests:
-`npx tsx --test supabase/functions/capture-ingest/*.test.ts`. Raw names are kept by the privacy notice; `capture.purge_identity_raw(interval)` is for manual use only (do not schedule).
+`npx tsx --test supabase/functions/capture-ingest/*.test.ts` (or `deno test` in the function directory). Raw names are kept by the privacy notice; `capture.purge_identity_raw(interval)` is for manual use only (do not schedule). It clears player / alliance names only; hero and
+skill names (letters only, at most 16 characters) stay in `observations`.
 (no cron yet).
 
 GRANT/REVOKE in migrations: never quote `"boolean"` (Postgres type name is `bool`). Use unquoted `boolean` / `text` / `uuid` / `jsonb`.
