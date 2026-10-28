@@ -74,8 +74,8 @@
     <!-- Footer: contact panel above, settings/collapse below -->
     <div class="border-t border-divider pt-2 mt-2">
       <div v-if="!collapsed" class="px-1 mb-2 flex items-center gap-1">
-        <el-tooltip content="yt.neko.vision@gmail.com" placement="top" :show-after="200">
-          <a href="mailto:yt.neko.vision@gmail.com" class="footer-icon" aria-label="Email">
+        <el-tooltip content="neko.vision+nobu@mail.grokbot.com" placement="top" :show-after="200">
+          <a href="mailto:neko.vision+nobu@mail.grokbot.com" class="footer-icon" aria-label="Email">
             <el-icon :size="13"><Message /></el-icon>
           </a>
         </el-tooltip>

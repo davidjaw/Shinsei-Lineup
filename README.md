@@ -203,7 +203,7 @@ dist/                      # Vite 產出（gitignored）
 
 This project is a fan-made tool for **信長之野望：真戰** (Nobunaga's Ambition: Shinsei). Game data, images, and trademarks belong to their respective owners (KOEI TECMO Games Co., Ltd.). This project is not affiliated with or endorsed by KOEI TECMO.
 
-若本專案之內容侵犯了您的權益，請透過 yt.neko.vision@gmail.com 或 Discord（neko.vision）聯繫作者，將盡速配合處理（包括但不限於移除相關內容或下架本專案）。
+若本專案之內容侵犯了您的權益，請透過 neko.vision+nobu@mail.grokbot.com 或 Discord（neko.vision）聯繫作者，將盡速配合處理（包括但不限於移除相關內容或下架本專案）。
 
 ## License
 

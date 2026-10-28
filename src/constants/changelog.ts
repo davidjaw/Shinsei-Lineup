@@ -39,6 +39,20 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.6',
+    date: '2026-10-28',
+    entries: [
+      { tag: 'fix', text: '舊存檔中柳生宗嚴、上泉信綱的屬性不再顯示多位小數' },
+      { tag: 'data', text: '陣前無我回復率改為 278%' },
+      { tag: 'data', text: '智者樂水減傷修正為 9→18% / 12→24%' },
+      { tag: 'data', text: '軍神滿層加成改為 80%→160%、疊層機率改為 33%→66%' },
+      { tag: 'data', text: '越後二天首擊改為 54%→108%' },
+      { tag: 'data', text: '豐後戰神統率分支發動加成改為 4%→8%' },
+      { tag: 'misc', text: '更新聯絡信箱' },
+    ],
+  },
+
+  {
     version: '0.5.5',
     date: '2026-10-20',
     entries: [
