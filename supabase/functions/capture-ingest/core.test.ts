@@ -36,8 +36,8 @@ test('a valid upload is accepted with names moved to identities', async () => {
   assert.equal(out.rows.length, 1)
   const row = out.rows[0] as Record<string, any>
   assert.equal('player' in row.left, false)
-  assert.equal(row.identities.left.player_raw, 'Player') // NFKC + trimmed
   assert.match(row.identities.left.player_hmac, /^[0-9a-f]{64}$/)
+  assert.equal('player_raw' in row.identities.left, false) // names are never stored, only their HMACs
   assert.equal(row.mirrored, true) // left 9000 sorts after right 8000
 })
 
@@ -263,8 +263,9 @@ test('heroes: cfg_id range, cfg_id needs a name, names are bounded letters', asy
 test('names: NFKC, then control / format characters dropped, then trimmed and length-checked', async () => {
   const named = (player: string) => battle(0, side(9000, { player }))
   const row = async (player: string) => (await prepare(body([named(player)]), await key())).rows[0] as Record<string, any>
-  assert.equal((await row('\u200bＡ\u0007b\u202e ')).identities.left.player_raw, 'Ab')
-  assert.equal((await row('\u200b\u200b')).identities.left.player_raw, null)
+  const hmac = async (name: string) => nameHmac(await key(), name)
+  assert.equal((await row('\u200bＡ\u0007b\u202e ')).identities.left.player_hmac, await hmac('Ab'))
+  assert.equal((await row('\u200b\u200b')).identities.left.player_hmac, null)
   // U+FDFA is one code unit but 18 after NFKC: 4 of them pass the raw length, not the normalised one.
   const out = await prepare(body([named('\uFDFA'.repeat(4))]), await key())
   assert.match(out.rejected[0].reason, /^left\.player: at most 64/)

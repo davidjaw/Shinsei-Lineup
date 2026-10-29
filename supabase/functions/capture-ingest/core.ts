@@ -9,7 +9,7 @@ export const MAX_BODY_BYTES = 1024 * 1024
  * The privacy notice version the client consents to (capture/client/src/config.ts UPLOAD.consentVersion). Only this
  * one is accepted, so a notice bump deploys the function first, then the client.
  */
-export const CONSENT_VERSION = '2026-10-28'
+export const CONSENT_VERSION = '2026-10-29'
 
 // Value sets of the capture client (capture/client/src/prefs.ts, cv/listParse.ts, cv/troopIcon.ts, cv/listPixels.ts)
 // and of the 總覽 (brief) read: six cards in screen order, left three blue, right three red; a skill column is 固有,
@@ -432,8 +432,6 @@ export async function nameHmac(key: CryptoKey, name: string | null): Promise<str
 
 async function identityRow(key: CryptoKey, id: Identity) {
   return {
-    player_raw: id.player,
-    alliance_raw: id.alliance,
     player_hmac: await nameHmac(key, id.player),
     alliance_hmac: await nameHmac(key, id.alliance),
   }
@@ -443,7 +441,7 @@ async function identityRow(key: CryptoKey, id: Identity) {
 
 export interface Prepared {
   header: Header
-  /** What the RPC stores: one entry per accepted battle, no names except under `identities`. */
+  /** What the RPC stores: one entry per accepted battle, no names except their HMACs under `identities`. */
   rows: Record<string, unknown>[]
   rejected: { index: number; reason: string }[]
 }

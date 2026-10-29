@@ -13,10 +13,19 @@
 --     earlier payload of the session. Backfilled from capture.uploads.
 --   - rate_limited says which limit was hit and when to retry.
 --
+--   - Raw player / alliance names are no longer stored: capture.identities keeps
+--     only the HMACs (a name is looked up by computing its HMAC with the
+--     function secret). The raw columns and capture.purge_identity_raw go;
+--     existing raw values are dropped with the columns.
+--
 -- A brief is sent with the seq, date and coord of its list row: (user,
 -- session, seq) is the join; its own troop numbers usually, not always, give
 -- the same fp.
 
+
+DROP FUNCTION IF EXISTS capture.purge_identity_raw(interval);
+ALTER TABLE "capture"."identities" DROP COLUMN IF EXISTS "player_raw";
+ALTER TABLE "capture"."identities" DROP COLUMN IF EXISTS "alliance_raw";
 
 ALTER TABLE "capture"."observations" ADD COLUMN IF NOT EXISTS "cards" jsonb;
 
@@ -217,10 +226,9 @@ BEGIN
     ),
     names AS (
         INSERT INTO capture.identities (
-            observation_id, side, player_raw, alliance_raw, player_hmac, alliance_hmac
+            observation_id, side, player_hmac, alliance_hmac
         )
-        SELECT ins.id, s.side, s.i->>'player_raw', s.i->>'alliance_raw',
-               s.i->>'player_hmac', s.i->>'alliance_hmac'
+        SELECT ins.id, s.side, s.i->>'player_hmac', s.i->>'alliance_hmac'
           FROM ins
           JOIN cur ON cur.seq = ins.seq AND cur.level = ins.level
          CROSS JOIN LATERAL (VALUES

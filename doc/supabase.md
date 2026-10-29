@@ -54,9 +54,8 @@ npx supabase functions deploy capture-ingest --no-verify-jwt
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided by the platform (all required, else
 500). A legacy JWT service_role key is sent as `apikey` + bearer; an `sb_secret_` key (not a JWT) as `apikey` only —
 the secret-key path is not yet tested against a hosted project. Anonymous sign-ins get 401. Tests:
-`npx tsx --test supabase/functions/capture-ingest/*.test.ts` (or `deno test` in the function directory). Raw names are kept by the privacy notice; `capture.purge_identity_raw(interval)` is for manual use only (do not schedule). It clears player / alliance names only; hero and
+`npx tsx --test supabase/functions/capture-ingest/*.test.ts` (or `deno test` in the function directory). Player / alliance names are stored only as HMACs (`capture.identities`, key `CAPTURE_NAME_HMAC_KEY`); look a name up by computing its HMAC over the NFKC-normalised name. Hero and
 skill names (letters only, at most 16 characters) stay in `observations`.
-(no cron yet).
 
 GRANT/REVOKE in migrations: never quote `"boolean"` (Postgres type name is `bool`). Use unquoted `boolean` / `text` / `uuid` / `jsonb`.
 
