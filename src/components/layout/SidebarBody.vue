@@ -15,20 +15,35 @@
     </RouterLink>
 
     <div class="mt-4 flex-1 overflow-y-auto">
-      <!-- Owner's notice: buying accounts, contact over Discord -->
-      <div
-        class="mb-3 flex items-center gap-2 rounded-lg border border-brand/40 bg-brand/5"
-        :class="collapsed ? 'justify-center p-1' : 'px-2.5 py-2'"
-      >
-        <div v-if="!collapsed" class="min-w-0 flex-1 leading-tight">
-          <div class="text-[12px] font-bold text-ink">站長收滿紅帳號 <span class="text-brand">20w TWD</span></div>
-          <div class="mt-0.5 text-[11px] text-ink-mute">請 DC 聯絡，點右側複製 ID</div>
+      <!-- Support card, one box: the boba tip link above the owner's notice (buying accounts, contact over Discord) -->
+      <div class="mb-3 overflow-hidden rounded-lg border border-brand/40 bg-brand/5">
+        <a
+          :href="BOBA_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="group flex items-center gap-2 text-ink transition-colors hover:bg-brand/10"
+          :class="collapsed ? 'justify-center p-1' : 'px-2.5 py-2'"
+          title="請站長喝杯珍奶"
+          aria-label="請站長喝杯珍奶"
+          data-testid="boba-link"
+        >
+          <span class="boba-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 6.5 15.5 1.5" /><path d="M5.5 8h13" /><path d="M7 8c0-1.8 2.2-3 5-3s5 1.2 5 3" /><path d="M6.8 8l1.1 11.2a1.6 1.6 0 0 0 1.6 1.4h5a1.6 1.6 0 0 0 1.6-1.4L17.2 8" /><g fill="currentColor" stroke="none"><circle cx="10" cy="17.6" r="1.05" /><circle cx="12.4" cy="17.9" r="1.05" /><circle cx="14.3" cy="16.9" r="1.05" /><circle cx="11.2" cy="15.4" r="1.05" /></g></svg>
+          </span>
+          <span v-if="!collapsed" class="min-w-0 flex-1 truncate text-[12px] font-bold">請站長喝杯珍奶</span>
+          <svg v-if="!collapsed" class="shrink-0 text-ink-mute transition-colors group-hover:text-brand" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
+        </a>
+        <div class="flex items-center gap-2 border-t border-brand/25" :class="collapsed ? 'justify-center p-1' : 'px-2.5 py-2'">
+          <div v-if="!collapsed" class="min-w-0 flex-1 leading-tight">
+            <div class="text-[12px] font-bold text-ink">站長收滿紅帳號 <span class="text-brand">20w TWD</span></div>
+            <div class="mt-0.5 text-[11px] text-ink-mute">請 DC 聯絡，點右側複製 ID</div>
+          </div>
+          <el-tooltip :content="collapsed ? `${BUY_NOTICE}，${DISCORD_HINT}` : DISCORD_HINT" :placement="collapsed ? 'right' : 'top'" :show-after="200">
+            <button type="button" class="notice-dc" @click="copyDiscord" aria-label="複製 Discord ID">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path :d="DISCORD_ICON" /></svg>
+            </button>
+          </el-tooltip>
         </div>
-        <el-tooltip :content="collapsed ? `${BUY_NOTICE}，${DISCORD_HINT}` : DISCORD_HINT" :placement="collapsed ? 'right' : 'top'" :show-after="200">
-          <button type="button" class="notice-dc" @click="copyDiscord" aria-label="複製 Discord ID">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path :d="DISCORD_ICON" /></svg>
-          </button>
-        </el-tooltip>
       </div>
 
       <SidebarSection v-if="!collapsed" label="主要功能" />
@@ -139,6 +154,7 @@ const emit = defineEmits<{
 
 const { showOwnedOnly, ownedHeroes, ownedSkills } = useInventory()
 
+const BOBA_URL = 'https://buymeacoffee.com/jdway'
 const DISCORD_ID = 'neko.vision'
 const DISCORD_HINT = `Discord：${DISCORD_ID}（點擊複製）`
 const BUY_NOTICE = '站長收滿紅帳號 20w TWD'
@@ -219,6 +235,18 @@ const wishNav: readonly NavItem[] = [
 .footer-link:hover {
   color: rgb(var(--color-focus));
   background: rgb(var(--color-highlight));
+}
+
+.boba-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: rgb(var(--color-brand));
+  background: rgb(var(--color-brand) / 0.15);
 }
 
 .notice-dc {
