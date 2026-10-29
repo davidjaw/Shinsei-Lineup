@@ -93,7 +93,7 @@ test('nulls are allowed where the client may leave a field unread', () => {
   const s = side(null, { role: null, troop_type: null, troop_lv: null, heroes: [{ cfg_id: null, name: null, level: null, red: null }, hero(), hero()] })
   const b = parseBattle({ ...battle(0, s), date: null, result: null, coord: null }, false)
   assert.equal(b.left.hp, null)
-  assert.deepEqual(fingerprint(b), { fp: null, mirrored: false })
+  assert.deepEqual(fingerprint(b), { fp: null, nums: null, mirrored: false })
 })
 
 test('a mirrored upload has the same fp, flagged mirrored', () => {
@@ -283,4 +283,13 @@ test('readBody: stops at the cap with or without Content-Length', async () => {
   assert.equal(await readBody(req(11), 100), null)
   assert.equal(await readBody(req(1, { 'content-length': '101' }), 100), null)
   assert.equal(await readBody(new Request('http://x/', { method: 'POST', body: '{"a":"é"}' })), '{"a":"é"}')
+})
+
+test('fingerprint: nums are the canonical eight; equal side keys order by role, attacker first', () => {
+  const a = parseBattle(battle(0, side(9000), side(8000)), false)
+  assert.deepEqual(fingerprint(a).nums, [8000, 10000, 100, 50, 9000, 10000, 100, 50])
+  const tie = (l: string, r: string) => parseBattle(battle(0, side(9000, { role: l }), side(9000, { role: r })), false)
+  assert.equal(fingerprint(tie('defend', 'attack')).mirrored, true)
+  assert.equal(fingerprint(tie('attack', 'defend')).mirrored, false)
+  assert.equal(fingerprint(tie('attack', 'defend')).fp, fingerprint(tie('defend', 'attack')).fp)
 })

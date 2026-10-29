@@ -29,13 +29,16 @@ npx supabase functions deploy handbook-snapshot --no-verify-jwt
 ### capture-ingest (battle-report uploads)
 
 Migrations `20261028000000_capture_ingest.sql` (schema `capture`, RPC `public.capture_ingest`, service role only; applied
-on prod) and `20261028120000_capture_brief.sql` (brief `cards`, retry key with level, `capture.session_fps` for `fp_ordinal`, RPC body
-replaced). It backfills `session_fps` from `uploads`; an upload committed by the old function while the push runs can
-miss that, so push with no traffic or re-run the migration's backfill `INSERT … ON CONFLICT DO NOTHING` right after. Push the
-migration before deploying the new function (the function reads the RPC's new 429 fields).
+on prod) and `20261028120000_capture_brief.sql` (rebuilds the capture tables: `uploads` header only, one `battles` row per real battle,
+`observations` per user / session / level / seq, `identities` as bytea HMACs on the battle's canonical side; drops `session_fps`,
+`fp_ordinal` and the payload copy; RPC body replaced; the prod test data is dropped). Push the migration before deploying the new
+function (the function now sends `nums`, and the RPC no longer reads `fp_ordinal`). `capture.prune_battles()` deletes battles no
+observation points at; run it by hand after removing a user or an upload (not scheduled).
+Dedup: a battle is the exact key (server, time to the second, tile, both sides' four troop numbers in canonical order, `nth` for
+twins); a misread number makes a one-source battle, never a merge. A user counts once per battle and level.
 A battle is `level: 'list'` (a 戰報 list row) or `level: 'brief'` (a 總覽 read: the list battle fields plus six `cards`,
 stored in `observations.cards`). A brief carries the seq, date and coord of its list row and joins it on (user, session, seq); its own troop
-numbers usually give the same `fp`, but a brief with an unread number may not. The retry key is (user, session, level, seq). Requests: at most 200 battles and 1 MiB (200 briefs measure ~650 KB;
+numbers usually give the same key, but a brief with an unread number may not (it then moves to its list row's battle). The retry key is (user, session, level, seq). Requests: at most 200 battles and 1 MiB (200 briefs measure ~650 KB;
 a bigger body is 413, with or without Content-Length). Over a rate limit (20 uploads per hour, 2000 battles per day) the
 answer is 429 with `Retry-After` and `{error, limit: 'hour' | 'day', retry_after_s}`.
 

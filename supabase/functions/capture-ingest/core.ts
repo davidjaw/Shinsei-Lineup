@@ -404,16 +404,22 @@ function compareKeys(a: number[], b: number[]): number {
 
 /**
  * date | coord | the two side keys [hp, hp_max, wounded, dead] in canonical (ascending) order, so the opposing
- * alliance's mirrored upload of a battle gets the same fp. `mirrored`: the sort swapped the sides. Null when the
- * date, the coord or any of the eight numbers is unread (a partial key, as in battle-viewer: stored, not deduped).
+ * alliance's mirrored upload of a battle gets the same fp. `mirrored`: the sort swapped the sides; on equal keys the
+ * printed roles decide (the attacker first). `nums`: the eight numbers in that canonical order (the battle row's
+ * columns). Null fp / nums when the date, the coord or any of the eight numbers is unread (a partial key: stored
+ * without a battle, never merged).
  */
-export function fingerprint(b: Battle): { fp: string | null; mirrored: boolean } {
+export function fingerprint(b: Battle): { fp: string | null; nums: number[] | null; mirrored: boolean } {
   const left = sideKey(b.left)
   const right = sideKey(b.right)
-  if (b.date === null || b.coord === null || [...left, ...right].some((n) => n === null)) return { fp: null, mirrored: false }
-  const mirrored = compareKeys(left as number[], right as number[]) > 0
-  const [first, second] = mirrored ? [right, left] : [left, right]
-  return { fp: [b.date, `${b.coord.x},${b.coord.y}`, ...first, ...second].join('|'), mirrored }
+  if (b.date === null || b.coord === null || [...left, ...right].some((n) => n === null)) {
+    return { fp: null, nums: null, mirrored: false }
+  }
+  const order = compareKeys(left as number[], right as number[])
+  const mirrored = order > 0 || (order === 0 && b.left.role === 'defend' && b.right.role === 'attack')
+  const [first, second] = (mirrored ? [right, left] : [left, right]) as number[][]
+  const nums = [...first, ...second]
+  return { fp: [b.date, `${b.coord.x},${b.coord.y}`, ...nums].join('|'), nums, mirrored }
 }
 
 // ---- names ----
