@@ -223,6 +223,38 @@ REVOKE ALL ON FUNCTION capture.prune_battles() FROM authenticated;
 GRANT EXECUTE ON FUNCTION capture.prune_battles() TO service_role;
 
 
+-- A battle with its sources, for the exports (service role only; the schema is
+-- not exposed). n_users / n_briefs count distinct users. `dual`: both sides
+-- were uploaded from their own list (the opposing alliance's mirrored upload
+-- has its left side on the other canonical side). result_a: the result of
+-- canonical side a by vote of the list reads (a read's result is its left
+-- side's, so a mirrored read is flipped); result_conflict: the reads disagree.
+CREATE OR REPLACE VIEW capture.battle_summary AS
+WITH reads AS (
+    SELECT battle_id, user_id, level, mirrored,
+           CASE WHEN mirrored THEN CASE result WHEN 'win' THEN 'loss' WHEN 'loss' THEN 'win' ELSE result END
+                ELSE result END AS result_a
+      FROM capture.observations
+     WHERE battle_id IS NOT NULL
+)
+SELECT b.id AS battle_id, b.edition, b.server, b.battle_at, b.coord_x, b.coord_y, b.nth,
+       b.a_hp, b.a_hp_max, b.a_wounded, b.a_dead, b.b_hp, b.b_hp_max, b.b_wounded, b.b_dead,
+       count(DISTINCT r.user_id) FILTER (WHERE r.level = 'list')  AS n_users,
+       count(DISTINCT r.user_id) FILTER (WHERE r.level = 'brief') AS n_briefs,
+       count(DISTINCT r.mirrored) FILTER (WHERE r.level = 'list') = 2 AS dual,
+       mode() WITHIN GROUP (ORDER BY r.result_a) FILTER (WHERE r.level = 'list') AS result_a,
+       count(DISTINCT r.result_a) FILTER (WHERE r.level = 'list') > 1 AS result_conflict
+  FROM capture.battles b
+  LEFT JOIN reads r ON r.battle_id = b.id
+ GROUP BY b.id;
+
+ALTER VIEW capture.battle_summary OWNER TO "postgres";
+REVOKE ALL ON capture.battle_summary FROM PUBLIC;
+REVOKE ALL ON capture.battle_summary FROM anon;
+REVOKE ALL ON capture.battle_summary FROM authenticated;
+GRANT SELECT ON capture.battle_summary TO service_role;
+
+
 -- 3. Ingest RPC -------------------------------------------------------------------
 --
 -- p_header:   the validated upload header (schema_version .. anonymous).

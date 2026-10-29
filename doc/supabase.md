@@ -34,6 +34,9 @@ on prod) and `20261028120000_capture_brief.sql` (rebuilds the capture tables: `u
 `fp_ordinal` and the payload copy; RPC body replaced; the prod test data is dropped). Push the migration before deploying the new
 function (the function now sends `nums`, and the RPC no longer reads `fp_ordinal`). `capture.prune_battles()` deletes battles no
 observation points at; run it by hand after removing a user or an upload (not scheduled).
+Data-removal requests: `CAPTURE_NAME_HMAC_KEY=… npx tsx script/capture_requests.ts lookup | remove-name | remove-user …` prints SQL to
+paste into the SQL Editor (it never connects to a database; see the header of the script). `capture.battle_summary` (service role)
+gives each battle its distinct uploaders, whether both alliances uploaded it (`dual`) and the voted result of side a.
 Dedup: a battle is the exact key (server, time to the second, tile, both sides' four troop numbers in canonical order, `nth` for
 twins); a misread number makes a one-source battle, never a merge. A user counts once per battle and level.
 A battle is `level: 'list'` (a 戰報 list row) or `level: 'brief'` (a 總覽 read: the list battle fields plus six `cards`,
