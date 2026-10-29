@@ -32,6 +32,8 @@
 --     seq): that pair is the link, its own troop numbers "usually, not always"
 --     equal the list row's. A brief without a list row yet uses its own key;
 --     when its list row arrives later, the brief moves to the list's battle.
+--     A battle listed twice in opposite orientations (both sides in the
+--     alliance) is one battle: only rows of the same orientation count.
 --   - Side order: ascending [hp, hp_max, wounded, dead]; equal keys: attacker
 --     first (core.ts fingerprint). `mirrored` on an observation = its left side
 --     is the battle's side b. result stays as read (the uploader's left).
@@ -374,6 +376,8 @@ BEGIN
               JOIN capture.battles x ON x.id = o.battle_id
              WHERE o.user_id = p_user_id AND o.session_id = v_session
                    AND o.level = r.level AND o.seq < r.seq
+                   -- The opposite orientation of one key is the same battle listed from its other side.
+                   AND o.mirrored = v_mirrored
                    AND x.edition = v_edition AND x.server = v_server
                    AND x.battle_at = (r.k->>'date')::timestamp
                    AND x.coord_x = (r.k->'coord'->>'x')::integer
