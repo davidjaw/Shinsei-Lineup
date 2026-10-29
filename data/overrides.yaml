@@ -1,4 +1,9 @@
 skills:
+  献身:
+    # The self damage-taken increase is 18% (game8 「自身への被ダメージが18%上昇」, in-game 18% on every printed row);
+    # the stale data had 20%.
+    vars:
+      damage_taken_increase: 0.18
   回山倒海:
     rarity: A
   槍弾正:
