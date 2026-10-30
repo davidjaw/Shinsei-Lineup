@@ -3659,3 +3659,17 @@ heroes:
       description: 造成的兵刃傷害增加1.6%
       active: true
     _action: add
+  ねね:
+    traits:
+    - name: 謀攻Ⅲ
+      description: 自軍全體造成謀略傷害提高3.7%
+      active: true
+    - name: 防護Ⅱ
+      description: 兵刃傷害減少2.2%
+      active: true
+    - name: 弓術Ⅱ
+      description: 部隊的弓兵等級增加2
+      active: true
+    - name: 知慧Ⅲ
+      description: 智略提高3%
+      active: true
