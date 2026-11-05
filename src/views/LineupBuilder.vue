@@ -21,6 +21,7 @@
           @save-as-proposal="onSaveAsProposal"
           @export-to-group="onExportTeamToOtherGroup"
           @remove-team="onRemoveTeam"
+          @move-team="onMoveTeam"
           @compact="enterCompactView"
         />
 
@@ -65,6 +66,7 @@
         :current-team-index="currentTeamIndex"
         @select="onSelectTeam"
         @remove-team="onRemoveTeam"
+        @move-team="onMoveTeam"
         @add-team="onAddTeam"
         @share="dialogs.open('share')"
         @export-to-group="onExportTeamToOtherGroup"
@@ -203,6 +205,7 @@ const {
   addTeam,
   addTeamFromSnapshot,
   removeTeamFromCurrent,
+  moveTeam,
   ensureTeamCount,
 } = useLineups()
 
@@ -707,6 +710,10 @@ const onRemoveTeam = (idx: number) => {
   } else {
     ElMessage.info(`已刪除「${removedName}」`)
   }
+}
+
+const onMoveTeam = (from: number, to: number) => {
+  if (moveTeam(from, to)) flushLocalAutosave()
 }
 
 const proposalSubmitting = ref(false)

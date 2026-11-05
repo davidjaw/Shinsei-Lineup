@@ -2,16 +2,29 @@
   <aside class="hidden md:flex flex-col w-[200px] flex-shrink-0 border-r border-divider bg-white text-ink h-full overflow-hidden">
     <!-- Group selector lives in LineupHeader (top bar). Sidebar is just the
          team list for the active group. -->
-    <div class="flex-1 min-h-0 overflow-y-auto pt-2">
+    <div
+      class="flex-1 min-h-0 overflow-y-auto pt-2"
+      data-team-list
+      @dragover="reorder.onDragOver"
+      @dragleave="reorder.onDragLeave"
+      @drop="reorder.onDrop"
+    >
       <div
         v-for="(team, idx) in lineups"
         :key="idx"
+        data-team-row
+        draggable="true"
+        title="拖曳調整順序"
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+        @dragstart="reorder.onDragStart($event, idx)"
+        @dragend="reorder.onDragEnd"
+        @keydown="reorder.onRowKey($event, idx)"
         role="button"
         tabindex="0"
         class="group relative w-full flex items-center justify-between pl-0 pr-3 py-2 transition-colors text-left border-l-2 cursor-pointer"
-        :class="currentTeamIndex === idx
+        :class="[currentTeamIndex === idx
           ? 'bg-highlight border-focus'
-          : 'border-transparent hover:bg-highlight'"
+          : 'border-transparent hover:bg-highlight', reorder.dropClass(idx)]"
         @click="$emit('select', idx)"
         @keydown.enter="$emit('select', idx)"
         @keydown.space.prevent="$emit('select', idx)"
@@ -25,6 +38,15 @@
             class="text-[11px] tabular-nums"
             :class="teamCost(team) > 20 ? 'text-red-500' : 'text-ink-mute'"
           >{{ teamCost(team) }}/20</span>
+          <TeamMoveButtons
+            v-if="currentTeamIndex === idx && lineups.length > 1"
+            :idx="idx"
+            :count="lineups.length"
+            :name="team.name"
+            size="w-5 h-6"
+            :icon-size="12"
+            @step="(e, step) => reorder.shift(e, idx, step)"
+          />
           <span
             v-if="hasUnsavedChanges(idx)"
             class="w-1.5 h-1.5 rounded-full bg-focus"
@@ -105,21 +127,26 @@
 import { Share, Document, Plus, Delete, Position, FullScreen } from '@element-plus/icons-vue'
 import { type Lineup, isEmptyTeam, computeTeamCost } from '../../composables/useLineups'
 import { MAX_TEAMS_PER_GROUP } from '../../types/group'
+import TeamMoveButtons from './TeamMoveButtons.vue'
+import { useTeamReorder } from './useTeamReorder'
 
-defineProps<{
+const props = defineProps<{
   lineups: Lineup[]
   currentTeamIndex: number
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'select', idx: number): void
   (e: 'add-team'): void
   (e: 'share'): void
   (e: 'save-as-proposal'): void
   (e: 'export-to-group'): void
   (e: 'remove-team', idx: number): void
+  (e: 'move-team', from: number, to: number): void
   (e: 'compact'): void
 }>()
+
+const reorder = useTeamReorder(() => props.lineups.length, (from, to) => emit('move-team', from, to))
 
 const teamCost = computeTeamCost
 
@@ -129,6 +156,12 @@ const hasUnsavedChanges = (_idx: number): boolean => false
 </script>
 
 <style scoped>
+.team-drop-before {
+  box-shadow: inset 0 2px 0 rgb(var(--color-focus));
+}
+.team-drop-after {
+  box-shadow: inset 0 -2px 0 rgb(var(--color-focus));
+}
 .action-row {
   display: flex;
   align-items: center;

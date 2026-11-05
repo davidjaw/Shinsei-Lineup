@@ -139,16 +139,28 @@
 
       </div>
 
-      <div class="flex-1 min-h-0 overflow-y-auto py-1">
+      <div
+        class="flex-1 min-h-0 overflow-y-auto py-1"
+        data-team-list
+        @dragover="reorder.onDragOver"
+        @dragleave="reorder.onDragLeave"
+        @drop="reorder.onDrop"
+      >
         <div
           v-for="(team, idx) in lineups"
           :key="idx"
+          data-team-row
+          draggable="true"
+          aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+          @dragstart="reorder.onDragStart($event, idx)"
+          @dragend="reorder.onDragEnd"
+          @keydown="reorder.onRowKey($event, idx)"
           role="button"
           tabindex="0"
           class="w-full flex items-center justify-between px-4 py-2 transition-colors text-left border-l-2 cursor-pointer"
-          :class="currentTeamIndex === idx
+          :class="[currentTeamIndex === idx
             ? 'bg-highlight border-focus'
-            : 'border-transparent hover:bg-highlight'"
+            : 'border-transparent hover:bg-highlight', reorder.dropClass(idx)]"
           @click="$emit('select', idx)"
           @keydown.enter="$emit('select', idx)"
           @keydown.space.prevent="$emit('select', idx)"
@@ -157,11 +169,21 @@
             <span class="text-xs text-ink-mute w-4 text-right">{{ idx + 1 }}</span>
             <span class="text-sm truncate">{{ team.name }}</span>
           </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
+          <div class="flex items-center gap-1 flex-shrink-0">
             <span
               class="text-xs tabular-nums"
               :class="teamCost(team) > 20 ? 'text-red-500' : 'text-ink-mute'"
             >{{ teamCost(team) }}/20</span>
+            <!-- On every row: choosing a team closes this drawer, so a phone cannot reorder through the active row. -->
+            <TeamMoveButtons
+              v-if="lineups.length > 1"
+              :idx="idx"
+              :count="lineups.length"
+              :name="team.name"
+              size="w-8 h-8"
+              :icon-size="14"
+              @step="(e, step) => reorder.shift(e, idx, step)"
+            />
             <!-- Empty team → instant delete. Non-empty → popconfirm. Always
                  visible on mobile (no hover affordance). -->
             <span
@@ -243,8 +265,10 @@ import { useProfiles } from '../../composables/useProfiles'
 import { useActiveProfile } from '../../composables/useActiveProfile'
 import { useAuth } from '../../composables/useAuth'
 import { useInventory } from '../../composables/useInventory'
+import TeamMoveButtons from './TeamMoveButtons.vue'
+import { useTeamReorder } from './useTeamReorder'
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean
   lineups: Lineup[]
   currentTeamIndex: number
@@ -253,6 +277,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'select', idx: number): void
   (e: 'remove-team', idx: number): void
+  (e: 'move-team', from: number, to: number): void
   (e: 'import-handbook'): void
 
   (e: 'add-team'): void
@@ -261,6 +286,8 @@ const emit = defineEmits<{
   (e: 'import-from-link'): void
   (e: 'compact'): void
 }>()
+
+const reorder = useTeamReorder(() => props.lineups.length, (from, to) => emit('move-team', from, to))
 
 const router = useRouter()
 const { groups, currentGroup, currentGroupIndex, setCurrentGroup, addGroup, renameGroup } = useGroups()
@@ -352,6 +379,12 @@ const onGroupCommand = async (cmd: string) => {
 </script>
 
 <style scoped>
+.team-drop-before {
+  box-shadow: inset 0 2px 0 rgb(var(--color-focus));
+}
+.team-drop-after {
+  box-shadow: inset 0 -2px 0 rgb(var(--color-focus));
+}
 .drawer-pill {
   display: inline-flex;
   align-items: center;

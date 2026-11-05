@@ -39,6 +39,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.7',
+    date: '2026-11-04',
+    entries: [
+      { tag: 'fix', text: '豐臣秀吉 1 星突破起多 15 點可分配屬性點數（立身出世）' },
+      { tag: 'feat', text: '隊伍清單可拖曳調整順序；手機與鍵盤用上下移動按鈕（鍵盤也可按 Alt + ↑↓）' },
+    ],
+  },
+  {
     version: '0.5.6',
     date: '2026-10-28',
     entries: [

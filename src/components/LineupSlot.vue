@@ -419,6 +419,7 @@
 </template>
 
 <script setup lang="ts">
+import { freePointsTotal as computeFreePoints } from '../lib/freePoints'
 import { PropType, ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Plus, Close, InfoFilled, Sort } from '@element-plus/icons-vue'
 import HeroCard from './HeroCard.vue'
@@ -520,8 +521,7 @@ const handleHeroDropEvent = (event: DragEvent) => {
 }
 
 // Stats Editing
-// Base 50 free points, +10 per breakthrough star
-const freePointsTotal = computed(() => 50 + (props.breakthrough ?? 0) * 10)
+const freePointsTotal = computed(() => computeFreePoints(props.hero, props.breakthrough))
 const statsDialogVisible = ref(false)
 const STAT_KEYS = ['lea', 'val', 'int', 'pol', 'cha', 'spd'] as const
 

@@ -57,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { freePointsTotal as computeFreePoints } from '../lib/freePoints'
 import { PropType, computed, ref, watch } from 'vue'
 import { Hero, Trait } from '../composables/useData'
 import { getTraitColor } from '../constants/gameData'
@@ -88,7 +89,7 @@ const STAT_LABELS: Record<typeof STAT_KEYS[number], string> = {
 const bonus = (key: typeof STAT_KEYS[number]): number =>
   (props.stats?.[key] ?? 0) - (props.hero?.stats?.[key] ?? 0)
 
-const freePointsTotal = computed(() => 50 + (props.breakthrough ?? 0) * 10)
+const freePointsTotal = computed(() => computeFreePoints(props.hero, props.breakthrough))
 const freePointsRemaining = computed(() => {
   let used = 0
   for (const k of STAT_KEYS) used += Math.max(0, bonus(k))

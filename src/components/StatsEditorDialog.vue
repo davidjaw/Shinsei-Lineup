@@ -46,6 +46,7 @@
 </template>
 
 <script setup lang="ts">
+import { freePointsTotal as computeFreePoints } from '../lib/freePoints'
 import { computed, ref, watch } from 'vue'
 import type { Hero } from '../composables/useData'
 import type { RoleData } from '../composables/useLineups'
@@ -67,8 +68,7 @@ const emit = defineEmits<{
   (e: 'update:stats', stats: StatMap): void
 }>()
 
-// Base 50 free points, +10 per breakthrough star
-const freePointsTotal = computed(() => 50 + (props.breakthrough ?? 0) * 10)
+const freePointsTotal = computed(() => computeFreePoints(props.hero, props.breakthrough))
 
 const heroBaseStats = computed<StatMap>(() => {
   const s = props.hero?.stats

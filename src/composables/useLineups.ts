@@ -185,6 +185,29 @@ const removeTeamFromCurrent = (idx: number): boolean => {
   return true
 }
 
+// Where the entry at `index` ends up when `from` moves to `to`.
+const indexAfterMove = (index: number, from: number, to: number): number => {
+  if (index === from) return to
+  if (from < index && index <= to) return index - 1
+  if (to <= index && index < from) return index + 1
+  return index
+}
+
+// Move a team within the current group, in the mirror too; the active team
+// stays active. Teams have no ids of their own: order is just the array, so
+// the autosave blob, the cloud row (keyed by group id, teams as a whole) and
+// share links all carry it with no change of shape.
+const moveTeam = (from: number, to: number): boolean => {
+  const n = lineups.length
+  if (from === to || from < 0 || to < 0 || from >= n || to >= n) return false
+  const active = currentTeamIndex.value
+  for (const list of [currentGroup.value.teams, lineups]) {
+    list.splice(to, 0, list.splice(from, 1)[0])
+  }
+  currentTeamIndex.value = indexAfterMove(active, from, to)
+  return true
+}
+
 // Read-only placeholder so `.name` / troop-level computeds stay total if
 // the mirror is empty mid-switch. Mutations here are discarded on the next
 // sync; the flush:'sync' watcher is what actually repairs the mirror.
@@ -284,6 +307,7 @@ export function useLineups() {
     addTeam,
     addTeamFromSnapshot,
     removeTeamFromCurrent,
+    moveTeam,
     ensureTeamCount,
   }
 }
