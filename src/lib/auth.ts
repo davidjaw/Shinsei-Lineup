@@ -313,12 +313,13 @@ export const updateDisplayName = async (displayName: string): Promise<void> => {
 }
 
 // Best-effort server-side logout. Clears local state regardless of network
-// outcome — user pressed Sign Out and expects to be logged out.
+// outcome — user pressed Sign Out and expects to be logged out. scope=local
+// revokes this session only, so another client or device stays signed in.
 export const signOut = async (): Promise<void> => {
   const session = getSession()
   if (session && SUPABASE_URL && SUPABASE_KEY) {
     try {
-      await fetchWithTimeout(`${SUPABASE_URL}/auth/v1/logout`, {
+      await fetchWithTimeout(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
         method: 'POST',
         headers: {
           apikey: SUPABASE_KEY,

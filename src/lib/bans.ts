@@ -4,6 +4,18 @@ import { SUPABASE_URL, fetchWithTimeout, restHeaders } from './supabase'
 import { getSession, getValidAccessToken } from './auth'
 import { mapRpcError } from './variants'
 
+interface OwnBanRow {
+  scope?: string
+  expires_at?: string | null
+}
+
+// "This account is banned" means an unexpired scope 'all' row. Narrower scopes
+// (upload, publish, ...) do not count. A row without the columns predates scoped
+// bans and meant a permanent full ban.
+const isActiveFullBan = (row: OwnBanRow, nowMs: number): boolean =>
+  (row.scope ?? 'all') === 'all'
+    && (!row.expires_at || Date.parse(row.expires_at) > nowMs)
+
 export async function fetchMyBan(): Promise<boolean> {
   if (!SUPABASE_URL) return false
   const token = await getValidAccessToken()
@@ -13,12 +25,13 @@ export async function fetchMyBan(): Promise<boolean> {
   const res = await fetchWithTimeout(
     `${SUPABASE_URL}/rest/v1/user_bans`
       + `?user_id=eq.${encodeURIComponent(session.user.id)}`
-      + `&select=user_id`,
+      + `&select=*`,
     { headers: restHeaders(token) },
   )
   if (!res.ok) return false
-  const rows = (await res.json()) as Array<{ user_id: string }>
-  return rows.length > 0
+  const rows = (await res.json()) as OwnBanRow[]
+  const now = Date.now()
+  return rows.some((row) => isActiveFullBan(row, now))
 }
 
 export async function adminListBannedUserIds(): Promise<string[]> {

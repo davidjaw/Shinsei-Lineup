@@ -64,9 +64,11 @@ import {
   bulkCreateLineupGroups,
   createLineupGroup,
   deleteLineupGroup,
+  groupContentHash,
   listMyLineupGroups,
   patchLineupGroupForce,
   patchLineupGroupWithLock,
+  stableStringify,
   type CloudLineupGroup,
 } from '../lib/lineupGroups'
 import { createShare } from '../lib/share'
@@ -97,7 +99,9 @@ let localGen = 0
 // would loop the same data back to disk / cloud. A single boolean isn't
 // enough because Vue may batch reactive updates across multiple ticks for
 // a single replaceGroups call. We instead arm a short time window
-// (SUPPRESS_WINDOW_MS) during which scheduleWrite is a no-op.
+// (SUPPRESS_WINDOW_MS) during which a firing write is dropped. The window is
+// shorter than the debounce, so most echoes outlive it; those are dropped in
+// writeBlobToStorage because their content matches what is already stored.
 const SUPPRESS_WINDOW_MS = 50
 let suppressWritesUntil = 0
 let debounceHandle: number | null = null
@@ -116,12 +120,29 @@ const cloudStatus = ref<
   'idle' | 'syncing' | 'conflict' | 'offline' | 'error'
 >('idle')
 
+// Set by "稍後再決定" in the merge dialog: the user has not said which side
+// wins, so no push may run until they do. Local autosave continues.
+const cloudMergeDeferred = ref(false)
+
 // Maps a local ShareableGroup.id (client_id) to its corresponding cloud row
 // id + the updated_at observed at the last successful read/write. The
 // updated_at is the optimistic-lock precondition for the next PATCH.
-const cloudGroupsByClientId = reactive(
-  new Map<string, { cloudId: string; serverUpdatedAt: string }>(),
-)
+// contentHash + sortOrder are what local held at that moment; a PATCH with both
+// equal is skipped so an unchanged group does not invalidate other clients'
+// locks. A missing hash (meta persisted by an older version) means "assume changed".
+// removed: the user removed this group in a tab that held it, so stale-delete
+// may delete the row. Nothing else authorizes a delete.
+// rowGone: another client deleted the row while local had no edit to upload.
+interface CloudGroupMeta {
+  cloudId: string
+  serverUpdatedAt: string
+  contentHash?: string
+  sortOrder?: number
+  removed?: boolean
+  rowGone?: boolean
+}
+
+const cloudGroupsByClientId = reactive(new Map<string, CloudGroupMeta>())
 
 // Surfaces the conflict dialog. Populated when a PATCH hits the
 // precondition-failed (0-row) response. Cleared by the dialog's resolution
@@ -158,16 +179,18 @@ function persistCloudSyncPref(v: boolean): void {
 // Persist the in-memory cloudGroupsByClientId snapshot for the given user.
 // Called after every successful sync operation so a reload can skip the
 // 2x2 bootstrap (and its merge dialog) when we've already synced.
-type PersistedCloudMeta = Record<
-  string, // client_id
-  { cloudId: string; serverUpdatedAt: string }
->
+type PersistedCloudMeta = Record<string, CloudGroupMeta> // keyed by client_id
 
 const cloudMetaKey = (userId: string): string => `${CLOUD_META_KEY_PREFIX}${userId}`
+
+// The stored meta this tab last read or wrote. A different value in storage
+// means a sibling tab pushed since.
+let lastSeenMetaRaw: string | null = null
 
 const loadPersistedCloudMeta = (userId: string): PersistedCloudMeta | null => {
   try {
     const raw = localStorage.getItem(cloudMetaKey(userId))
+    lastSeenMetaRaw = raw
     return raw ? (JSON.parse(raw) as PersistedCloudMeta) : null
   } catch {
     return null
@@ -178,9 +201,11 @@ const writePersistedCloudMeta = (userId: string): void => {
   try {
     const obj: PersistedCloudMeta = {}
     cloudGroupsByClientId.forEach((v, k) => {
-      obj[k] = { cloudId: v.cloudId, serverUpdatedAt: v.serverUpdatedAt }
+      obj[k] = { ...v }
     })
-    localStorage.setItem(cloudMetaKey(userId), JSON.stringify(obj))
+    const raw = JSON.stringify(obj)
+    localStorage.setItem(cloudMetaKey(userId), raw)
+    lastSeenMetaRaw = raw
   } catch {
     /* swallow — quota / private browsing */
   }
@@ -194,6 +219,46 @@ const syncCloudMetaToStorage = (): void => {
   const userId = user.value?.id
   if (!userId) return
   writePersistedCloudMeta(userId)
+}
+
+// Pick up locks a sibling tab stored since we last looked. Without this, this
+// tab's next write would conflict with its own sibling. Keeps the in-memory map
+// when storage is unchanged, including when storage writes are failing. A tab
+// that missed a sibling's save keeps its own locks: its copies of the rows the
+// sibling moved are stale, so writing them must raise a conflict, not succeed.
+const reloadCloudMetaFromStorage = (): void => {
+  const userId = useAuth().user.value?.id
+  if (!userId || missedSiblingSave) return
+  const raw = localStorage.getItem(cloudMetaKey(userId))
+  if (raw === null || raw === lastSeenMetaRaw) return
+  const persisted = loadPersistedCloudMeta(userId)
+  if (!persisted) return
+  cloudGroupsByClientId.clear()
+  for (const [clientId, meta] of Object.entries(persisted)) {
+    cloudGroupsByClientId.set(clientId, meta)
+  }
+}
+
+// Authorize stale-delete for these rows, in memory and in storage: the map may be
+// empty (sync off) or behind a sibling, and the delete may only run after a reload.
+const markRowsRemoved = (clientIds: string[]): void => {
+  const userId = useAuth().user.value?.id
+  if (!userId) return
+  for (const id of clientIds) {
+    const meta = cloudGroupsByClientId.get(id)
+    if (meta) meta.removed = true
+  }
+  try {
+    const raw = localStorage.getItem(cloudMetaKey(userId))
+    if (!raw) return
+    const stored = JSON.parse(raw) as PersistedCloudMeta
+    for (const id of clientIds) {
+      if (stored[id]) stored[id].removed = true
+    }
+    localStorage.setItem(cloudMetaKey(userId), JSON.stringify(stored))
+  } catch {
+    /* swallow — quota / private browsing */
+  }
 }
 
 // Drop ALL persisted cloud meta entries (every user key under the prefix).
@@ -212,6 +277,7 @@ const clearPersistedCloudMeta = (): void => {
       if (k && k.startsWith(CLOUD_META_KEY_PREFIX)) keysToRemove.push(k)
     }
     for (const k of keysToRemove) localStorage.removeItem(k)
+    lastSeenMetaRaw = null
   } catch {
     /* swallow */
   }
@@ -432,18 +498,115 @@ const cloudRowsToBlob = (rows: CloudLineupGroup[]): ShareableData => {
   }
 }
 
+// Tab-local knowledge of the saved state ----------------------------------
+
+// Ids this tab has held as live local groups. Only a group that leaves this set
+// through a local edit counts as removed by the user. Groups replaced by a
+// sibling's blob or a cloud pull do not: that tab's copy may simply be older.
+let heldGroupIds: ReadonlySet<string> | null = null
+
+const liveGroupIds = (): Set<string> => {
+  const { workspaces } = useGroups()
+  return new Set(
+    CATALOG_MODES.flatMap((m) => workspaces[m].groups.map((g) => g.id).filter(Boolean)),
+  )
+}
+
+// Once, before the user can act: a later seed would miss a removal made before it.
+const seedHeldGroups = (): void => {
+  if (!heldGroupIds) heldGroupIds = liveGroupIds()
+}
+
+const noteRemovedGroups = (): void => {
+  const live = liveGroupIds()
+  const removed = [...(heldGroupIds ?? [])].filter((id) => !live.has(id))
+  heldGroupIds = live
+  if (removed.length > 0) markRowsRemoved(removed)
+}
+
+// The stored blob this tab last wrote or applied. A different value in storage
+// is a sibling's save this tab did not apply (a dialog was open, or the two
+// saves had the same gen).
+let lastSeenBlobRaw: string | null = null
+let missedSiblingSave = false
+
+const storedBlobIsUnseen = (): boolean => {
+  if (!localRestoreAttempted) return false
+  const raw = readStoredRaw()
+  return raw !== null && raw !== lastSeenBlobRaw
+}
+
+// While these are open the tab must not take in a sibling's blob: their snapshots
+// (capacity, hydrated teams, name collisions) would diverge mid-decision.
+const siblingUpdatesBlocked = (): boolean => {
+  if (cloudMerge.value || cloudConflict.value) return true
+  const { active } = useDialogs()
+  return active.value === 'import-from-link'
+    || active.value === 'import-handbook'
+    || active.value === 'export-team-to-group'
+}
+
+// Keep groups a sibling saved that this tab never knew, so saving does not erase
+// them from the stored blob. Known groups are left alone: one missing from the
+// local copy was removed here, and one that differs goes through the row lock.
+const adoptUnseenSiblingGroups = (): void => {
+  const raw = readStoredRaw()
+  if (!raw) return
+  const { heroes, skills } = useData()
+  const { workspaces } = useGroups()
+  const stored = wrapV4AsV5(JSON.parse(raw) as ShareableData)
+  const known = new Set([...(heldGroupIds ?? []), ...liveGroupIds()])
+  const report: string[] = []
+  for (const mode of CATALOG_MODES) {
+    const unseen = (stored.workspaces?.[mode]?.groups ?? []).filter((g) => g.id && !known.has(g.id))
+    const hydrated = hydrateShareableGroups(unseen, { heroes: heroes.value, skills: skills.value }, report)
+    workspaces[mode].groups.push(...hydrated.map((g) => ({ ...g, id: g.id as string })))
+  }
+  if (report.length > 0) healingReport.value = Array.from(new Set(report))
+}
+
 // Local autosave ---------------------------------------------------------
 
-const writeBlobToStorage = (): void => {
-  if (Date.now() < suppressWritesUntil) {
+// Per-save values: two blobs equal apart from these hold the same user data.
+const VOLATILE_BLOB_KEYS: ReadonlySet<string> = new Set(['gen', 'saved_at', 'device_id', 'updated_at'])
+
+const blobContentKey = (blob: ShareableData): string => stableStringify(blob, VOLATILE_BLOB_KEYS)
+
+const matchesStoredBlob = (blob: ShareableData): boolean => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw !== null && blobContentKey(JSON.parse(raw) as ShareableData) === blobContentKey(blob)
+  } catch {
+    return false
+  }
+}
+
+// `force` is for decision paths, which must re-arm the cloud push even when
+// the local content did not change.
+const writeBlobToStorage = (force = false): void => {
+  if (!force && Date.now() < suppressWritesUntil) {
     // Reactive echo from a recent applyBlobToLiveState (cross-tab message,
     // merge / conflict resolution). The window expires on its own — no need
     // to clear it here.
     return
   }
+  // Applying a blob from a sibling tab fires the deep watcher. Saving that
+  // echo would bump gen and broadcast, so the two tabs would keep waking each
+  // other forever, with each round re-arming the cloud push.
   try {
+    const unseen = storedBlobIsUnseen()
+    if (unseen && !force) adoptUnseenSiblingGroups()
+    if (!force && matchesStoredBlob(buildBlob(false))) {
+      // Same content as an unseen save: this tab already holds all of it.
+      if (unseen) lastSeenBlobRaw = readStoredRaw()
+      return
+    }
+    if (unseen) missedSiblingSave = true
     const blob = buildBlob()
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob))
+    const raw = JSON.stringify(blob)
+    localStorage.setItem(STORAGE_KEY, raw)
+    lastSeenBlobRaw = raw
+    noteRemovedGroups()
     try { localStorage.removeItem(LEGACY_STORAGE_KEY) } catch { /* swallow */ }
     bc?.postMessage({
       type: 'saved',
@@ -461,10 +624,21 @@ const writeBlobToStorage = (): void => {
   }
 }
 
+// A sibling saved while a dialog is open: wait for the dialog, so the save can
+// keep that sibling's new groups instead of overwriting them.
+const runScheduledWrite = (): void => {
+  debounceHandle = null
+  if (storedBlobIsUnseen() && siblingUpdatesBlocked()) {
+    scheduleWrite()
+    return
+  }
+  writeBlobToStorage()
+}
+
 const scheduleWrite = (): void => {
   if (!autosaveEnabled) return
   if (debounceHandle != null) clearTimeout(debounceHandle)
-  debounceHandle = window.setTimeout(writeBlobToStorage, LOCAL_DEBOUNCE_MS)
+  debounceHandle = window.setTimeout(runScheduledWrite, LOCAL_DEBOUNCE_MS)
 }
 
 // Public: synchronously persist the current in-memory state to localStorage,
@@ -480,12 +654,13 @@ const scheduleWrite = (): void => {
 // may still be module-init defaults. Writing those would overwrite saved 編組.
 const flushLocalAutosave = (): void => {
   restoreFromLocalStorage()
+  seedHeldGroups()
   if (debounceHandle != null) {
     clearTimeout(debounceHandle)
     debounceHandle = null
   }
   suppressWritesUntil = 0
-  writeBlobToStorage()
+  writeBlobToStorage(true)
 }
 
 // Persist an in-flight debounced write now. Unlike flushLocalAutosave this
@@ -510,6 +685,9 @@ const applyBlobFromStorage = (): void => {
     const blob = JSON.parse(raw) as ShareableData
     applyBlobToLiveState(blob)
     localGen = typeof blob.gen === 'number' ? blob.gen : localGen
+    lastSeenBlobRaw = raw
+    missedSiblingSave = false
+    heldGroupIds = liveGroupIds()
   } catch (e) {
     console.warn('[autosave] cross-tab reconcile failed:', e)
   }
@@ -529,7 +707,8 @@ const scheduleCloudPush = (blob: ShareableData): void => {
   if (!isLoggedIn.value) return
   // While the merge dialog is up, we haven't agreed on what cloud state
   // should look like — suppress pushes until the user resolves it.
-  if (cloudMerge.value) return
+  // The same holds after "稍後再決定", until the user comes back to it.
+  if (cloudMerge.value || cloudMergeDeferred.value) return
   // While a conflict is unresolved, stop pushing to avoid clobbering the
   // server row before the user has decided. The conflict dialog's resolvers
   // re-enable by clearing cloudConflict.
@@ -570,28 +749,62 @@ const markBootstrapped = (): void => {
 // Public: 全部重置 bumped the generation so an in-flight list cannot apply
 // stale cloud rows over the wipe. skipCloudHydrate also blocks silent
 // cloud→local on a bootstrap that starts after the wipe in this session.
+// While a merge is deferred the wipe says nothing about the cloud rows, so it
+// must not arm the path that deletes them; the 2x2 decides when the merge resumes.
 const noteUserWipe = (): void => {
   bootstrapGeneration += 1
-  skipCloudHydrate = true
+  if (!cloudMergeDeferred.value) skipCloudHydrate = true
 }
 
-// Replace cloudGroupsByClientId with a fresh snapshot from cloud. Used to
-// recover when bulkCreateLineupGroups returns fewer rows than inputs (some
-// inputs collided on the partial unique index and were silently dropped by
-// `resolution=ignore-duplicates`) — without this, the missing entries would
-// cause the next push to take the INSERT branch and 409 against the same
-// rows we just failed to (re-)insert.
+const cancelPendingCloudPush = (): void => {
+  if (cloudDebounceHandle != null) {
+    clearTimeout(cloudDebounceHandle)
+    cloudDebounceHandle = null
+  }
+  pendingCloudBlob = null
+}
+
+const rowContentHash = (r: CloudLineupGroup): string => groupContentHash(r.name, r.teams)
+
+// Remember a row we just read or wrote. Without a hash the next push PATCHes it.
+const recordCloudRow = (clientId: string, row: CloudLineupGroup, contentHash?: string): void => {
+  cloudGroupsByClientId.set(clientId, {
+    cloudId: row.id,
+    serverUpdatedAt: row.updated_at,
+    contentHash,
+    sortOrder: row.sort_order,
+  })
+}
+
+// For the paths where the user asked for the cloud to match local (wipe,
+// keep-local): rows just listed that local does not hold are to go.
+const markAbsentRowsRemoved = (): void => {
+  const live = liveGroupIds()
+  cloudGroupsByClientId.forEach((meta, clientId) => {
+    if (!live.has(clientId)) meta.removed = true
+  })
+}
+
+// After a pull: hash what local now serializes to, not what the row holds. If
+// the two differ (a key this client does not know, a hero it cannot resolve),
+// reading must not by itself rewrite the row. A later edit to the group still will.
+const recordLiveHashes = (onlyClientId?: string): void => {
+  shareableGroupsInBlob(buildBlob(false)).forEach((g, i) => {
+    const meta = g.id ? cloudGroupsByClientId.get(g.id) : undefined
+    if (!meta || (onlyClientId && g.id !== onlyClientId)) return
+    meta.contentHash = groupContentHash(g.name, g.teams)
+    meta.sortOrder = i
+  })
+}
+
+// Replace cloudGroupsByClientId with a fresh snapshot from cloud. Used by
+// keep-local when a row that survived its delete collided on the partial unique
+// index and is missing from the bulk result. The user chose to overwrite the cloud, so these rows get no hash and the next push PATCHes them.
 const hydrateMapFromCloud = async (): Promise<void> => {
   try {
     const rows = await listMyLineupGroups()
     cloudGroupsByClientId.clear()
-    for (const r of rows) {
-      const clientId = r.client_id ?? r.id
-      cloudGroupsByClientId.set(clientId, {
-        cloudId: r.id,
-        serverUpdatedAt: r.updated_at,
-      })
-    }
+    for (const r of rows) recordCloudRow(r.client_id ?? r.id, r)
   } catch (e) {
     console.warn('[cloud-sync] hydrate map from cloud failed:', e)
   }
@@ -624,86 +837,155 @@ const flushPendingCloudPush = async (): Promise<void> => {
   }
 }
 
+type PushableGroup = ShareableGroup & { id: string }
+type PushStep = 'next' | 'halt'
+
+// Surface the conflict to the user; halt the rest of the push so we don't
+// compound the divergence.
+const haltOnConflict = (localGroupId: string, serverRow: CloudLineupGroup): PushStep => {
+  cloudConflict.value = { localGroupId, serverRow }
+  cloudStatus.value = 'conflict'
+  return 'halt'
+}
+
+// Local serialization round-trips through hydration, so a row written in an older
+// shape can differ from the local copy of the same data. Compare after the same
+// round trip. A row with an entry this catalog cannot resolve never matches: the
+// round trip dropped that entry, and it is not this client's to discard.
+const rowMatchesLocal = (g: PushableGroup, row: CloudLineupGroup): boolean => {
+  const localHash = groupContentHash(g.name, g.teams)
+  if (rowContentHash(row) === localHash) return true
+  const { heroes, skills } = useData()
+  const deps = { heroes: heroes.value, skills: skills.value }
+  const report: string[] = []
+  const [hydrated] = hydrateShareableGroups([rowToShareableGroup(row)], deps, report)
+  if (report.length > 0) return false
+  const teams = hydrated.teams.map((t) => makeSerializer(deps).serializeLineup(t))
+  return groupContentHash(hydrated.name, teams) === localHash
+}
+
+// The INSERT found an existing row, so nothing of ours was written. Same content
+// is fine. A row with no teams has nothing to lose, so local may fill it.
+// Anything else is the user's decision: taking the row's updated_at as our lock
+// would let the next push overwrite it with no dialog.
+const adoptExistingRow = (g: PushableGroup, row: CloudLineupGroup, sortOrder: number): Promise<PushStep> | PushStep => {
+  if (rowMatchesLocal(g, row)) {
+    recordCloudRow(g.id, row, groupContentHash(g.name, g.teams))
+    return 'next'
+  }
+  if (!row.teams.every(isEmptyShareableLineup)) return haltOnConflict(g.id, row)
+  recordCloudRow(g.id, row)
+  return patchGroup(g, sortOrder)
+}
+
+// createLineupGroup falls back to GET-by-client_id on a duplicate, so a stale
+// local map (cloud row exists but we don't know about it) resolves to a row
+// reference, whichever way the server reports the collision.
+const insertGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep> => {
+  const { row, adopted } = await createLineupGroup({
+    client_id: g.id,
+    name: g.name,
+    teams: g.teams,
+    sort_order: sortOrder,
+  })
+  if (adopted) return adoptExistingRow(g, row, sortOrder)
+  recordCloudRow(g.id, row, rowContentHash(row))
+  return 'next'
+}
+
+const patchGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep> => {
+  const meta = cloudGroupsByClientId.get(g.id)
+  if (!meta || meta.rowGone) {
+    cloudGroupsByClientId.delete(g.id)
+    return insertGroup(g, sortOrder)
+  }
+  const contentHash = groupContentHash(g.name, g.teams)
+  const result = await patchLineupGroupWithLock(meta.cloudId, meta.serverUpdatedAt, {
+    name: g.name,
+    teams: g.teams,
+    sort_order: sortOrder,
+  })
+  switch (result.kind) {
+    case 'ok':
+      recordCloudRow(g.id, result.row, contentHash)
+      return 'next'
+    case 'conflict':
+      return haltOnConflict(g.id, result.serverRow)
+    case 'deleted':
+      // Another client deleted the row. With the content unchanged (this PATCH
+      // was only a position shift) nothing is at stake: respect the delete in the
+      // cloud and keep the local copy; a later edit uploads it. Otherwise upload
+      // now, including when old meta has no hash and an edit cannot be ruled out:
+      // an unwanted group can be deleted a second time, but lost edits cannot be
+      // recovered.
+      if (meta.contentHash === contentHash) {
+        cloudGroupsByClientId.set(g.id, { ...meta, rowGone: true })
+        return 'next'
+      }
+      cloudGroupsByClientId.delete(g.id)
+      return insertGroup(g, sortOrder)
+    default:
+      // Next edit retries via the debounce.
+      console.warn('[cloud-sync] patch failed:', result.message)
+      cloudStatus.value = 'error'
+      return 'halt'
+  }
+}
+
+const pushGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep> => {
+  const meta = cloudGroupsByClientId.get(g.id)
+  if (meta?.contentHash === groupContentHash(g.name, g.teams)) {
+    if (meta.rowGone || meta.sortOrder === sortOrder) return 'next'
+  }
+  return patchGroup(g, sortOrder)
+}
+
+// Delete cloud rows the user removed locally. Being absent from the local list
+// is not enough: a tab can learn of a row from stored meta without ever having
+// held the group, because a sibling created it. Only run when the local groups
+// list is the source of truth — i.e. cloud sync is enabled and we've finished
+// the bootstrap.
+const deleteStaleRows = async (liveGroups: ShareableGroup[]): Promise<void> => {
+  if (!cloudBootstrapped) return
+  const liveIds = new Set(liveGroups.map((g) => g.id))
+  const stale = [...cloudGroupsByClientId.entries()]
+    .filter(([clientId, meta]) => meta.removed && !liveIds.has(clientId))
+  for (const [clientId, meta] of stale) {
+    try {
+      await deleteLineupGroup(meta.cloudId)
+      cloudGroupsByClientId.delete(clientId)
+    } catch (e) {
+      console.warn('[cloud-sync] delete stale row failed:', e)
+    }
+  }
+}
+
 const pushBlobToCloud = async (blob: ShareableData): Promise<void> => {
-  if (!cloudSyncEnabled.value) return
+  if (!cloudSyncEnabled.value || cloudMergeDeferred.value) return
   const { isLoggedIn } = useAuth()
   if (!isLoggedIn.value) return
   const groupsToPush = shareableGroupsInBlob(blob)
   if (groupsToPush.length === 0) return
 
   cloudStatus.value = 'syncing'
+  reloadCloudMetaFromStorage()
   try {
     for (let i = 0; i < groupsToPush.length; i++) {
       const g = groupsToPush[i]
       if (!g.id) continue // shouldn't happen for v4 blobs; defensive guard
-      const meta = cloudGroupsByClientId.get(g.id)
-      if (!meta) {
-        // First push for this group → INSERT. createLineupGroup uses
-        // ignore-duplicates + GET-by-client_id fallback, so a stale local
-        // map (cloud row exists but we don't know about it) self-heals into
-        // a populated row reference instead of throwing a 409.
-        const row = await createLineupGroup({
-          client_id: g.id,
-          name: g.name,
-          teams: g.teams,
-          sort_order: i,
-        })
-        cloudGroupsByClientId.set(g.id, {
-          cloudId: row.id,
-          serverUpdatedAt: row.updated_at,
-        })
-      } else {
-        const result = await patchLineupGroupWithLock(meta.cloudId, meta.serverUpdatedAt, {
-          name: g.name,
-          teams: g.teams,
-          sort_order: i,
-        })
-        if (result.kind === 'ok') {
-          meta.serverUpdatedAt = result.row.updated_at
-        } else if (result.kind === 'conflict') {
-          // Surface the conflict to the user; halt the rest of the push so
-          // we don't compound the divergence.
-          cloudConflict.value = {
-            localGroupId: g.id,
-            serverRow: result.serverRow,
-          }
-          cloudStatus.value = 'conflict'
-          return
-        } else {
-          // 'error' — log and bail; next edit retries via the debounce.
-          console.warn('[cloud-sync] patch failed:', result.message)
-          cloudStatus.value = 'error'
-          return
-        }
-      }
+      if (await pushGroup(g as PushableGroup, i) === 'halt') return
     }
-    // Delete cloud rows whose client_id no longer exists locally (user
-    // deleted the group). Only run when the local groups list is the source
-    // of truth — i.e. cloud sync is enabled and we've finished the bootstrap.
-    if (cloudBootstrapped) {
-      const liveIds = new Set(groupsToPush.map((g) => g.id))
-      const stale: Array<[string, string]> = []  // [clientId, cloudId]
-      for (const [clientId, meta] of cloudGroupsByClientId.entries()) {
-        if (!liveIds.has(clientId)) stale.push([clientId, meta.cloudId])
-      }
-      for (const [clientId, cloudId] of stale) {
-        try {
-          await deleteLineupGroup(cloudId)
-          cloudGroupsByClientId.delete(clientId)
-        } catch (e) {
-          console.warn('[cloud-sync] delete stale row failed:', e)
-        }
-      }
-    }
+    await deleteStaleRows(groupsToPush)
     cloudStatus.value = 'idle'
-    // Snapshot the freshly observed updated_at values + any new client_id
-    // entries so a reload's fast-path picks up the latest preconditions.
-    syncCloudMetaToStorage()
   } catch (e) {
     // Network / auth-expired failures — don't retry in a loop, the next
     // edit will reschedule. Status surface drives any user-visible UI.
     console.warn('[cloud-sync]', e)
     cloudStatus.value = 'offline'
+  } finally {
+    // Every exit, including a halt: rows already written have new updated_at
+    // values, and a reload must not take its own writes for another client's.
+    syncCloudMetaToStorage()
   }
 }
 
@@ -718,13 +1000,9 @@ const applyCloudRowsToLocal = (rows: CloudLineupGroup[]): void => {
   applyBlobToLiveState(blob)
   // Rebuild the client_id ↔ cloudId meta map from the rows we just loaded.
   cloudGroupsByClientId.clear()
-  for (const r of rows) {
-    const clientId = r.client_id ?? r.id
-    cloudGroupsByClientId.set(clientId, {
-      cloudId: r.id,
-      serverUpdatedAt: r.updated_at,
-    })
-  }
+  for (const r of rows) recordCloudRow(r.client_id ?? r.id, r)
+  recordLiveHashes()
+  heldGroupIds = liveGroupIds()
 }
 
 // Backup-share-link safety net — used by the discard-side of the merge dialog
@@ -755,6 +1033,7 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
   // Hydrate still-pristine workspaces first — setCloudSyncEnabled can
   // re-bootstrap without LineupBuilder ever mounting.
   restoreFromLocalStorage()
+  seedHeldGroups()
 
   // Fast-path emptiness is sampled NOW (sync). The 2x2 re-samples after
   // the list await so a wipe/edit during the fetch is not decided on a
@@ -844,13 +1123,8 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     // seed the meta map from the list we already have so the empty push
     // can stale-delete old cloud rows this turn (not the 1800ms debounce).
     cloudGroupsByClientId.clear()
-    for (const r of cloudRows) {
-      const clientId = r.client_id ?? r.id
-      cloudGroupsByClientId.set(clientId, {
-        cloudId: r.id,
-        serverUpdatedAt: r.updated_at,
-      })
-    }
+    for (const r of cloudRows) recordCloudRow(r.client_id ?? r.id, r)
+    markAbsentRowsRemoved()
     cloudStatus.value = 'idle'
     syncCloudMetaToStorage()
     // Latch the map before the wipe push so stale-delete is allowed, but
@@ -902,22 +1176,15 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     }))
     try {
       const created = await bulkCreateLineupGroups(localInputs)
-      for (const r of created) {
-        const clientId = r.client_id ?? r.id
-        cloudGroupsByClientId.set(clientId, {
-          cloudId: r.id,
-          serverUpdatedAt: r.updated_at,
-        })
-      }
-      // ignore-duplicates can silently drop colliding rows from the response.
-      // Defensive: if the response is short, re-list cloud to refill missing
-      // map entries so the next push doesn't take an INSERT branch that 409s.
-      if (created.length < localInputs.length) {
-        await hydrateMapFromCloud()
-      }
+      for (const r of created) recordCloudRow(r.client_id ?? r.id, r, rowContentHash(r))
       cloudStatus.value = 'idle'
       syncCloudMetaToStorage()
       markBootstrapped()
+      // Rows that collided with an existing row are missing from the result.
+      // Push again so those groups go through the INSERT path, which compares
+      // content before it takes over an existing row.
+      // An edit made during the upload is newer and already queued.
+      if (created.length < localInputs.length) scheduleCloudPush(pendingCloudBlob ?? localBlob)
     } catch (e) {
       console.warn('[cloud-sync] bulk upload failed:', e)
       cloudStatus.value = 'offline'
@@ -992,18 +1259,13 @@ const resolveMergeKeepLocal = async (): Promise<MergeResolutionResult> => {
     }))
     const created = await bulkCreateLineupGroups(localInputs)
     cloudGroupsByClientId.clear()
-    for (const r of created) {
-      const clientId = r.client_id ?? r.id
-      cloudGroupsByClientId.set(clientId, {
-        cloudId: r.id,
-        serverUpdatedAt: r.updated_at,
-      })
-    }
+    for (const r of created) recordCloudRow(r.client_id ?? r.id, r, rowContentHash(r))
     // Defensive: deleteLineupGroup above is best-effort (errors are swallowed),
     // so a stray surviving cloud row could collide with our insert and be
-    // dropped by ignore-duplicates. Re-list cloud to fill any missing meta.
+    // missing from the result. Re-list cloud to fill any missing meta.
     if (created.length < localInputs.length) {
       await hydrateMapFromCloud()
+      markAbsentRowsRemoved()
     }
     cloudMerge.value = null
     cloudStatus.value = 'idle'
@@ -1080,17 +1342,16 @@ const resolveMergeAppend = async (): Promise<MergeResolutionResult> => {
   suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
   applyBlobToLiveState(merged)
 
-  // Seed the meta map for the cloud rows we just adopted. The local ones
-  // will INSERT on the next pushBlobToCloud (no meta entry → createLineupGroup
-  // path). Match by client_id against the original cloud rows.
+  // Seed the meta map for the cloud rows we just adopted. They now sit after
+  // the local groups, so they get no hash and the next push rewrites sort_order.
+  // The local ones will INSERT on the next pushBlobToCloud (no meta entry →
+  // createLineupGroup path). A local group whose id already exists in the cloud
+  // was filtered out above, so that INSERT raises a conflict if content differs.
+  // Match by client_id against the original cloud rows.
   const adoptedIds = new Set(adopted.map((g) => g.id))
   for (const r of ctx.cloudRows) {
     const clientId = r.client_id ?? r.id
-    if (!adoptedIds.has(clientId)) continue
-    cloudGroupsByClientId.set(clientId, {
-      cloudId: r.id,
-      serverUpdatedAt: r.updated_at,
-    })
+    if (adoptedIds.has(clientId)) recordCloudRow(clientId, r)
   }
   cloudMerge.value = null
   cloudStatus.value = 'idle'
@@ -1102,6 +1363,10 @@ const resolveMergeAppend = async (): Promise<MergeResolutionResult> => {
 
 const resolveMergeCancel = (): void => {
   cloudMerge.value = null
+  // No push until the user decides. Nothing is written to the meta either, so
+  // a reload takes the same path back to this dialog.
+  cloudMergeDeferred.value = true
+  cancelPendingCloudPush()
   // Mark bootstrapped so token refresh / other `persisted` events in THIS
   // session don't re-trigger the dialog. Next page reload still re-runs
   // bootstrap (cloudBootstrapped is module-state, not persisted), giving
@@ -1110,12 +1375,22 @@ const resolveMergeCancel = (): void => {
   markBootstrapped()
 }
 
+// Public: come back to a deferred merge. Re-runs the 2x2 against a fresh list,
+// since the cloud and local may both have moved since the dialog closed.
+const reopenDeferredMerge = (): void => {
+  if (!cloudMergeDeferred.value) return
+  cloudMergeDeferred.value = false
+  cloudBootstrapped = false
+  void tryBootstrapCloudSync()
+}
+
 // Conflict-dialog resolutions ------------------------------------------
 
 const resolveConflictUseServer = async (): Promise<void> => {
   const ctx = cloudConflict.value
   if (!ctx) return
   cloudStatus.value = 'syncing'
+  reloadCloudMetaFromStorage()
 
   // Snapshot BOTH workspaces and swap the one conflicting group so the
   // other mode is not dropped. applyBlobToLiveState is the only sanctioned
@@ -1141,13 +1416,12 @@ const resolveConflictUseServer = async (): Promise<void> => {
   // Refresh meta for the swapped group so the next push uses the freshly
   // observed updated_at as its precondition.
   const clientId = ctx.serverRow.client_id ?? ctx.serverRow.id
-  cloudGroupsByClientId.set(clientId, {
-    cloudId: ctx.serverRow.id,
-    serverUpdatedAt: ctx.serverRow.updated_at,
-  })
+  recordCloudRow(clientId, ctx.serverRow)
+  recordLiveHashes(clientId)
   cloudConflict.value = null
   cloudStatus.value = 'idle'
   syncCloudMetaToStorage()
+  if (storedBlobIsUnseen()) adoptUnseenSiblingGroups()
   flushLocalAutosave()
 }
 
@@ -1166,18 +1440,18 @@ const resolveConflictForceOverwrite = async (): Promise<void> => {
   }
   const { heroes, skills } = useData()
   const serializer = makeSerializer({ heroes: heroes.value, skills: skills.value })
+  const teams = localGroup.teams.map((t) => serializer.serializeLineup(t))
+  reloadCloudMetaFromStorage()
   try {
-    const row = await patchLineupGroupForce(ctx.serverRow.id, {
-      name: localGroup.name,
-      teams: localGroup.teams.map((t) => serializer.serializeLineup(t)),
-    })
-    cloudGroupsByClientId.set(ctx.localGroupId, {
-      cloudId: row.id,
-      serverUpdatedAt: row.updated_at,
-    })
+    const row = await patchLineupGroupForce(ctx.serverRow.id, { name: localGroup.name, teams })
+    // A row deleted in the meantime has no meta, so the push below inserts it.
+    if (row) recordCloudRow(ctx.localGroupId, row, groupContentHash(localGroup.name, teams))
+    else cloudGroupsByClientId.delete(ctx.localGroupId)
     cloudConflict.value = null
     cloudStatus.value = 'idle'
     syncCloudMetaToStorage()
+    // The conflict halted the push that found it; finish the other groups.
+    scheduleCloudPush(buildBlob(false))
   } catch (e) {
     console.warn('[cloud-sync] force overwrite failed:', e)
     cloudStatus.value = 'error'
@@ -1185,10 +1459,11 @@ const resolveConflictForceOverwrite = async (): Promise<void> => {
   }
 }
 
+// Session only, as the dialog says: the stored preference is left alone, so the
+// next load has sync on again and the conflict comes back on the next edit.
 const resolveConflictDefer = (): void => {
   cloudConflict.value = null
   cloudSyncEnabled.value = false
-  persistCloudSyncPref(false)
   cloudStatus.value = 'idle'
 }
 
@@ -1197,6 +1472,7 @@ const resolveConflictDefer = (): void => {
 const setCloudSyncEnabled = (v: boolean): void => {
   cloudSyncEnabled.value = v
   persistCloudSyncPref(v)
+  cloudMergeDeferred.value = false
   if (v) {
     // Turning sync on after a defer / fresh session — re-run bootstrap.
     cloudBootstrapped = false
@@ -1211,11 +1487,7 @@ const setCloudSyncEnabled = (v: boolean): void => {
     bootstrapGeneration += 1
     cloudGroupsByClientId.clear()
     cloudBootstrapped = false
-    if (cloudDebounceHandle != null) {
-      clearTimeout(cloudDebounceHandle)
-      cloudDebounceHandle = null
-    }
-    pendingCloudBlob = null
+    cancelPendingCloudPush()
   }
 }
 
@@ -1241,6 +1513,8 @@ onSessionEvent((e) => {
     bootstrapInFlight = false
     cloudConflict.value = null
     cloudMerge.value = null
+    cloudMergeDeferred.value = false
+    missedSiblingSave = false
     cloudStatus.value = 'idle'
     // Invalidate persisted meta — once signed out, the "local == cloud"
     // invariant no longer holds (user can reset, edit, etc., off-line).
@@ -1250,11 +1524,7 @@ onSessionEvent((e) => {
       // Token is dead — drop any pending push instead of letting the
       // setTimeout tick fire it and 401 silently. (signed-out is already
       // covered by flushPendingCloudPush() in AppLayout's handler.)
-      if (cloudDebounceHandle != null) {
-        clearTimeout(cloudDebounceHandle)
-        cloudDebounceHandle = null
-      }
-      pendingCloudBlob = null
+      cancelPendingCloudPush()
     }
     // Don't flip cloudSyncEnabled — the user's preference survives a
     // session round trip. Next sign-in re-bootstraps.
@@ -1279,6 +1549,7 @@ const restoreFromLocalStorage = (): boolean => {
   localRestoreAttempted = true
 
   const raw = readStoredRaw()
+  lastSeenBlobRaw = raw
   if (!raw) return false
 
   let blob: ShareableData
@@ -1335,6 +1606,7 @@ const enableAutosave = (): void => {
   if (autosaveEnabled) return
   autosaveEnabled = true
   postMountReady = true
+  seedHeldGroups()
 
   const { workspaces } = useGroups()
   const { ownedHeroes, ownedSkills } = useInventory()
@@ -1362,14 +1634,12 @@ const enableAutosave = (): void => {
       // local-name collision set) would diverge from live state mid-decision,
       // and resolving with the diverged snapshot would silently discard
       // edits made in the other tab.
-      if (cloudMerge.value || cloudConflict.value) return
-      const { active } = useDialogs()
-      if (active.value === 'import-from-link') return
-      if (active.value === 'import-handbook') return
-
-      if (active.value === 'export-team-to-group') return
+      if (siblingUpdatesBlocked()) return
       suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
       applyBlobFromStorage()
+      // The sibling's newer blob supersedes ours and it pushes that blob itself.
+      // Pushing ours too would race its lock and raise a conflict with ourselves.
+      cancelPendingCloudPush()
     }
   }
 
@@ -1391,6 +1661,8 @@ export interface UseGroupPersistence {
   cloudStatus: typeof cloudStatus
   cloudConflict: typeof cloudConflict
   cloudMerge: typeof cloudMerge
+  cloudMergeDeferred: typeof cloudMergeDeferred
+  reopenDeferredMerge: () => void
   tryBootstrapCloudSync: () => Promise<void>
   noteUserWipe: () => void
   flushPendingCloudPush: () => Promise<void>
@@ -1416,6 +1688,8 @@ export function useGroupPersistence(): UseGroupPersistence {
     cloudStatus,
     cloudConflict,
     cloudMerge,
+    cloudMergeDeferred,
+    reopenDeferredMerge,
     tryBootstrapCloudSync,
     noteUserWipe,
     flushPendingCloudPush,

@@ -39,6 +39,20 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.8',
+    date: '2026-11-05',
+    entries: [
+      { tag: 'fix', text: '編組在其他裝置被刪除時不再卡住雲端同步，此裝置的編組會重新上傳' },
+      { tag: 'fix', text: '雲端同步只上傳有變更的編組，減少不必要的衝突提示' },
+      { tag: 'fix', text: '登入合併選「稍後再決定」後會暫停雲端同步，直到做出選擇' },
+      { tag: 'fix', text: '同一編組在雲端的內容不同時會詢問，不再直接覆蓋' },
+      { tag: 'fix', text: '衝突對話框的「暫不同步」只在本次階段生效' },
+      { tag: 'fix', text: '登出時不再連帶登出其他裝置' },
+      { tag: 'fix', text: '只有全站且未過期的封鎖才會限制公開分享' },
+      { tag: 'fix', text: '同時開啟多個分頁時不再反覆互相存檔或誤報衝突' },
+    ],
+  },
+  {
     version: '0.5.7',
     date: '2026-11-04',
     entries: [

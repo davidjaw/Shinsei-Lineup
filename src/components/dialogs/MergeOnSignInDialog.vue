@@ -309,7 +309,7 @@ const onConfirm = async () => {
 
 const onCancel = () => {
   resolveMergeCancel()
-  ElMessage.info('已暫不同步，下次登入會再詢問')
+  ElMessage.info('雲端同步已暫停，重新整理頁面或到設定頁可再次選擇')
 }
 </script>
 

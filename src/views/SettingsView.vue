@@ -16,6 +16,14 @@
           <div class="flex items-center justify-between flex-wrap gap-3">
             <div class="flex flex-col gap-1.5 min-w-0 flex-1">
               <span class="text-base" :class="statusClass">{{ statusLabel }}</span>
+              <el-button
+                v-if="cloudSyncEnabled && cloudMergeDeferred"
+                class="!rounded-sm self-start"
+                size="small"
+                @click="reopenDeferredMerge"
+              >
+                立即選擇
+              </el-button>
             </div>
             <el-switch
               v-model="syncOn"
@@ -52,7 +60,13 @@ import { useAuth } from '../composables/useAuth'
 import { useGroupPersistence } from '../composables/useGroupPersistence'
 
 const { isLoggedIn } = useAuth()
-const { cloudSyncEnabled, cloudStatus, setCloudSyncEnabled } = useGroupPersistence()
+const {
+  cloudSyncEnabled,
+  cloudStatus,
+  cloudMergeDeferred,
+  setCloudSyncEnabled,
+  reopenDeferredMerge,
+} = useGroupPersistence()
 
 const syncOn = computed({
   get: () => cloudSyncEnabled.value,
@@ -61,6 +75,7 @@ const syncOn = computed({
 
 const statusLabel = computed(() => {
   if (!cloudSyncEnabled.value) return '目前狀態：已關閉'
+  if (cloudMergeDeferred.value) return '目前狀態：登入合併尚未決定，雲端同步暫停中'
   switch (cloudStatus.value) {
     case 'syncing': return '目前狀態：同步中…'
     case 'conflict': return '目前狀態：發生衝突，請於對話框處理'
@@ -73,6 +88,7 @@ const statusLabel = computed(() => {
 
 const statusClass = computed(() => {
   if (!cloudSyncEnabled.value) return 'text-ink-mute'
+  if (cloudMergeDeferred.value) return 'text-amber-700'
   switch (cloudStatus.value) {
     case 'syncing': return 'text-focus'
     case 'conflict':
