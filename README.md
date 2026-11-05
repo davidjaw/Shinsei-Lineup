@@ -113,35 +113,6 @@ npm run data       # merge_sources → build_frontend_data → check_build / che
 - **登入前快照**：點擊「登入」時把當前隊伍 + 庫存寫入 `nobunaga.auth.recovery`（5 分鐘 TTL），登入回呼後自動還原 — 避免 OAuth 重導向丟失正在編輯的內容
 - **首次登入**：`display_name` 為空時自動彈出設定對話框（之後可從使用者下拉選單編輯）
 
-### 資料庫結構（PostgREST + RLS）
-
-無 Edge Function、無自訂 RPC — 全部透過 PostgREST 直連 + Row-Level Security 實現存取控制。
-
-#### `character_profiles`（角色配置）
-
-| 欄位 | 型別 | 說明 |
-|---|---|---|
-| `id` | uuid (PK) | |
-| `user_id` | uuid → `auth.users.id` | RLS 限定僅擁有者讀寫 |
-| `name` | text | 配置名稱（CHT，使用者命名） |
-| `inv_h` | text[] | 已擁有武將（**JP 名稱**為 key — 對翻譯版本變更有韌性；override-added 武將以 CHT 名稱 fallback） |
-| `inv_s` | text[] | 已擁有戰法（同上規則） |
-| `is_default` | boolean | 登入時自動套用 |
-| `created_at` / `updated_at` | timestamptz | |
-
-#### `shares`（分享）
-
-| 欄位 | 型別 | 說明 |
-|---|---|---|
-| `slug` | text (PK) | 12-14 字 base62 短碼 |
-| `blob` | jsonb | v2 分享 payload（隊伍 + 庫存，全部以 JP 名稱 key） |
-| `user_id` | uuid (nullable) | 匿名分享為 NULL；登入分享受 RLS 保護 |
-| `display_name` | text (nullable) | 僅登入分享有效 |
-| `pinned` | boolean | 釘選到「我的分享」頂端 |
-| `created_at` / `updated_at` | timestamptz | |
-
-**RLS 模式**：`shares` 為「公開讀、私有寫」— 任何人可讀取 slug 並建立新分享，但僅 `user_id = auth.uid()` 可 PATCH/DELETE。`character_profiles` 為「擁有者全權」— 列級 `user_id` 過濾。
-
 ### 環境變數
 
 | 變數 | 用途 | 必要性 |

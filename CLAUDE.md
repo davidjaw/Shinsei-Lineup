@@ -118,8 +118,8 @@ cloud sync/short shares/proposals/gacha are silently disabled. The client uses d
 
 - `.env`: `OPENROUTER_API_KEY` (required for the OpenRouter backend), optional `ANTHROPIC_API_KEY`,
   optional `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY`.
-- Supabase projects: dev `pptoljoymqbflmucyxzo`, prod `ebmamfpeffgkmhpyoyul`. Link, push, admin/ban SQL:
-  [doc/supabase.md](doc/supabase.md).
+- Supabase projects: dev `pptoljoymqbflmucyxzo`, prod `ebmamfpeffgkmhpyoyul`. This repo is only a client of them:
+  migrations, edge functions and DB operations are not kept or deployed from here.
 
 ## Conventions
 
