@@ -88,3 +88,4 @@ export interface Proposal {
   forkedFrom: string | null
 }
 
+export const DEFAULT_GROUP_NAME = '預設'

@@ -23,6 +23,17 @@ export function capAuthorName(name: string | null | undefined): string | null {
   return s === '' ? null : s
 }
 
+/** The name a public row may carry: never the part of the account's email before
+ *  the @. Null reads 匿名 with the account's tag. */
+export function publicAuthorName(
+  name: string | null | undefined,
+  email: string | null | undefined,
+): string | null {
+  const capped = capAuthorName(name)
+  const prefix = capAuthorName(email?.split('@')[0])
+  return capped?.toLowerCase() === prefix?.toLowerCase() ? null : capped
+}
+
 export function capTeamName(name: string | null | undefined): string | null {
   const s = (name ?? '').trim().slice(0, TEAM_NAME_MAX)
   return s === '' ? null : s

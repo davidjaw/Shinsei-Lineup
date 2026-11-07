@@ -8,7 +8,7 @@ import { getSession, getValidAccessToken } from './auth'
 const SLUG_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 // 12-char base62 ≈ 71.5 bits → ~3.2 quintillion possibilities. Doubles as
-// URL secrecy since shares are publicly readable by slug. On collision we
+// URL secrecy since a share is readable by anyone holding its slug. On collision we
 // widen rather than retry at the same width, so the math degrades gracefully.
 const generateSlug = (len: number): string => {
   const bytes = new Uint8Array(len)
@@ -77,12 +77,64 @@ export const loadShare = async (slug: string): Promise<unknown> => {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('share backend not configured')
   if (!SLUG_PATTERN.test(slug)) throw new Error('invalid share slug')
 
-  const url = `${SUPABASE_URL}/rest/v1/shares?slug=eq.${encodeURIComponent(slug)}&select=blob`
-  const res = await fetchWithTimeout(url, { headers: restHeaders(null) })
+  const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/rpc/share_blob`, {
+    method: 'POST',
+    headers: { ...restHeaders(null), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_slug: slug }),
+  })
   if (!res.ok) throw new Error(`share load failed: ${res.status}`)
-  const rows = (await res.json()) as Array<{ blob: unknown }>
-  if (rows.length === 0) throw new Error('share not found')
-  return rows[0].blob
+  const blob: unknown = await res.json()
+  if (blob === null) throw new Error('share not found')
+  return blob
+}
+
+export type ShareSource = { slug: string } | { base64: string }
+
+/** Throws on anything that is not base64 of UTF-8 JSON. */
+export const decodeShareBlob = (base64: string): unknown =>
+  JSON.parse(decodeURIComponent(escape(atob(base64))))
+
+const decodesToObject = (base64: string): boolean => {
+  try {
+    const value = decodeShareBlob(base64)
+    return typeof value === 'object' && value !== null
+  } catch {
+    return false
+  }
+}
+
+const percentDecoded = (part: string): string | null => {
+  try {
+    return decodeURIComponent(part)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * What a pasted text points at: a slug alone, or a link of either site in any of
+ * its forms (`#s/<slug>`, `#/s/<slug>`, `#<base64>`, `#/<base64>`, and the new
+ * site's `#/lineup/s/<slug>`, `#/lineup/b/<percent-encoded base64>`). Null if none.
+ * The payload is tried first: base64 may itself hold `s/`.
+ */
+export const parseShareInput = (text: string): ShareSource | null => {
+  const input = text.trim()
+  if (!input) return null
+  if (SLUG_PATTERN.test(input)) return { slug: input }
+  const payload = input.slice(input.indexOf('#') + 1).replace(/^\//, '')
+  if (decodesToObject(payload)) return { base64: payload }
+  const slug = /(?:^|[/#])s\/([A-Za-z0-9]{12,14})(?:[/?#&]|$)/.exec(input)
+  if (slug) return { slug: slug[1] }
+  const blob = /(?:^|[/#])b\/([^?#&\s]+)/.exec(input)
+  const decoded = blob && percentDecoded(blob[1])
+  return decoded && decodesToObject(decoded) ? { base64: decoded } : null
+}
+
+/** The blob a pasted text points at. Null when the text points at nothing. */
+export const loadShareSource = async (text: string): Promise<unknown> => {
+  const source = parseShareInput(text)
+  if (!source) return null
+  return 'slug' in source ? loadShare(source.slug) : decodeShareBlob(source.base64)
 }
 
 export interface MyShare {

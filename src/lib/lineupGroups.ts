@@ -11,7 +11,7 @@
 // Same PostgREST-via-fetch pattern as share.ts / profiles.ts.
 
 import { SUPABASE_URL, fetchWithTimeout, restHeaders } from './supabase'
-import { requireAuth } from './auth'
+import { AccountChangedError, requireAuth } from './auth'
 import type { ShareableLineup } from '../constants/gameData'
 
 export interface CloudLineupGroup {
@@ -64,8 +64,8 @@ const hashString = (text: string): string => {
 export const groupContentHash = (name: string, teams: ShareableLineup[]): string =>
   hashString(stableStringify({ name, teams }))
 
-export const listMyLineupGroups = async (): Promise<CloudLineupGroup[]> => {
-  const { userId, token } = await requireAuth()
+export const listMyLineupGroups = async (owner: string): Promise<CloudLineupGroup[]> => {
+  const { userId, token } = await requireAuth(owner)
   const url = `${SUPABASE_URL}/rest/v1/lineup_groups?user_id=eq.${userId}` +
     `&select=${COLS}&order=sort_order.asc,updated_at.desc`
   const res = await fetchWithTimeout(url, { headers: restHeaders(token) })
@@ -102,9 +102,10 @@ const isDuplicateResponse = (res: Response): boolean => res.status === 409
 // (existing or new) to hydrate its meta map. Without client_id, this is a plain
 // INSERT.
 export const createLineupGroup = async (
+  owner: string,
   input: CreateLineupGroupInput,
 ): Promise<CreatedLineupGroup> => {
-  const { userId, token } = await requireAuth()
+  const { userId, token } = await requireAuth(owner)
   const row: Record<string, unknown> = {
     user_id: userId,
     name: input.name,
@@ -137,7 +138,7 @@ export const createLineupGroup = async (
   if (!input.client_id) {
     throw new Error('create lineup_group: empty response with no client_id to recover from')
   }
-  const existing = await getLineupGroupByClientId(input.client_id)
+  const existing = await getLineupGroupByClientId(owner, input.client_id)
   if (!existing) {
     throw new Error(
       `create lineup_group: insert reported a duplicate but no row found for client_id=${input.client_id}`,
@@ -150,9 +151,10 @@ export const createLineupGroup = async (
 // the current user's row. Used by createLineupGroup's empty-body recovery
 // and by useGroupPersistence's meta-map heal-on-409 path.
 const getLineupGroupByClientId = async (
+  owner: string,
   clientId: string,
 ): Promise<CloudLineupGroup | null> => {
-  const { token } = await requireAuth()
+  const { token } = await requireAuth(owner)
   const url = `${SUPABASE_URL}/rest/v1/lineup_groups?client_id=eq.${encodeURIComponent(clientId)}` +
     `&select=${COLS}`
   const res = await fetchWithTimeout(url, { headers: restHeaders(token) })
@@ -161,15 +163,15 @@ const getLineupGroupByClientId = async (
   return rows[0] ?? null
 }
 
-// Bulk insert used by the anon→signed-in handoff when local has groups and
-// cloud is empty. Returns only the rows it inserted; a short result means some
+// Bulk insert used when the user chose to take local up to the account. Returns only the rows it inserted; a short result means some
 // inputs collided with existing rows. A 409 fails the whole array, so retry one
 // at a time to get the same result as a suppressed duplicate.
 export const bulkCreateLineupGroups = async (
+  owner: string,
   inputs: CreateLineupGroupInput[],
 ): Promise<CloudLineupGroup[]> => {
   if (inputs.length === 0) return []
-  const { userId, token } = await requireAuth()
+  const { userId, token } = await requireAuth(owner)
   const rows = inputs.map((input, idx) => {
     const row: Record<string, unknown> = {
       user_id: userId,
@@ -193,7 +195,7 @@ export const bulkCreateLineupGroups = async (
   })
   if (isDuplicateResponse(res)) {
     const results = []
-    for (const input of inputs) results.push(await createLineupGroup(input))
+    for (const input of inputs) results.push(await createLineupGroup(owner, input))
     return results.filter((r) => !r.adopted).map((r) => r.row)
   }
   if (!res.ok) {
@@ -220,11 +222,12 @@ export type PatchResult =
 // caller gets `kind: 'conflict'` along with the current server row so they
 // can show a 3-option dialog (use cloud / overwrite cloud / defer).
 export const patchLineupGroupWithLock = async (
+  owner: string,
   id: string,
   expectedUpdatedAt: string,
   patch: LineupGroupPatch,
 ): Promise<PatchResult> => {
-  const { token } = await requireAuth()
+  const { token } = await requireAuth(owner)
   // The trigger maintains updated_at server-side; we don't include it in the
   // body. The filter is the precondition.
   const url = `${SUPABASE_URL}/rest/v1/lineup_groups?id=eq.${encodeURIComponent(id)}` +
@@ -249,12 +252,13 @@ export const patchLineupGroupWithLock = async (
     }
     // 0-row PATCH response: either the precondition failed (conflict) or the
     // row was deleted. Fetch the current row to disambiguate.
-    const serverRow = await getLineupGroup(id)
+    const serverRow = await getLineupGroup(owner, id)
     if (!serverRow) {
       return { kind: 'deleted' }
     }
     return { kind: 'conflict', serverRow }
   } catch (e) {
+    if (e instanceof AccountChangedError) throw e // another account's answer says nothing of this row
     return { kind: 'error', message: (e as Error).message }
   }
 }
@@ -263,10 +267,11 @@ export const patchLineupGroupWithLock = async (
 // conflict dialog. The user has just seen what they're discarding. Returns null
 // when the row no longer exists.
 export const patchLineupGroupForce = async (
+  owner: string,
   id: string,
   patch: LineupGroupPatch,
 ): Promise<CloudLineupGroup | null> => {
-  const { token } = await requireAuth()
+  const { token } = await requireAuth(owner)
   const url = `${SUPABASE_URL}/rest/v1/lineup_groups?id=eq.${encodeURIComponent(id)}` +
     `&select=${COLS}`
   const res = await fetchWithTimeout(url, {
@@ -285,8 +290,8 @@ export const patchLineupGroupForce = async (
   return rows[0] ?? null
 }
 
-const getLineupGroup = async (id: string): Promise<CloudLineupGroup | null> => {
-  const { token } = await requireAuth()
+const getLineupGroup = async (owner: string, id: string): Promise<CloudLineupGroup | null> => {
+  const { token } = await requireAuth(owner)
   const url = `${SUPABASE_URL}/rest/v1/lineup_groups?id=eq.${encodeURIComponent(id)}` +
     `&select=${COLS}`
   const res = await fetchWithTimeout(url, { headers: restHeaders(token) })
@@ -295,9 +300,11 @@ const getLineupGroup = async (id: string): Promise<CloudLineupGroup | null> => {
   return rows[0] ?? null
 }
 
-export const deleteLineupGroup = async (id: string): Promise<void> => {
-  const { token } = await requireAuth()
-  const url = `${SUPABASE_URL}/rest/v1/lineup_groups?id=eq.${encodeURIComponent(id)}`
+// Only the version the caller saw: a row changed since stays.
+export const deleteLineupGroup = async (owner: string, id: string, expectedUpdatedAt: string): Promise<void> => {
+  const { token } = await requireAuth(owner)
+  const url = `${SUPABASE_URL}/rest/v1/lineup_groups?id=eq.${encodeURIComponent(id)}` +
+    `&updated_at=eq.${encodeURIComponent(expectedUpdatedAt)}`
   const res = await fetchWithTimeout(url, {
     method: 'DELETE',
     headers: { ...restHeaders(token), Prefer: 'return=minimal' },

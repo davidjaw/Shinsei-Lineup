@@ -26,7 +26,7 @@
       >
         <div class="flex flex-col gap-0.5 min-w-0">
           <span class="text-sm">
-            以「<span class="font-bold"><UserTag :name="displayName || '我'" :user-id="userId" /></span> · <span class="font-bold">{{ groupName }}</span>」公開分享
+            以「<span class="font-bold"><UserTag :name="displayName || '匿名'" :user-id="userId" /></span> · <span class="font-bold">{{ groupName }}</span>」公開分享
           </span>
           <span class="text-[11px] text-ink-mute leading-snug">
             僅 <span class="font-bold">分享當前隊伍</span> 適用；勾選後會同時加入公開「精選隊伍」庫

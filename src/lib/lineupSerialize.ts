@@ -15,7 +15,8 @@ import {
   type RoleData,
   type BingxueActive,
 } from '../composables/useLineups'
-import { MAX_TEAMS_PER_GROUP } from '../types/group'
+import { findHeroByKey, findSkillByKey } from './catalogLookup'
+import { DEFAULT_GROUP_NAME, MAX_TEAMS_PER_GROUP } from '../types/group'
 import type { IncomingGroup, WorkspaceIncoming } from '../composables/useGroups'
 import {
   CATALOG_MODES,
@@ -38,6 +39,16 @@ export interface SerializeDeps {
 // effectively dead weight in merge/preview displays.
 export const isEmptyShareableLineup = (l: ShareableLineup): boolean =>
   !l.m && !l.v1 && !l.v2
+
+const SKILL_KEYS = ['m_s1', 'm_s2', 'v1_s1', 'v1_s2', 'v2_s1', 'v2_s2'] as const
+
+// Holds nothing anyone made, a name included: as a new group is, or as a reset
+// leaves it. A hero-less team under a chosen name is still someone's work.
+export const isUntouchedShareableGroup = (g: { name: string; teams: ShareableLineup[] }): boolean =>
+  g.name === DEFAULT_GROUP_NAME && g.teams.every((t, i) =>
+    isEmptyShareableLineup(t)
+    && SKILL_KEYS.every((key) => !t[key])
+    && t.name === makeTeam(i).name)
 
 const serializeBx = (bx: BingxueActive): ShareableBingxue => ({
   d: bx.direction,
@@ -133,49 +144,6 @@ export const shareableGroupsForMode = (
   }
   return []
 }
-
-// Lookup maps memoized by the input array. Restore visits ~36 keys per group
-// (4 teams × 3 roles × 3 fields); building a Map once is O(1) per lookup vs
-// O(n) Array.find each time. WeakMap keeps the cache alive only as long as
-// the heroes/skills array reference.
-const heroLookupCache = new WeakMap<Hero[], Map<string, Hero>>()
-const skillLookupCache = new WeakMap<Skill[], Map<string, Skill>>()
-
-const buildLookup = <T extends { name: string; name_jp?: string | null; aliases?: string[] }>(
-  items: T[],
-): Map<string, T> => {
-  const map = new Map<string, T>()
-  for (const it of items) {
-    if (it.name) map.set(it.name, it)
-    if (it.name_jp) map.set(it.name_jp, it)
-    if (it.aliases) for (const a of it.aliases) map.set(a, it)
-  }
-  return map
-}
-
-const getHeroLookup = (heroes: Hero[]): Map<string, Hero> => {
-  let map = heroLookupCache.get(heroes)
-  if (!map) {
-    map = buildLookup(heroes)
-    heroLookupCache.set(heroes, map)
-  }
-  return map
-}
-
-const getSkillLookup = (skills: Skill[]): Map<string, Skill> => {
-  let map = skillLookupCache.get(skills)
-  if (!map) {
-    map = buildLookup(skills)
-    skillLookupCache.set(skills, map)
-  }
-  return map
-}
-
-const findHeroByKey = (heroes: Hero[], key: string): Hero | undefined =>
-  getHeroLookup(heroes).get(key)
-
-const findSkillByKey = (skills: Skill[], key: string): Skill | undefined =>
-  getSkillLookup(skills).get(key)
 
 // Per-role hydrate with healing. Mutates `role` in place.
 //

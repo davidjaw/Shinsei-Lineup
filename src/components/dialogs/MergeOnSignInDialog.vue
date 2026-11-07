@@ -10,7 +10,7 @@
   >
     <template v-if="ctx">
       <p class="text-sm text-ink-soft mb-4 leading-relaxed">
-        這台裝置上有尚未同步的編組，與此帳號上次保存的編組不同。請選擇要如何整合：
+        {{ intro }}
       </p>
 
       <!-- Local vs cloud side cards. Each side has a 預覽 button that opens
@@ -72,7 +72,7 @@
            in flex restores top-aligned grouping and is also easier to click. -->
       <div class="flex flex-col gap-2 mb-1">
         <label
-          v-for="opt in OPTIONS"
+          v-for="opt in visibleOptions"
           :key="opt.value"
           class="option-card"
           :class="{ 'option-card--active': choice === opt.value }"
@@ -98,6 +98,7 @@
           type="primary"
           class="!rounded-sm"
           :loading="busy"
+          :disabled="!choice"
           @click="onConfirm"
         >確認</el-button>
       </div>
@@ -151,10 +152,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { View } from '@element-plus/icons-vue'
-import { useGroupPersistence } from '../../composables/useGroupPersistence'
+import {
+  defaultMergeChoice,
+  mergeCloudHoldsNothing,
+  nextMergeChoice,
+  offeredMergeChoices,
+  useGroupPersistence,
+  type MergeResolutionResult,
+} from '../../composables/useGroupPersistence'
 import { useData } from '../../composables/useData'
 import { hydrateShare } from '../preview/hydrateShare'
 import GroupPreviewCard from '../preview/GroupPreviewCard.vue'
@@ -194,8 +202,30 @@ const {
 const { heroes, skills } = useData()
 
 const busy = ref(false)
-const choice = ref<ChoiceValue>('append')
+const choice = ref<ChoiceValue | null>(null)
 const ctx = computed(() => cloudMerge.value)
+const cloudIsEmpty = computed(() => mergeCloudHoldsNothing(ctx.value?.cloudRows ?? []))
+const fromOtherAccount = computed(() => ctx.value?.localOwner === 'other')
+const intro = computed(() => {
+  if (cloudIsEmpty.value) {
+    return fromOtherAccount.value
+      ? '這台裝置上的編組上次屬於其他帳號，此帳號還沒有保存的編組，不會自動上傳。若要上傳到此帳號請選擇下方選項；否則請選「稍後再決定」。'
+      : '此帳號還沒有保存的編組，這台裝置上的編組不會自動上傳。請選擇是否上傳到此帳號；還不確定可選「稍後再決定」。'
+  }
+  return fromOtherAccount.value
+    ? '這台裝置上的編組上次屬於其他帳號，與此帳號保存的編組不同。請選擇要如何整合：'
+    : '這台裝置上有尚未同步的編組，與此帳號上次保存的編組不同。請選擇要如何整合：'
+})
+const visibleOptions = computed(() => {
+  const offered = offeredMergeChoices(ctx.value?.cloudRows ?? [])
+  return OPTIONS.filter((opt) => offered.includes(opt.value))
+})
+// A new prompt starts from its default; rows changing under an open one keep the
+// user's choice, unless it is no longer offered.
+watch(ctx, (now) => { choice.value = now && defaultMergeChoice(now) }, { immediate: true })
+watch(cloudIsEmpty, () => {
+  if (ctx.value) choice.value = nextMergeChoice(choice.value, ctx.value)
+})
 
 const labeledGroups = (blob: ShareableData | undefined): ShareableGroup[] => {
   if (!blob) return []
@@ -277,31 +307,31 @@ const openLocalPreview = () => { localPreviewOpen.value = true }
 const openCloudPreview = () => { cloudPreviewOpen.value = true }
 
 const showBackupToast = (slug: string | null | undefined, label: string): void => {
-  if (slug) {
-    ElMessage.success({
-      message: `${label}，已建立備份分享連結（在「我的分享」可找到）`,
-      duration: 5000,
-    })
-  } else {
-    ElMessage.warning(
-      `${label}，但備份分享連結建立失敗，請手動分享後再決定`,
-    )
-  }
+  ElMessage.success(
+    slug
+      ? { message: `${label}，已建立備份分享連結（在「我的分享」可找到）`, duration: 5000 }
+      : label,
+  )
+}
+
+const notDoneMessage = (res: MergeResolutionResult): string => {
+  if (res.cloudMoved) return '帳號保存的編組剛剛有變更，內容已更新，請確認後再選擇一次'
+  if (res.backupFailed) return '備份分享連結建立失敗，沒有變更任何資料，請稍後再試或改選其他選項'
+  if (res.backupSlug) return '上傳未完成，帳號原本的編組已備份，可在「我的分享」找回，請稍後再試'
+  return '未能完成，請重新整理頁面後再試'
 }
 
 const onConfirm = async () => {
+  if (!choice.value) return
   busy.value = true
   try {
-    if (choice.value === 'append') {
-      await resolveMergeAppend()
-      ElMessage.success('已合併兩邊的編組')
-    } else if (choice.value === 'keep-cloud') {
-      const res = await resolveMergeKeepCloud()
-      showBackupToast(res.backupSlug, '已採用帳號之前保存的編組')
-    } else if (choice.value === 'keep-local') {
-      const res = await resolveMergeKeepLocal()
-      showBackupToast(res.backupSlug, '已用此裝置的編組覆寫帳號保存版本')
-    }
+    const res = choice.value === 'append'
+      ? await resolveMergeAppend()
+      : choice.value === 'keep-cloud' ? await resolveMergeKeepCloud() : await resolveMergeKeepLocal()
+    if (res.kind === 'cancel') { if (cloudMerge.value) ElMessage.warning(notDoneMessage(res)) }
+    else if (res.kind === 'append') ElMessage.success('已合併兩邊的編組')
+    else if (res.kind === 'keep-cloud') showBackupToast(res.backupSlug, '已採用帳號之前保存的編組')
+    else showBackupToast(res.backupSlug, '已用此裝置的編組覆寫帳號保存版本')
   } finally {
     busy.value = false
   }

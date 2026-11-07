@@ -6,6 +6,7 @@ import {
   onSessionEvent,
 } from '../lib/auth'
 import { fetchMyBan } from '../lib/bans'
+import { publicAuthorName } from '../lib/displayName'
 
 // Single shared reactive session for the whole app. Initialized from
 // localStorage so a returning user stays logged in across reloads.
@@ -68,16 +69,16 @@ export function useAuth() {
     session: readonly(session),
     user: computed(() => session.value?.user ?? null),
     isLoggedIn: computed(() => session.value !== null),
-    // Best-effort name to display: explicit display_name > email prefix > 'user'
+    // The name public rows carry; empty until the user chose one that is not
+    // their email prefix (publish paths then send null, which reads 匿名).
     displayName: computed(() => {
       const u = session.value?.user
-      if (!u) return ''
-      return u.display_name?.trim() || u.email.split('@')[0] || 'user'
+      return (u && publicAuthorName(u.display_name, u.email)) ?? ''
     }),
-    /** True if user has never set display_name — used to trigger first-time prompt. */
+    /** True if user has no usable display_name — used to trigger first-time prompt. */
     needsDisplayName: computed(() => {
       const u = session.value?.user
-      return u != null && (!u.display_name || u.display_name.trim() === '')
+      return u != null && !publicAuthorName(u.display_name, u.email)
     }),
     isAdmin: computed(() => session.value?.user.is_admin === true),
     isBanned: computed(() => banned.value),

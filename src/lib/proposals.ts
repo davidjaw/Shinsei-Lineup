@@ -9,6 +9,8 @@
 import { SUPABASE_URL, fetchWithTimeout, isSupabaseConfigured, restHeaders } from './supabase'
 import { getSession, getValidAccessToken } from './auth'
 import { mapRpcError } from './variants'
+import { publicAuthorName } from './displayName'
+import { readStoredTeam } from './storedTeam'
 import type { Proposal } from '../types/group'
 
 interface ProposalRow {
@@ -29,7 +31,7 @@ interface ProposalRow {
 const rowToProposal = (row: ProposalRow): Proposal => ({
   id: row.id,
   name: row.name,
-  team: row.team_blob as Proposal['team'],
+  team: readStoredTeam(row.team_blob),
   isPublic: row.is_public,
   authorId: row.user_id,
   authorName: row.author_name,
@@ -65,7 +67,7 @@ export const createProposal = async (input: CreateProposalInput): Promise<Propos
     team_blob: input.team,
     is_public: input.isPublic,
     forked_from: input.forkedFrom ?? null,
-    author_name: input.authorName ?? null,
+    author_name: publicAuthorName(input.authorName, getSession()?.user.email),
   }
 
   const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/proposals`, {
@@ -98,6 +100,12 @@ export const updateProposal = async (
   const body: Record<string, unknown> = {}
   if (patch.name !== undefined) body.name = patch.name
   if (patch.isPublic !== undefined) body.is_public = patch.isPublic
+  // Going public writes the author afresh: a private row may hold the email
+  // prefix an older client stored, seen by nobody until now.
+  if (patch.isPublic) {
+    const user = getSession()?.user
+    body.author_name = publicAuthorName(user?.display_name, user?.email)
+  }
 
   const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/proposals?id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',

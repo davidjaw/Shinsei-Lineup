@@ -1,6 +1,6 @@
 import { reactive, computed, watch, type ComputedRef } from 'vue'
 import type { Group, Team } from '../types/group'
-import { MAX_TEAMS_PER_GROUP } from '../types/group'
+import { DEFAULT_GROUP_NAME, MAX_TEAMS_PER_GROUP } from '../types/group'
 import { CATALOG_MODES, type CatalogMode } from '../constants/gameData'
 import { useInventory } from './useInventory'
 
@@ -40,7 +40,7 @@ export const makeGroupId = (mode: CatalogMode): string =>
 
 const makeDefaultGroup = (mode: CatalogMode): Group => ({
   id: makeGroupId(mode),
-  name: '預設',
+  name: DEFAULT_GROUP_NAME,
   teams: [],
 })
 
@@ -149,7 +149,7 @@ const setCurrentGroup = (idx: number) => {
 }
 
 const toLiveGroups = (incoming: IncomingGroup[], mode: CatalogMode): Group[] => {
-  const source = incoming.length > 0 ? incoming : [{ name: '預設', teams: [] as Team[] }]
+  const source = incoming.length > 0 ? incoming : [{ name: DEFAULT_GROUP_NAME, teams: [] as Team[] }]
   return source.map((g) => ({
     id: g.id ?? makeGroupId(mode),
     name: g.name,

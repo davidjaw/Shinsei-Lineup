@@ -11,13 +11,16 @@
     "dev:supabase-dev": "npm run data && vite --mode dev",
     "build": "npm run data && vite build",
     "deploy:alt": "npm run build && cp -r dist/* ../nobunaga-deploy/ && cd ../nobunaga-deploy && git add . && git commit -m \"Update site\" && git push",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
+    "happy-dom": "^21.0.4",
     "typescript": "^5.2.2",
     "vite": "^8.0.10",
     "vite-plugin-singlefile": "^2.0.0",
+    "vitest": "^4.1.12",
     "vue-tsc": "^3.2.7"
   },
   "dependencies": {

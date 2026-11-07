@@ -41,13 +41,16 @@
 //   cloud / defer (turn sync off for this session).
 //
 // Anon → signed-in handoff (risk #1):
-//   2x2 table inside tryBootstrapCloudSync. Both-non-empty is the only
-//   path that prompts; the other three corners apply silently.
+//   Stored sync meta counts only if written in this very session (same account,
+//   same JWT session_id). Without it, tryBootstrapCloudSync lists the cloud:
+//   local that holds anything reaches the merge dialog, even over an empty
+//   cloud, unless it already equals the rows. Nothing uploads silently, and no
+//   push runs before local and cloud are agreed on in the running session.
 
 import { reactive, ref, watch } from 'vue'
 import { useData } from './useData'
 import { useGroups } from './useGroups'
-import { useLineups, isEmptyTeam, type Lineup } from './useLineups'
+import { useLineups } from './useLineups'
 import { useInventory } from './useInventory'
 import { useAuth } from './useAuth'
 import { useDialogs } from './useDialogs'
@@ -55,6 +58,7 @@ import {
   applyBlobToState,
   hydrateShareableGroups,
   isEmptyShareableLineup,
+  isUntouchedShareableGroup,
   makeSerializer,
   shareableGroupsInBlob,
   wrapV4AsV5,
@@ -72,7 +76,7 @@ import {
   type CloudLineupGroup,
 } from '../lib/lineupGroups'
 import { createShare } from '../lib/share'
-import { onSessionEvent } from '../lib/auth'
+import { AccountChangedError, currentSessionId, getSession, onSessionEvent } from '../lib/auth'
 import { CATALOG_MODES, type CatalogMode, type ShareableData, type ShareableGroup } from '../constants/gameData'
 import { workspaceOfClientId } from './useGroups'
 
@@ -80,10 +84,10 @@ const STORAGE_KEY = 'nobunaga.groups.v5'
 const LEGACY_STORAGE_KEY = 'nobunaga.groups.v4'
 const DEVICE_ID_KEY = 'nobunaga.device.id'
 const CLOUD_SYNC_PREF_KEY = 'nobunaga.cloud_sync_enabled'
-// Per-user persisted meta map. Used as the "we've already synced on this
-// device for this user" signal so reloads don't re-prompt the merge dialog
-// when local + cloud are already in sync. Keyed by user_id so a different
-// user signing in on the same device gets a fresh handoff.
+// Per-user persisted meta map, stamped with the session that wrote it. The
+// "this session already synced here" signal, so reloads don't re-prompt the
+// merge dialog. After any other sign-in, whoever's, nothing is known of what
+// happened to local since, so the stamp no longer matches and it is not used.
 const CLOUD_META_KEY_PREFIX = 'nobunaga.cloud_sync_meta.'
 const BROADCAST_CHANNEL_NAME = 'nobunaga.groups'
 const LOCAL_DEBOUNCE_MS = 800
@@ -113,6 +117,31 @@ let bootstrapInFlight = false
 let bootstrapGeneration = 0
 let bootstrapFlightGen = 0  // generation that currently owns the mutex
 let skipCloudHydrate = false  // session wipe-intent; not persisted
+// Who the running bootstrap, and everything after it, belongs to. A sibling tab
+// can replace the stored session without this page hearing of it.
+// A new object per bootstrap, so work that outlives it can tell (`live`).
+interface RunningSession { account: string; session: string | null }
+let running: RunningSession | null = null
+// Local and cloud were agreed on in `running`: by trusted meta, the 2x2 or the user.
+let agreedWithCloud = false
+
+const sessionMoved = (): boolean =>
+  running !== null
+  && (running.account !== getSession()?.user.id || running.session !== currentSessionId())
+
+class SessionMovedError extends Error {}
+
+// After a request: the session it belonged to has ended, so nothing may come of the answer.
+const live = <T>(mine: RunningSession, answer: T): T => {
+  if (running !== mine || sessionMoved()) throw new SessionMovedError()
+  return answer
+}
+
+// Every push passes here.
+const pushAllowed = (): boolean => agreedWithCloud && !sessionMoved()
+
+const isSessionEnd = (e: unknown): boolean =>
+  e instanceof SessionMovedError || e instanceof AccountChangedError
 
 // Cloud-sync reactive surface — components subscribe via useGroupPersistence().
 const cloudSyncEnabled = ref<boolean>(loadCloudSyncPref())
@@ -155,10 +184,40 @@ const cloudConflict = ref<{
 // Surfaces the merge-on-sign-in dialog. Populated by tryBootstrapCloudSync
 // when both local and cloud are non-empty. Cleared by the dialog's choice
 // handlers.
+export type LocalOwner = 'this' | 'other' | 'unknown'
+
 const cloudMerge = ref<{
   localBlob: ShareableData
   cloudRows: CloudLineupGroup[]
+  /** Who last agreed on the local data here. 'unknown': nobody on record, as with anonymous use or data from before the record. */
+  localOwner: LocalOwner
 } | null>(null)
+
+// The account the local data last belonged to. It decides no write, only what the
+// merge dialog says and preselects.
+const LOCAL_DATA_ACCOUNT_KEY = 'nobunaga.local_data_account'
+
+const boundAccount = (): string | null => {
+  try {
+    return localStorage.getItem(LOCAL_DATA_ACCOUNT_KEY)
+  } catch {
+    return null
+  }
+}
+
+const localOwnerFor = (userId: string): LocalOwner => {
+  const bound = boundAccount()
+  if (!bound) return 'unknown'
+  return bound === userId ? 'this' : 'other'
+}
+
+const bindLocalData = (userId: string): void => {
+  try {
+    localStorage.setItem(LOCAL_DATA_ACCOUNT_KEY, userId)
+  } catch {
+    /* swallow — quota / private browsing */
+  }
+}
 
 function loadCloudSyncPref(): boolean {
   try {
@@ -187,11 +246,24 @@ const cloudMetaKey = (userId: string): string => `${CLOUD_META_KEY_PREFIX}${user
 // means a sibling tab pushed since.
 let lastSeenMetaRaw: string | null = null
 
+// Trusted only under the session that wrote it. A token with no session id proves
+// nothing, so it never matches; meta from before this rule (a flat map, no stamp)
+// neither: the cloud is listed and the 2x2 decides, with nothing discarded.
+const parseCloudMeta = (raw: string | null): PersistedCloudMeta | null => {
+  if (!raw) return null
+  const stored = JSON.parse(raw) as { session?: string | null; rows?: PersistedCloudMeta }
+  const session = currentSessionId()
+  return stored.rows && session && stored.session === session ? stored.rows : null
+}
+
+const serializeCloudMeta = (rows: PersistedCloudMeta): string =>
+  JSON.stringify({ session: currentSessionId(), rows })
+
 const loadPersistedCloudMeta = (userId: string): PersistedCloudMeta | null => {
   try {
     const raw = localStorage.getItem(cloudMetaKey(userId))
     lastSeenMetaRaw = raw
-    return raw ? (JSON.parse(raw) as PersistedCloudMeta) : null
+    return parseCloudMeta(raw)
   } catch {
     return null
   }
@@ -203,7 +275,7 @@ const writePersistedCloudMeta = (userId: string): void => {
     cloudGroupsByClientId.forEach((v, k) => {
       obj[k] = { ...v }
     })
-    const raw = JSON.stringify(obj)
+    const raw = serializeCloudMeta(obj)
     localStorage.setItem(cloudMetaKey(userId), raw)
     lastSeenMetaRaw = raw
   } catch {
@@ -217,7 +289,7 @@ const writePersistedCloudMeta = (userId: string): void => {
 const syncCloudMetaToStorage = (): void => {
   const { user } = useAuth()
   const userId = user.value?.id
-  if (!userId) return
+  if (!userId || sessionMoved()) return
   writePersistedCloudMeta(userId)
 }
 
@@ -249,13 +321,12 @@ const markRowsRemoved = (clientIds: string[]): void => {
     if (meta) meta.removed = true
   }
   try {
-    const raw = localStorage.getItem(cloudMetaKey(userId))
-    if (!raw) return
-    const stored = JSON.parse(raw) as PersistedCloudMeta
+    const stored = parseCloudMeta(localStorage.getItem(cloudMetaKey(userId)))
+    if (!stored) return
     for (const id of clientIds) {
       if (stored[id]) stored[id].removed = true
     }
-    localStorage.setItem(cloudMetaKey(userId), JSON.stringify(stored))
+    localStorage.setItem(cloudMetaKey(userId), serializeCloudMeta(stored))
   } catch {
     /* swallow — quota / private browsing */
   }
@@ -320,16 +391,8 @@ seedLocalGen()
 
 // Helpers ----------------------------------------------------------------
 
-// "Empty" for the merge decision — zero groups, OR all groups contain only
-// empty teams. A fresh seeded group (one empty team) counts as empty.
-const isEmptyGroupSet = (groups: { teams: Lineup[] }[]): boolean => {
-  for (const g of groups) {
-    for (const t of g.teams) {
-      if (!isEmptyTeam(t)) return false
-    }
-  }
-  return true
-}
+const cloudHoldsNothing = (rows: CloudLineupGroup[]): boolean =>
+  rows.every((r) => isUntouchedShareableGroup(r))
 
 const firstNonEmptyShareableIndex = (
   groups: { teams: CloudLineupGroup['teams'] }[],
@@ -737,6 +800,10 @@ const scheduleCloudPush = (blob: ShareableData): void => {
 // pendingCloudBlob captured by scheduleCloudPush's guard never silently
 // sits forever.
 const markBootstrapped = (): void => {
+  if (running && cloudSyncEnabled.value && !cloudMergeDeferred.value) {
+    agreedWithCloud = true
+    bindLocalData(running.account)
+  }
   cloudBootstrapped = true
   bootstrapInFlight = false
   if (pendingCloudBlob) {
@@ -797,19 +864,6 @@ const recordLiveHashes = (onlyClientId?: string): void => {
   })
 }
 
-// Replace cloudGroupsByClientId with a fresh snapshot from cloud. Used by
-// keep-local when a row that survived its delete collided on the partial unique
-// index and is missing from the bulk result. The user chose to overwrite the cloud, so these rows get no hash and the next push PATCHes them.
-const hydrateMapFromCloud = async (): Promise<void> => {
-  try {
-    const rows = await listMyLineupGroups()
-    cloudGroupsByClientId.clear()
-    for (const r of rows) recordCloudRow(r.client_id ?? r.id, r)
-  } catch (e) {
-    console.warn('[cloud-sync] hydrate map from cloud failed:', e)
-  }
-}
-
 // Public: cancel any debounced cloud push and fire it immediately. Callers
 // (signOut handler) await this so the user's last edits make it to cloud
 // BEFORE the auth token is invalidated. No-op when nothing is pending or
@@ -868,43 +922,43 @@ const rowMatchesLocal = (g: PushableGroup, row: CloudLineupGroup): boolean => {
 // is fine. A row with no teams has nothing to lose, so local may fill it.
 // Anything else is the user's decision: taking the row's updated_at as our lock
 // would let the next push overwrite it with no dialog.
-const adoptExistingRow = (g: PushableGroup, row: CloudLineupGroup, sortOrder: number): Promise<PushStep> | PushStep => {
+const adoptExistingRow = (g: PushableGroup, row: CloudLineupGroup, sortOrder: number, mine: RunningSession): Promise<PushStep> | PushStep => {
   if (rowMatchesLocal(g, row)) {
     recordCloudRow(g.id, row, groupContentHash(g.name, g.teams))
     return 'next'
   }
-  if (!row.teams.every(isEmptyShareableLineup)) return haltOnConflict(g.id, row)
+  if (!isUntouchedShareableGroup(row)) return haltOnConflict(g.id, row)
   recordCloudRow(g.id, row)
-  return patchGroup(g, sortOrder)
+  return patchGroup(g, sortOrder, mine)
 }
 
 // createLineupGroup falls back to GET-by-client_id on a duplicate, so a stale
 // local map (cloud row exists but we don't know about it) resolves to a row
 // reference, whichever way the server reports the collision.
-const insertGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep> => {
-  const { row, adopted } = await createLineupGroup({
+const insertGroup = async (g: PushableGroup, sortOrder: number, mine: RunningSession): Promise<PushStep> => {
+  const { row, adopted } = live(mine, await createLineupGroup(mine.account, {
     client_id: g.id,
     name: g.name,
     teams: g.teams,
     sort_order: sortOrder,
-  })
-  if (adopted) return adoptExistingRow(g, row, sortOrder)
+  }))
+  if (adopted) return adoptExistingRow(g, row, sortOrder, mine)
   recordCloudRow(g.id, row, rowContentHash(row))
   return 'next'
 }
 
-const patchGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep> => {
+const patchGroup = async (g: PushableGroup, sortOrder: number, mine: RunningSession): Promise<PushStep> => {
   const meta = cloudGroupsByClientId.get(g.id)
   if (!meta || meta.rowGone) {
     cloudGroupsByClientId.delete(g.id)
-    return insertGroup(g, sortOrder)
+    return insertGroup(g, sortOrder, mine)
   }
   const contentHash = groupContentHash(g.name, g.teams)
-  const result = await patchLineupGroupWithLock(meta.cloudId, meta.serverUpdatedAt, {
+  const result = live(mine, await patchLineupGroupWithLock(mine.account, meta.cloudId, meta.serverUpdatedAt, {
     name: g.name,
     teams: g.teams,
     sort_order: sortOrder,
-  })
+  }))
   switch (result.kind) {
     case 'ok':
       recordCloudRow(g.id, result.row, contentHash)
@@ -923,7 +977,7 @@ const patchGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep
         return 'next'
       }
       cloudGroupsByClientId.delete(g.id)
-      return insertGroup(g, sortOrder)
+      return insertGroup(g, sortOrder, mine)
     default:
       // Next edit retries via the debounce.
       console.warn('[cloud-sync] patch failed:', result.message)
@@ -932,12 +986,12 @@ const patchGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep
   }
 }
 
-const pushGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep> => {
+const pushGroup = async (g: PushableGroup, sortOrder: number, mine: RunningSession): Promise<PushStep> => {
   const meta = cloudGroupsByClientId.get(g.id)
   if (meta?.contentHash === groupContentHash(g.name, g.teams)) {
     if (meta.rowGone || meta.sortOrder === sortOrder) return 'next'
   }
-  return patchGroup(g, sortOrder)
+  return patchGroup(g, sortOrder, mine)
 }
 
 // Delete cloud rows the user removed locally. Being absent from the local list
@@ -945,23 +999,25 @@ const pushGroup = async (g: PushableGroup, sortOrder: number): Promise<PushStep>
 // held the group, because a sibling created it. Only run when the local groups
 // list is the source of truth — i.e. cloud sync is enabled and we've finished
 // the bootstrap.
-const deleteStaleRows = async (liveGroups: ShareableGroup[]): Promise<void> => {
+const deleteStaleRows = async (liveGroups: ShareableGroup[], mine: RunningSession): Promise<void> => {
   if (!cloudBootstrapped) return
   const liveIds = new Set(liveGroups.map((g) => g.id))
   const stale = [...cloudGroupsByClientId.entries()]
     .filter(([clientId, meta]) => meta.removed && !liveIds.has(clientId))
   for (const [clientId, meta] of stale) {
     try {
-      await deleteLineupGroup(meta.cloudId)
+      live(mine, await deleteLineupGroup(mine.account, meta.cloudId, meta.serverUpdatedAt))
       cloudGroupsByClientId.delete(clientId)
     } catch (e) {
+      if (isSessionEnd(e)) throw e
       console.warn('[cloud-sync] delete stale row failed:', e)
     }
   }
 }
 
 const pushBlobToCloud = async (blob: ShareableData): Promise<void> => {
-  if (!cloudSyncEnabled.value || cloudMergeDeferred.value) return
+  const mine = running
+  if (!mine || !cloudSyncEnabled.value || cloudMergeDeferred.value || !pushAllowed()) return
   const { isLoggedIn } = useAuth()
   if (!isLoggedIn.value) return
   const groupsToPush = shareableGroupsInBlob(blob)
@@ -972,12 +1028,17 @@ const pushBlobToCloud = async (blob: ShareableData): Promise<void> => {
   try {
     for (let i = 0; i < groupsToPush.length; i++) {
       const g = groupsToPush[i]
+      if (!pushAllowed()) return
       if (!g.id) continue // shouldn't happen for v4 blobs; defensive guard
-      if (await pushGroup(g as PushableGroup, i) === 'halt') return
+      if (await pushGroup(g as PushableGroup, i, mine) === 'halt') return
     }
-    await deleteStaleRows(groupsToPush)
+    await deleteStaleRows(groupsToPush, mine)
     cloudStatus.value = 'idle'
   } catch (e) {
+    if (isSessionEnd(e)) {
+      if (running === mine) cloudStatus.value = 'idle'
+      return
+    }
     // Network / auth-expired failures — don't retry in a loop, the next
     // edit will reschedule. Status surface drives any user-visible UI.
     console.warn('[cloud-sync]', e)
@@ -985,7 +1046,7 @@ const pushBlobToCloud = async (blob: ShareableData): Promise<void> => {
   } finally {
     // Every exit, including a halt: rows already written have new updated_at
     // values, and a reload must not take its own writes for another client's.
-    syncCloudMetaToStorage()
+    if (running === mine) syncCloudMetaToStorage()
   }
 }
 
@@ -1016,107 +1077,60 @@ const createBackupShareLink = async (blob: ShareableData): Promise<string | null
   }
 }
 
-// Public: kick off the anon→signed-in handoff. Idempotent — guarded by
-// cloudBootstrapped. Called from LineupBuilder.vue's onMounted after the
-// other restore paths have settled, and from the post-OAuth callback hook.
-const tryBootstrapCloudSync = async (): Promise<void> => {
-  if (cloudBootstrapped || bootstrapInFlight) return
-  const { isLoggedIn, user } = useAuth()
-  if (!isLoggedIn.value) return
-  if (!cloudSyncEnabled.value) {
-    markBootstrapped() // remember so toggling sync back on doesn't re-prompt
-    return
-  }
-  const userId = user.value?.id
-  if (!userId) return // shouldn't happen given isLoggedIn — defensive
+// Every group here has its row and every row its group, the same on both.
+const localEqualsRows = (rows: CloudLineupGroup[]): boolean => {
+  const local = new Map(shareableGroupsInBlob(buildBlob(false)).map((g) => [g.id, g as PushableGroup]))
+  return local.size === rows.length && rows.every((r) => {
+    const g = local.get(r.client_id ?? r.id)
+    return g !== undefined && rowMatchesLocal(g, r)
+  })
+}
 
-  // Hydrate still-pristine workspaces first — setCloudSyncEnabled can
-  // re-bootstrap without LineupBuilder ever mounting.
-  restoreFromLocalStorage()
-  seedHeldGroups()
+const localHoldsNothing = (): boolean =>
+  shareableGroupsInBlob(buildBlob(false)).every(isUntouchedShareableGroup)
 
-  // Fast-path emptiness is sampled NOW (sync). The 2x2 re-samples after
-  // the list await so a wipe/edit during the fetch is not decided on a
-  // stale empty flag. We read groups directly (not via buildBlob) so the
-  // read-only decision doesn't pollute the cross-tab gen counter.
-  const { workspaces } = useGroups()
-  const localActuallyEmpty = CATALOG_MODES.every((m) =>
-    isEmptyGroupSet(workspaces[m].groups),
-  )
-
-  // Fast path: this device + user has been bootstrapped before AND local
-  // still has actual content AND every non-empty workspace overlaps the
-  // persisted meta map. Restore the cloud meta so subsequent PATCHes carry
-  // the optimistic-lock preconditions we last observed; skip the 2x2 /
-  // merge dialog entirely. If a competing device pushed while we were
-  // offline, the next push hits a precondition mismatch and surfaces the
-  // conflict dialog naturally.
-  //
-  // We REQUIRE non-empty local for the fast path. With empty local, the
-  // "local == cloud" invariant the fast path assumes is broken: either the
-  // user wiped local (reset, browser data clear) while signed out, OR
-  // localStorage never got the post-cloud-fetch write. In either case we
-  // must fall through to the full 2x2, otherwise the empty local would
-  // silently overwrite cloud on the next autosave push.
-  //
-  // A workspace whose live ids are disjoint from the persisted map (v5
-  // share restore mints ids in the active mode only) is a 2x2/merge case
-  // — otherwise the other mode's overlap would skip the prompt and the
-  // next push stale-deletes the replaced mode's cloud 編組. Genuine
-  // per-group deletes still overlap via remaining ids, so stale-delete
-  // after a real bootstrap is unchanged.
+// The fast path: this session has been bootstrapped here before, local holds
+// something, and every workspace holding something overlaps the persisted map.
+// Restore the meta so PATCHes carry the locks last observed, and skip the 2x2.
+// A competing device's push surfaces at the next PATCH as a conflict.
+//
+// Local holding nothing breaks the "local == cloud" invariant: either the user
+// wiped it, or storage never got the post-fetch write. Without this requirement
+// the empty local would silently overwrite cloud on the next push.
+//
+// A workspace with no overlap was replaced (a v5 share restore mints ids in the
+// active mode only): a 2x2/merge case, or the next push would stale-delete the
+// replaced mode's rows. Genuine per-group deletes still overlap via remaining ids.
+const tryFastPath = (userId: string): boolean => {
   const persisted = loadPersistedCloudMeta(userId)
-  if (persisted && !localActuallyEmpty) {
-    const everyNonEmptyOverlaps = CATALOG_MODES.every((m) => {
-      const groups = workspaces[m].groups
-      if (isEmptyGroupSet(groups)) return true
-      return groups.some((g) => Boolean(g.id && persisted[g.id]))
-    })
-    if (everyNonEmptyOverlaps) {
-      cloudGroupsByClientId.clear()
-      for (const [clientId, m] of Object.entries(persisted)) {
-        cloudGroupsByClientId.set(clientId, m)
-      }
-      cloudStatus.value = 'idle'
-      markBootstrapped()
-      return
-    }
+  if (!persisted || localHoldsNothing()) return false
+  const blob = buildBlob(false)
+  const everyWorkspaceOverlaps = CATALOG_MODES.every((m) => {
+    const groups = blob.workspaces?.[m]?.groups ?? []
+    return groups.every(isUntouchedShareableGroup) || groups.some((g) => Boolean(g.id && persisted[g.id]))
+  })
+  if (!everyWorkspaceOverlaps) return false
+  cloudGroupsByClientId.clear()
+  for (const [clientId, m] of Object.entries(persisted)) {
+    cloudGroupsByClientId.set(clientId, m)
   }
+  cloudStatus.value = 'idle'
+  markBootstrapped()
+  return true
+}
 
-  // Cold start (or local-wiped re-bootstrap). Run the 2x2.
-  const gen = bootstrapGeneration
-  bootstrapFlightGen = gen
-  bootstrapInFlight = true
-  cloudStatus.value = 'syncing'
-  let cloudRows: CloudLineupGroup[]
-  try {
-    cloudRows = await listMyLineupGroups()
-  } catch (e) {
-    console.warn('[cloud-sync] bootstrap list failed:', e)
-    cloudStatus.value = 'offline'
-    if (bootstrapFlightGen === gen) bootstrapInFlight = false
-    // Leave cloudBootstrapped false so a later `persisted` can retry.
-    return
-  }
+// The schema forces `teams` to be an array, not what it holds. Everything past the
+// list, the dialog's rendering included, reads each entry as a team.
+const assertReadableRows = (rows: CloudLineupGroup[]): void => {
+  const readable = rows.every((r) => r.teams.every((t) => typeof t === 'object' && t !== null))
+  if (!readable) throw new Error('malformed lineup_groups row')
+}
 
-  if (gen !== bootstrapGeneration && !skipCloudHydrate) {
-    // Stale flight (logout / disable). Do not latch — next sign-in must 2x2.
-    // Drop the mutex only if this flight still owns it; a newer sign-in
-    // may have already set inFlight for a newer gen.
-    cloudStatus.value = 'idle'
-    if (bootstrapFlightGen === gen) bootstrapInFlight = false
-    return
-  }
-
-  const localEmptyNow = CATALOG_MODES.every((m) =>
-    isEmptyGroupSet(workspaces[m].groups),
-  )
-
-  // Empty-check the cloud side: a cloud row with only empty teams counts
-  // as empty — that data is dead weight and shouldn't force a merge dialog.
-  const cloudActuallyEmpty = cloudRows.every(
-    (r) => r.teams.every(isEmptyShareableLineup),
-  )
+// What the list says, on the state as it is now. Throws on a row it cannot read.
+const settleBootstrap = async (userId: string, cloudRows: CloudLineupGroup[], gen: number): Promise<void> => {
+  assertReadableRows(cloudRows)
+  const localEmptyNow = localHoldsNothing()
+  const cloudActuallyEmpty = cloudHoldsNothing(cloudRows)
 
   if (skipCloudHydrate) {
     // User wiped this session (possibly during the fetch). Keep local;
@@ -1130,6 +1144,7 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     // Latch the map before the wipe push so stale-delete is allowed, but
     // do not markBootstrapped yet — that would flush a parallel second push.
     cloudBootstrapped = true
+    agreedWithCloud = true
     const blob = buildBlob()  // live state, includes hero added during the wait
     pendingCloudBlob = null
     try {
@@ -1142,6 +1157,18 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     return
   }
 
+  if (localEqualsRows(cloudRows)) {
+    // Same on both sides, as after a sign-out and back with nothing changed.
+    // Nothing to decide, and nothing is written.
+    cloudGroupsByClientId.clear()
+    for (const r of cloudRows) recordCloudRow(r.client_id ?? r.id, r)
+    recordLiveHashes()
+    cloudStatus.value = 'idle'
+    syncCloudMetaToStorage()
+    markBootstrapped()
+    return
+  }
+
   if (localEmptyNow && cloudActuallyEmpty) {
     // Both empty — silent no-op. Persist an empty meta so reloads take the
     // fast path above.
@@ -1151,7 +1178,7 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     return
   }
 
-  if (localEmptyNow && !cloudActuallyEmpty) {
+  if (localEmptyNow) {
     // Silent apply: cloud → local. applyCloudRowsToLocal populates the meta
     // map; persist it so the next reload takes the fast path. flushLocalAutosave
     // also writes the freshly-applied groups to localStorage immediately —
@@ -1164,42 +1191,73 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
     return
   }
 
-  if (!localEmptyNow && cloudActuallyEmpty) {
-    // Silent upload: local → cloud. buildBlob here is the actual write — it
-    // owns the gen bump because we'll be persisting these groups to cloud.
-    const localBlob = buildBlob()
-    const localInputs = shareableGroupsInBlob(localBlob).map((g, i) => ({
-      client_id: g.id,
-      name: g.name,
-      teams: g.teams,
-      sort_order: i,
-    }))
-    try {
-      const created = await bulkCreateLineupGroups(localInputs)
-      for (const r of created) recordCloudRow(r.client_id ?? r.id, r, rowContentHash(r))
-      cloudStatus.value = 'idle'
-      syncCloudMetaToStorage()
-      markBootstrapped()
-      // Rows that collided with an existing row are missing from the result.
-      // Push again so those groups go through the INSERT path, which compares
-      // content before it takes over an existing row.
-      // An edit made during the upload is newer and already queued.
-      if (created.length < localInputs.length) scheduleCloudPush(pendingCloudBlob ?? localBlob)
-    } catch (e) {
-      console.warn('[cloud-sync] bulk upload failed:', e)
-      cloudStatus.value = 'offline'
-      if (bootstrapFlightGen === gen) bootstrapInFlight = false
-    }
+  // A sibling tab may have decided while this one listed.
+  if (tryFastPath(userId)) return
+
+  // Local holds something and no trusted meta says whose: explicit user choice,
+  // whatever the cloud holds. It may be another account's work. ctx snapshot
+  // only — the actual writes happen inside the resolveMerge* handlers.
+  cloudMerge.value = { localBlob: buildBlob(false), cloudRows, localOwner: localOwnerFor(userId) }
+  cloudStatus.value = 'idle'
+  if (bootstrapFlightGen === gen) bootstrapInFlight = false
+}
+
+// Public: kick off the anon→signed-in handoff. Idempotent — guarded by
+// cloudBootstrapped, and an open dialog keeps its snapshot. Called from
+// LineupBuilder.vue's onMounted after the other restore paths have settled,
+// and from the post-OAuth callback hook.
+const tryBootstrapCloudSync = async (): Promise<void> => {
+  if (cloudBootstrapped || bootstrapInFlight || cloudMerge.value) return
+  const { isLoggedIn, user } = useAuth()
+  if (!isLoggedIn.value) return
+  const userId = user.value?.id
+  if (!userId || userId !== getSession()?.user.id) return // no user, or the ref is behind a sibling tab's sign-in
+  running = { account: userId, session: currentSessionId() }
+  agreedWithCloud = false
+  if (!cloudSyncEnabled.value) {
+    markBootstrapped() // remember so toggling sync back on doesn't re-prompt
     return
   }
 
-  // Both non-empty — needs explicit user choice. Dialog resolver handlers
-  // call syncCloudMetaToStorage on success. ctx snapshot only — the actual
-  // writes happen inside the resolveMerge* handlers and bump gen there.
-  const localBlob = buildBlob(false)
-  cloudMerge.value = { localBlob, cloudRows }
-  cloudStatus.value = 'idle'
-  if (bootstrapFlightGen === gen) bootstrapInFlight = false
+  // Hydrate still-pristine workspaces first — setCloudSyncEnabled can
+  // re-bootstrap without LineupBuilder ever mounting.
+  restoreFromLocalStorage()
+  seedHeldGroups()
+  if (tryFastPath(userId)) return
+
+  // Cold start (or local-wiped re-bootstrap). Run the 2x2.
+  const gen = bootstrapGeneration
+  bootstrapFlightGen = gen
+  bootstrapInFlight = true
+  cloudStatus.value = 'syncing'
+  let cloudRows: CloudLineupGroup[]
+  try {
+    cloudRows = await listMyLineupGroups(userId)
+  } catch (e) {
+    console.warn('[cloud-sync] bootstrap list failed:', e)
+    cloudStatus.value = 'offline'
+    if (bootstrapFlightGen === gen) bootstrapInFlight = false
+    // Leave cloudBootstrapped false so a later `persisted` can retry.
+    return
+  }
+
+  if ((gen !== bootstrapGeneration && !skipCloudHydrate) || sessionMoved()) {
+    // Stale flight (logout / disable / another session). Do not latch — next sign-in must 2x2.
+    // Drop the mutex only if this flight still owns it; a newer sign-in
+    // may have already set inFlight for a newer gen.
+    cloudStatus.value = 'idle'
+    if (bootstrapFlightGen === gen) bootstrapInFlight = false
+    return
+  }
+
+  try {
+    await settleBootstrap(userId, cloudRows, gen)
+  } catch (e) {
+    // A row that cannot be read. No latch: a later `persisted` or reload retries.
+    console.warn('[cloud-sync] cloud rows could not be applied:', e)
+    cloudStatus.value = 'error'
+    if (bootstrapFlightGen === gen) bootstrapInFlight = false
+  }
 }
 
 // Merge-dialog resolutions ---------------------------------------------
@@ -1207,78 +1265,210 @@ const tryBootstrapCloudSync = async (): Promise<void> => {
 export interface MergeResolutionResult {
   kind: 'keep-cloud' | 'keep-local' | 'append' | 'cancel'
   backupSlug?: string | null
+  /** The side to be discarded could not be saved as a share. Nothing changed; the dialog stays. */
+  backupFailed?: boolean
+  /** The rows are not those the dialog showed. Nothing changed; it now shows them, for the user to choose again. */
+  cloudMoved?: boolean
 }
 
-const resolveMergeKeepCloud = async (): Promise<MergeResolutionResult> => {
+type MergeContext = NonNullable<typeof cloudMerge.value>
+type MergeChoice = 'keep-cloud' | 'keep-local' | 'append'
+
+export const mergeCloudHoldsNothing = cloudHoldsNothing
+
+// Keep-cloud over an empty account would only wipe this device.
+export const offeredMergeChoices = (rows: CloudLineupGroup[]): MergeChoice[] =>
+  cloudHoldsNothing(rows) ? ['append', 'keep-local'] : ['append', 'keep-cloud', 'keep-local']
+
+// One click must neither upload another account's groups nor replace this user's
+// own newer work, so a side is only preselected when the owner of local says which.
+export const defaultMergeChoice = (ctx: Pick<MergeContext, 'cloudRows' | 'localOwner'>): MergeChoice | null => {
+  if (ctx.localOwner === 'this') return 'append'
+  if (ctx.localOwner === 'unknown') return null
+  return cloudHoldsNothing(ctx.cloudRows) ? null : 'keep-cloud'
+}
+
+// When the rows change under an open dialog: a choice still offered stays.
+export const nextMergeChoice = (
+  current: MergeChoice | null,
+  ctx: Pick<MergeContext, 'cloudRows' | 'localOwner'>,
+): MergeChoice | null =>
+  current && offeredMergeChoices(ctx.cloudRows).includes(current) ? current : defaultMergeChoice(ctx)
+
+const versionsOf = (rows: CloudLineupGroup[]): string =>
+  rows.map((r) => `${r.id}@${r.updated_at}`).sort().join()
+
+// A sibling tab's decision is this tab's too. It shows as a trusted meta other
+// than the one this tab saw when it asked. Local comes along: what the sibling
+// decided is in storage, and this tab did not take it in while the prompt was up.
+const followSiblingDecision = (): void => {
+  const userId = running?.account
+  if (!userId || (!cloudMerge.value && !cloudMergeDeferred.value)) return
+  const seen = lastSeenMetaRaw
+  const rows = loadPersistedCloudMeta(userId)
+  if (!rows || lastSeenMetaRaw === seen) return
+  cloudMerge.value = null
+  cloudMergeDeferred.value = false
+  suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
+  applyBlobFromStorage()
+  cloudGroupsByClientId.clear()
+  for (const [clientId, meta] of Object.entries(rows)) cloudGroupsByClientId.set(clientId, meta)
+  cloudStatus.value = 'idle'
+  markBootstrapped()
+}
+
+let resolving = false
+
+// The frame of a decision: one at a time, and only on the rows the user saw, since
+// the dialog can sit open while another client writes. Rows that moved are shown
+// instead and decide nothing; only the next click can go on. `step` wraps every
+// await of the work: a sign-in elsewhere, a sibling's decision or a sign-out ends it.
+const decide = async (
+  work: (
+    ctx: MergeContext,
+    rows: CloudLineupGroup[],
+    step: <T>(answer: T) => T,
+    owner: string,
+  ) => Promise<MergeResolutionResult>,
+): Promise<MergeResolutionResult> => {
+  followSiblingDecision()
   const ctx = cloudMerge.value
-  if (!ctx) return { kind: 'cancel' }
+  const mine = running
+  if (!ctx || !mine || resolving || sessionMoved()) return { kind: 'cancel' }
+  resolving = true
   cloudStatus.value = 'syncing'
+  const step = <T>(answer: T): T => {
+    if (cloudMerge.value !== ctx) throw new SessionMovedError()
+    return live(mine, answer)
+  }
+  try {
+    const rows = step(await listMyLineupGroups(mine.account))
+    assertReadableRows(rows)
+    if (versionsOf(rows) !== versionsOf(ctx.cloudRows)) {
+      ctx.cloudRows = rows
+      cloudStatus.value = 'idle'
+      return { kind: 'cancel', cloudMoved: true }
+    }
+    // A sibling's save held back from this tab while the prompt was up: what
+    // follows backs up or replaces local, so it counts.
+    if (storedBlobIsUnseen()) {
+      suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
+      applyBlobFromStorage()
+    }
+    return await work(ctx, rows, step, mine.account)
+  } catch (e) {
+    console.warn('[cloud-sync] merge decision failed:', e)
+    if (cloudMerge.value === ctx) cloudStatus.value = isSessionEnd(e) ? 'idle' : 'error'
+    return { kind: 'cancel' }
+  } finally {
+    resolving = false
+  }
+}
 
-  // Safety net: stash the local data as a backup share link so the user
-  // can recover if they realize this was the wrong choice.
-  const backupSlug = await createBackupShareLink(ctx.localBlob)
+const backupFailed = (): MergeResolutionResult => {
+  cloudStatus.value = 'error'
+  return { kind: 'cancel', backupFailed: true }
+}
 
-  applyCloudRowsToLocal(ctx.cloudRows)
+const endMerge = (): void => {
   cloudMerge.value = null
   cloudStatus.value = 'idle'
   syncCloudMetaToStorage()
   flushLocalAutosave()
   markBootstrapped()
-  return { kind: 'keep-cloud', backupSlug }
 }
 
-const resolveMergeKeepLocal = async (): Promise<MergeResolutionResult> => {
-  const ctx = cloudMerge.value
-  if (!ctx) return { kind: 'cancel' }
-  cloudStatus.value = 'syncing'
+const inputsOf = (blob: ShareableData) =>
+  shareableGroupsInBlob(blob).map((g, i) => ({
+    client_id: g.id,
+    name: g.name,
+    teams: g.teams,
+    sort_order: i,
+  }))
 
-  // Backup the cloud state as a share link before destroying it.
-  const cloudBlob = cloudRowsToBlob(ctx.cloudRows)
-  const backupSlug = await createBackupShareLink(cloudBlob)
-
-  // Snapshot the local state RIGHT NOW — same rationale as
-  // resolveMergeAppend: the dialog can sit open for minutes; the user's
-  // intent on "keep local" is to push their CURRENT local state to cloud,
-  // not the bootstrap-time snapshot in ctx.localBlob.
-  const freshLocalBlob = buildBlob()
-
-  // Delete all cloud rows, then bulk-create from local.
-  try {
-    for (const r of ctx.cloudRows) {
-      try {
-        await deleteLineupGroup(r.id)
-      } catch (e) {
-        console.warn('[cloud-sync] delete row during overwrite failed:', e)
-      }
+const resolveMergeKeepCloud = (): Promise<MergeResolutionResult> =>
+  decide(async (_ctx, rows, step) => {
+    // Nothing to adopt: it would only wipe this device.
+    if (cloudHoldsNothing(rows)) {
+      cloudStatus.value = 'idle'
+      return { kind: 'cancel' }
     }
-    const localInputs = shareableGroupsInBlob(freshLocalBlob).map((g, i) => ({
-      client_id: g.id,
-      name: g.name,
-      teams: g.teams,
-      sort_order: i,
-    }))
-    const created = await bulkCreateLineupGroups(localInputs)
-    cloudGroupsByClientId.clear()
-    for (const r of created) recordCloudRow(r.client_id ?? r.id, r, rowContentHash(r))
-    // Defensive: deleteLineupGroup above is best-effort (errors are swallowed),
-    // so a stray surviving cloud row could collide with our insert and be
-    // missing from the result. Re-list cloud to fill any missing meta.
-    if (created.length < localInputs.length) {
-      await hydrateMapFromCloud()
-      markAbsentRowsRemoved()
-    }
-    cloudMerge.value = null
-    cloudStatus.value = 'idle'
-    syncCloudMetaToStorage()
-    flushLocalAutosave()
-    markBootstrapped()
-    return { kind: 'keep-local', backupSlug }
-  } catch (e) {
-    console.warn('[cloud-sync] keep-local failed:', e)
-    cloudStatus.value = 'error'
-    return { kind: 'cancel' }
+    // Safety net: stash the local data as it is now as a backup share link so the
+    // user can recover if they realize this was the wrong choice. No backup, no discard.
+    const backupSlug = step(await createBackupShareLink(buildBlob(false)))
+    if (!backupSlug) return backupFailed()
+    applyCloudRowsToLocal(rows)
+    endMerge()
+    return { kind: 'keep-cloud', backupSlug }
+  })
+
+// A local group that has its row takes it over in place, under the lock of the
+// version the backup holds. A row changed since stays, and the next push raises
+// the conflict. Throws: the dialog stays.
+const overwriteRow = async (
+  ctx: MergeContext,
+  row: CloudLineupGroup,
+  input: ReturnType<typeof inputsOf>[number],
+  step: <T>(answer: T) => T,
+  owner: string,
+): Promise<void> => {
+  const clientId = input.client_id!
+  const hash = groupContentHash(input.name, input.teams)
+  if (rowContentHash(row) === hash && row.sort_order === input.sort_order) {
+    recordCloudRow(clientId, row, hash)
+    return
+  }
+  const result = step(await patchLineupGroupWithLock(owner, row.id, row.updated_at, input))
+  if (result.kind === 'error') throw new Error(result.message)
+  if (result.kind === 'deleted') cloudGroupsByClientId.delete(clientId)
+  if (result.kind === 'ok') {
+    recordCloudRow(clientId, result.row, hash)
+    ctx.cloudRows = ctx.cloudRows.map((shown) => (shown.id === row.id ? result.row : shown))
   }
 }
+
+// Local goes up before anything comes down, so the account is never empty in the
+// middle of a choice and a failure leaves its rows in place. What went up joins
+// what the dialog shows: after a failure, this client's own rows are not another
+// client's move.
+const uploadLocal = async (
+  ctx: MergeContext,
+  rows: CloudLineupGroup[],
+  step: <T>(answer: T) => T,
+  owner: string,
+): Promise<void> => {
+  const inputs = inputsOf(buildBlob())
+  const rowOf = new Map(rows.map((r) => [r.client_id ?? r.id, r]))
+  const created = step(await bulkCreateLineupGroups(owner, inputs.filter((input) => !rowOf.has(input.client_id!))))
+  ctx.cloudRows = [...ctx.cloudRows, ...created]
+  cloudGroupsByClientId.clear()
+  for (const r of rows) recordCloudRow(r.client_id ?? r.id, r)
+  for (const r of created) recordCloudRow(r.client_id ?? r.id, r, rowContentHash(r))
+  for (const input of inputs) {
+    const row = rowOf.get(input.client_id!)
+    if (row) await overwriteRow(ctx, row, input, step, owner)
+  }
+}
+
+// The rows local does not hold are marked for the push, which deletes them under
+// their locks once all of this has held. A failure hands back the backup: some
+// rows may be overwritten already.
+const resolveMergeKeepLocal = (): Promise<MergeResolutionResult> =>
+  decide(async (ctx, rows, step, owner) => {
+    const nothingToLose = cloudHoldsNothing(rows)
+    const backupSlug = nothingToLose ? undefined : step(await createBackupShareLink(cloudRowsToBlob(rows)))
+    if (backupSlug === null) return backupFailed()
+    try {
+      await uploadLocal(ctx, rows, step, owner)
+    } catch (e) {
+      console.warn('[cloud-sync] keep-local failed:', e)
+      if (cloudMerge.value === ctx) cloudStatus.value = 'error'
+      return { kind: 'cancel', backupSlug }
+    }
+    markAbsentRowsRemoved()
+    endMerge()
+    return { kind: 'keep-local', backupSlug }
+  })
 
 // Append cloud groups after local, per workspace. Capped at 20 per mode so
 // merging never drops the other workspace to make room.
@@ -1303,63 +1493,51 @@ const appendWorkspaceGroups = (
   return { merged: [...localRenamed, ...adopted], adopted }
 }
 
-const resolveMergeAppend = async (): Promise<MergeResolutionResult> => {
-  const ctx = cloudMerge.value
-  if (!ctx) return { kind: 'cancel' }
-  cloudStatus.value = 'syncing'
-
-  // Snapshot the local state RIGHT NOW (not at bootstrap time). The dialog
-  // can sit open for minutes; any local edits the user made while the dialog
-  // was visible would be lost if we used ctx.localBlob (the bootstrap-time
-  // snapshot). ctx.localBlob is still kept as the backup-share-link target.
-  const freshLocalBlob = buildBlob()
-  // Split by id prefix only — do NOT run the v4 "copy into both" migration
-  // here. Unprefixed cloud rows belong to 庫存; duplicating them into 自由
-  // would clone teams the local v5 workspace already has.
-  const cloudSplit = splitCloudRowsByWorkspace(ctx.cloudRows)
-  const adopted: ShareableGroup[] = []
-  const mergedWorkspaces = {} as NonNullable<ShareableData['workspaces']>
-  for (const mode of CATALOG_MODES) {
-    const localGroups = freshLocalBlob.workspaces?.[mode]?.groups ?? []
-    const localIds = new Set(localGroups.map((g) => g.id))
-    const cloudGroups = cloudSplit[mode].filter((g) => !localIds.has(g.id))
-    const result = appendWorkspaceGroups(localGroups, cloudGroups)
-    adopted.push(...result.adopted)
-    mergedWorkspaces[mode] = {
-      active_group_index: freshLocalBlob.workspaces?.[mode]?.active_group_index ?? 0,
-      active_team_index: freshLocalBlob.workspaces?.[mode]?.active_team_index,
-      groups: result.merged,
+const resolveMergeAppend = (): Promise<MergeResolutionResult> =>
+  decide(async (_ctx, rows) => {
+    // Local as it is now: the dialog can sit open for minutes.
+    const freshLocalBlob = buildBlob()
+    // Split by id prefix only — do NOT run the v4 "copy into both" migration
+    // here. Unprefixed cloud rows belong to 庫存; duplicating them into 自由
+    // would clone teams the local v5 workspace already has.
+    const cloudSplit = splitCloudRowsByWorkspace(rows)
+    const adopted: ShareableGroup[] = []
+    const mergedWorkspaces = {} as NonNullable<ShareableData['workspaces']>
+    for (const mode of CATALOG_MODES) {
+      const localGroups = freshLocalBlob.workspaces?.[mode]?.groups ?? []
+      const localIds = new Set(localGroups.map((g) => g.id))
+      const cloudGroups = cloudSplit[mode].filter((g) => !localIds.has(g.id))
+      const result = appendWorkspaceGroups(localGroups, cloudGroups)
+      adopted.push(...result.adopted)
+      mergedWorkspaces[mode] = {
+        active_group_index: freshLocalBlob.workspaces?.[mode]?.active_group_index ?? 0,
+        active_team_index: freshLocalBlob.workspaces?.[mode]?.active_team_index,
+        groups: result.merged,
+      }
     }
-  }
 
-  const merged: ShareableData = {
-    v: 5,
-    inv_h: freshLocalBlob.inv_h,
-    inv_s: freshLocalBlob.inv_s,
-    workspaces: mergedWorkspaces,
-  }
+    suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
+    applyBlobToLiveState({
+      v: 5,
+      inv_h: freshLocalBlob.inv_h,
+      inv_s: freshLocalBlob.inv_s,
+      workspaces: mergedWorkspaces,
+    })
 
-  suppressWritesUntil = Date.now() + SUPPRESS_WINDOW_MS
-  applyBlobToLiveState(merged)
-
-  // Seed the meta map for the cloud rows we just adopted. They now sit after
-  // the local groups, so they get no hash and the next push rewrites sort_order.
-  // The local ones will INSERT on the next pushBlobToCloud (no meta entry →
-  // createLineupGroup path). A local group whose id already exists in the cloud
-  // was filtered out above, so that INSERT raises a conflict if content differs.
-  // Match by client_id against the original cloud rows.
-  const adoptedIds = new Set(adopted.map((g) => g.id))
-  for (const r of ctx.cloudRows) {
-    const clientId = r.client_id ?? r.id
-    if (adoptedIds.has(clientId)) recordCloudRow(clientId, r)
-  }
-  cloudMerge.value = null
-  cloudStatus.value = 'idle'
-  syncCloudMetaToStorage()
-  flushLocalAutosave()
-  markBootstrapped()
-  return { kind: 'append' }
-}
+    // Seed the meta map for the cloud rows we just adopted. They now sit after
+    // the local groups, so they get no hash and the next push rewrites sort_order.
+    // The local ones will INSERT on the next push (no meta entry → createLineupGroup
+    // path). A local group whose id already exists in the cloud was filtered out
+    // above, so that INSERT raises a conflict if content differs.
+    const adoptedIds = new Set(adopted.map((g) => g.id))
+    cloudGroupsByClientId.clear()
+    for (const r of rows) {
+      const clientId = r.client_id ?? r.id
+      if (adoptedIds.has(clientId)) recordCloudRow(clientId, r)
+    }
+    endMerge()
+    return { kind: 'append' }
+  })
 
 const resolveMergeCancel = (): void => {
   cloudMerge.value = null
@@ -1427,7 +1605,8 @@ const resolveConflictUseServer = async (): Promise<void> => {
 
 const resolveConflictForceOverwrite = async (): Promise<void> => {
   const ctx = cloudConflict.value
-  if (!ctx) return
+  const mine = running
+  if (!ctx || !mine) return
   cloudStatus.value = 'syncing'
 
   // Find the current local group (post-edit) and push it without the lock.
@@ -1443,7 +1622,7 @@ const resolveConflictForceOverwrite = async (): Promise<void> => {
   const teams = localGroup.teams.map((t) => serializer.serializeLineup(t))
   reloadCloudMetaFromStorage()
   try {
-    const row = await patchLineupGroupForce(ctx.serverRow.id, { name: localGroup.name, teams })
+    const row = live(mine, await patchLineupGroupForce(mine.account, ctx.serverRow.id, { name: localGroup.name, teams }))
     // A row deleted in the meantime has no meta, so the push below inserts it.
     if (row) recordCloudRow(ctx.localGroupId, row, groupContentHash(localGroup.name, teams))
     else cloudGroupsByClientId.delete(ctx.localGroupId)
@@ -1485,6 +1664,7 @@ const setCloudSyncEnabled = (v: boolean): void => {
     // Bump generation so an in-flight 2x2 cannot apply; do not clear
     // bootstrapInFlight — the aborted continuation drops the mutex.
     bootstrapGeneration += 1
+    agreedWithCloud = false
     cloudGroupsByClientId.clear()
     cloudBootstrapped = false
     cancelPendingCloudPush()
@@ -1504,31 +1684,36 @@ let postMountReady = false
 // Subscribe to auth events once at module load. signed-out / expired must
 // disable cloud-sync state but NEVER touch localStorage — the user's local
 // data has to survive sign-out per the brief.
+const endCloudSession = (): void => {
+  bootstrapGeneration += 1
+  running = null
+  agreedWithCloud = false
+  skipCloudHydrate = false  // next sign-in may hydrate
+  cloudGroupsByClientId.clear()
+  cloudBootstrapped = false
+  bootstrapInFlight = false
+  cloudConflict.value = null
+  cloudMerge.value = null
+  cloudMergeDeferred.value = false
+  missedSiblingSave = false
+  cloudStatus.value = 'idle'
+  // A queued blob belongs to the session that ended: dead token, or the wrong
+  // account. (signed-out already flushed it in AppLayout's handler.)
+  cancelPendingCloudPush()
+  // Don't flip cloudSyncEnabled — the user's preference survives a
+  // session round trip. Next sign-in re-bootstraps.
+}
+
 onSessionEvent((e) => {
   if (e === 'expired' || e === 'signed-out') {
-    bootstrapGeneration += 1
-    skipCloudHydrate = false  // next sign-in may hydrate
-    cloudGroupsByClientId.clear()
-    cloudBootstrapped = false
-    bootstrapInFlight = false
-    cloudConflict.value = null
-    cloudMerge.value = null
-    cloudMergeDeferred.value = false
-    missedSiblingSave = false
-    cloudStatus.value = 'idle'
+    endCloudSession()
     // Invalidate persisted meta — once signed out, the "local == cloud"
     // invariant no longer holds (user can reset, edit, etc., off-line).
     // Forces the next sign-in through the full 2x2 instead of fast-path.
     clearPersistedCloudMeta()
-    if (e === 'expired') {
-      // Token is dead — drop any pending push instead of letting the
-      // setTimeout tick fire it and 401 silently. (signed-out is already
-      // covered by flushPendingCloudPush() in AppLayout's handler.)
-      cancelPendingCloudPush()
-    }
-    // Don't flip cloudSyncEnabled — the user's preference survives a
-    // session round trip. Next sign-in re-bootstraps.
   } else if (e === 'persisted') {
+    // A token refresh keeps its session; anything else here is another sign-in.
+    if (sessionMoved()) endCloudSession()
     // Post-OAuth callback fires this once the new token lands. If onMounted
     // has already finished, run bootstrap now (the user just signed in and
     // is sitting on the page); otherwise defer to enableAutosave's latch.
@@ -1628,6 +1813,7 @@ const enableAutosave = (): void => {
         | undefined
       if (!msg || msg.type !== 'saved') return
       if (msg.device_id !== ourDeviceId) return
+      followSiblingDecision()
       if (msg.gen <= localGen) return
       // While a merge / conflict / import dialog is open, ignore cross-tab
       // updates — the dialog's snapshot (capacity calc, hydrated teams,

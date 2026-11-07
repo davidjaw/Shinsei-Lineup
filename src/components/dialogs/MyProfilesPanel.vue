@@ -191,9 +191,8 @@ import {
 } from '../../lib/profiles'
 import { getOrCreateProfileShareSlug } from '../../composables/useProfiles'
 import { relativeTime } from '../../lib/time'
-import { loadShare } from '../../lib/share'
+import { loadShareSource } from '../../lib/share'
 import { makeSerializer } from '../../lib/lineupSerialize'
-import { normalizeHash } from '../../lib/initial-hash'
 import { useData } from '../../composables/useData'
 import { useInventory } from '../../composables/useInventory'
 import { useActiveProfile } from '../../composables/useActiveProfile'
@@ -386,16 +385,6 @@ const openImportDialog = () => {
   importDialogVisible.value = true
 }
 
-const parseShareInput = (input: string): { slug?: string; base64?: string } => {
-  let payload = input.trim()
-  const hashIdx = payload.indexOf('#')
-  if (hashIdx >= 0) payload = payload.slice(hashIdx + 1)
-  payload = normalizeHash(payload)
-  if (!payload) throw new Error('連結為空')
-  if (payload.startsWith('s/')) return { slug: payload.slice(2) }
-  return { base64: payload }
-}
-
 interface ShareBlobLike {
   inv_h?: unknown
   inv_s?: unknown
@@ -415,14 +404,8 @@ const submitImport = async () => {
   }
   importLoading.value = true
   try {
-    const parsed = parseShareInput(url)
-    let blob: ShareBlobLike
-    if (parsed.slug) {
-      blob = (await loadShare(parsed.slug)) as ShareBlobLike
-    } else {
-      const json = decodeURIComponent(escape(atob(parsed.base64!)))
-      blob = JSON.parse(json) as ShareBlobLike
-    }
+    const blob = await loadShareSource(url) as ShareBlobLike | null
+    if (!blob) throw new Error('無法辨識的分享連結')
     const inv_h = Array.isArray(blob.inv_h) ? blob.inv_h.filter((x): x is string => typeof x === 'string')
       : Array.isArray(blob.inventory) ? blob.inventory.filter((x): x is string => typeof x === 'string')
       : []

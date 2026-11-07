@@ -205,7 +205,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElInput } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
-import { loadShare, isShareEnabled } from '../../lib/share'
+import { loadShareSource, parseShareInput, isShareEnabled } from '../../lib/share'
 import { hydrateShareableTeam, shareableGroupsForMode } from '../../lib/lineupSerialize'
 import { useData } from '../../composables/useData'
 import { useGroups } from '../../composables/useGroups'
@@ -359,15 +359,6 @@ const canImport = computed(() => {
   return true
 })
 
-// Strip URL noise so the user can paste a full link — we look for the last
-// `s/` segment, which is the share-route prefix in the SPA router.
-const extractSlug = (input: string): string => {
-  const trimmed = input.trim()
-  const idx = trimmed.lastIndexOf('s/')
-  if (idx >= 0) return trimmed.slice(idx + 2).split(/[?#]/)[0]
-  return trimmed.split(/[?#]/)[0]
-}
-
 const isGachaLogBlob = (blob: unknown): boolean => {
   const b = blob as { kind?: string } | null
   return !!b && b.kind === 'gacha_log'
@@ -414,8 +405,7 @@ const existingNames = computed(() => new Set(groups.value.map((g) => g.name)))
 
 const onLoad = async () => {
   if (!canLoad.value) return
-  const slug = extractSlug(rawInput.value)
-  if (!slug) {
+  if (!parseShareInput(rawInput.value)) {
     errorMessage.value = '請輸入有效的連結或 slug'
     phase.value = 'error'
     return
@@ -423,7 +413,7 @@ const onLoad = async () => {
   phase.value = 'loading'
   let blob: unknown
   try {
-    blob = await loadShare(slug)
+    blob = await loadShareSource(rawInput.value)
   } catch (e) {
     const msg = (e as Error).message
     if (/not found/i.test(msg)) errorMessage.value = '找不到此分享內容（可能已被刪除）'

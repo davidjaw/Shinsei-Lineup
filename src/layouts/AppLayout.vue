@@ -111,7 +111,7 @@ import { makeSerializer } from '../lib/lineupSerialize'
 import {
   createProfile, updateProfileInventory, type Profile,
 } from '../lib/profiles'
-import { capAuthorName } from '../lib/displayName'
+import { capAuthorName, publicAuthorName } from '../lib/displayName'
 
 const route = useRoute()
 const router = useRouter()
@@ -318,6 +318,10 @@ const submitRename = async () => {
   const name = capAuthorName(renameInput.value)
   if (!name) {
     ElMessage.warning('名稱不可為空')
+    return
+  }
+  if (!publicAuthorName(name, user.value?.email)) {
+    ElMessage.warning('名稱不可與信箱帳號相同')
     return
   }
   renameSaving.value = true

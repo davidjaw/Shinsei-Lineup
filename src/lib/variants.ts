@@ -11,6 +11,8 @@
 
 import { SUPABASE_URL, fetchWithTimeout, isSupabaseConfigured, restHeaders } from './supabase'
 import { getSession, getValidAccessToken } from './auth'
+import { publicAuthorName } from './displayName'
+import { readStoredTeam } from './storedTeam'
 import type { Lineup } from '../composables/useLineups'
 
 export type VoteDirection = 1 | -1
@@ -113,7 +115,7 @@ const num = (v: number | string | null | undefined): number =>
 const rowToHeroSet = (row: HeroSetRowDB): HeroSetSummary => ({
   heroSetHash:      row.hero_set_hash,
   sampleVariantId:  row.sample_variant_id,
-  sampleTeam:       row.sample_team_blob as Lineup,
+  sampleTeam:       readStoredTeam(row.sample_team_blob),
   variantCount:     num(row.variant_count),
   totalVoteCount:   num(row.total_vote_count),
   totalUpvoteCount: num(row.total_upvote_count),
@@ -125,7 +127,7 @@ const rowToVariant = (row: VariantRowDB): Variant => ({
   id:                row.id,
   variantHash:       row.variant_hash,
   heroSetHash:       row.hero_set_hash,
-  team:              row.team_blob as Lineup,
+  team:              readStoredTeam(row.team_blob),
   firstAuthorId:     row.first_author,
   firstSubmittedAt:  row.first_submitted_at,
   voteCount:         row.vote_count,
@@ -230,7 +232,7 @@ export const submitVariant = async (
     headers: { ...restHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({
       p_team: team,
-      p_author_name: authorName,
+      p_author_name: publicAuthorName(authorName, getSession()?.user.email),
       p_team_name: teamName ?? null,
     }),
   })
