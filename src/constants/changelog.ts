@@ -39,6 +39,13 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.10',
+    date: '2026-11-12',
+    entries: [
+      { tag: 'data', text: '新增戰法「能鷹隱爪」「孤注一擲」' },
+    ],
+  },
+  {
     version: '0.5.9',
     date: '2026-11-12',
     entries: [
