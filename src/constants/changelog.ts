@@ -39,6 +39,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.9',
+    date: '2026-11-12',
+    entries: [
+      { tag: 'data', text: '新增武將佐佐成政、長宗我部國親、小早川秀包、土居清良，以及戰法「三階菅笠」「武士之鑑」「野之虎」「當機立斷」「雨夜手拍子」「風聲鶴唳」「南予智將」' },
+      { tag: 'data', text: '11/11 平衡調整：新生、天下御免、武田之赤備、鬼若子、智者樂水、深謀遠慮；前田慶次統率成長 1.28 → 1.66' },
+    ],
+  },
+  {
     version: '0.5.8',
     date: '2026-11-05',
     entries: [

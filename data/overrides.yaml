@@ -1,4 +1,54 @@
 skills:
+  新生:
+    # 11-11 balance patch: the 70% heal becomes the base effect (治療率 70%); 大將技 drops the condition and heals by
+    # 統率 while own troops are not the highest on the field.
+    description: 戰鬥中，使友軍群體（2人）造成傷害提高{var:outgoing_buff}（{scale:統率}）。 回合結束時，若敵方部隊總兵力首次低於{var:commander_threshold}，自身每回合行動時恢復兵力（治療率{var:heal_rate}，{scale:智略}）
+    commander_description: 恢復自身兵力不再需要條件，且自身兵力不為全場最高時，恢復兵力改為受統率影響
+    vars:
+      commander_threshold: 0.7
+      heal_rate: 0.7
+  天下御免:
+    # 11-11 balance patch: 208% (大將技 248%), and a hit on an enemy 副將 steals 30 統率 for 2 rounds (2 stacks).
+    description: 普通攻擊之後，對目標額外造成兵刃傷害（傷害率{var:extra_dmg_rate}）；若命中敵方副將，則偷取目標{var:lea_steal}點統率（{scale:武勇}），持續{var:steal_duration}回合，可疊加{var:steal_stacks}次。 若命中敵軍大將，則使其進入{status:混亂}狀態（攻擊和戰法無差別選擇目標），持續{var:confusion_duration}回合，若敵方大將已經處於混亂狀態，則偷取其{var:stat_absorb}點主屬性（{scale:武勇}），屬性偷取可疊加，直到戰鬥結束。
+    commander_description: 傷害率增加至{var:commander_dmg_rate}
+    vars:
+      extra_dmg_rate:
+        base: 2.08
+        max: 2.08
+      lea_steal:
+        base: 30
+        max: 30
+        type: flat
+      steal_duration: 2
+      steal_stacks: 2
+      commander_dmg_rate:
+        base: 2.48
+        max: 2.48
+  武田之赤備:
+    # 11-11 balance patch: 赤備突擊 chance 30%, 152%, 統率 down scales with 武勇, 大將技 +12%.
+    description: 戰鬥中，獲得{var:crit_rate}{status:會心}。 每回合行動後，有{var:proc_rate}（{scale:武勇}）機率發動赤備衝擊：對敵軍單體造成{var:dmg_rate}兵刃傷害，並使其統率降低{var:stat_debuff}（{scale:武勇}），持續{var:debuff_duration}回合。 若此回合造成會心傷害，額外增加{var:extra_proc_rate}機率
+    vars:
+      proc_rate:
+        base: 0.15
+        max: 0.3
+      dmg_rate:
+        base: 0.76
+        max: 1.52
+      commander_proc_bonus: 0.12
+  鬼若子:
+    # 11-11 balance patch: all allies, 40% 連擊; 大將技 makes the allies' 連擊 chance also scale with own 統率.
+    description: 戰鬥前{var:duration}回合，使我軍全體獲得{var:consecutive_strike_rate}{status:連擊}並增加{var:stat_buff}點統率（{scale:統率}）
+    commander_description: 使友軍獲得的連擊機率額外受自身統率影響
+    vars:
+      consecutive_strike_rate:
+        base: 0.2
+        max: 0.4
+  深慮遠謀:
+    # 11-11 balance patch: 28% → 30% at level 10.
+    vars:
+      dmg_reduction:
+        base: 0.15
+        max: 0.3
   献身:
     # The self damage-taken increase is 18% (game8 「自身への被ダメージが18%上昇」, in-game 18% on every printed row);
     # the stale data had 20%.
@@ -28,14 +78,14 @@ skills:
         max: 1.6
   知者楽水:
     # cfg 「9%→18%から12%→24%」 is two level ranges (one per majority branch), not 9%～12%; in-game battle reports print
-    # 18.00 / 24.00 at level 10.
+    # 18.00 / 24.00 at level 10. 11-11 balance patch: 22% / 26% at level 10.
     vars:
       phys_reduce:
-        base: 0.09
-        max: 0.18
+        base: 0.11
+        max: 0.22
       strat_reduce:
-        base: 0.12
-        max: 0.24
+        base: 0.13
+        max: 0.26
   豊後の戦陣:
     # In game the 統率 branch at max level raises 主動 activation by 8% (game8 4%→8%; in-game 已滿級 8%; battle reports
     # 96 / 96 at 8%); the stale data had 3%→6%.
@@ -1807,6 +1857,216 @@ skills:
       chain_duration: 1
     source_hero: 上泉信綱
     _action: add
+  三階菅笠:
+    name: 三階菅笠
+    type: 指揮
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 100%
+    description: 自身和武勇最高的友軍各自行動前，若上回合受到的傷害累計達到最大兵力{var:hp_threshold}，則有{var:proc_rate}機率（受兩人武勇之和影響）使自身為其恢復兵力（恢復率{var:heal_rate}，{scale:武勇}），否則有{var:proc_rate}機率（受兩人武勇之和影響）使自身對敵軍單體造成兵刃傷害（傷害率{var:dmg_rate}）。
+    commander_description: 每次成功發動時，額外增加自身武勇{var:val_up}點（{scale:武勇}），持續{var:duration}回合，可疊加{var:max_stacks}次。
+    brief_description: 受傷達標時治療友軍，否則造成兵刃傷害
+    tags:
+    - 兵刃傷害
+    - 單體傷害
+    - 治療
+    - 提升屬性
+    - 指揮效果
+    - 條件觸發
+    - 武勇系
+    - 大將技
+    raw_text: 三階菅笠 (S) 種類： 指揮戰法 | 兵刃單體 效果： 自身和武勇最高的友軍各自行動前，若上回合受到的傷害累計達到最大兵力20%，則有17.5%->35%機率（受兩人武勇之和影響）使自身為其恢復兵力（恢復率73%->146%，受武勇影響），否則有17.5%->35%機率（受兩人武勇之和影響）使自身對敵軍單體造成兵刃傷害（傷害率80%->160%） 大將技： 每次成功發動時，額外增加自身武勇4->8點（受武勇影響），持續1回合，可疊加2次
+    vars:
+      hp_threshold: 0.2
+      proc_rate:
+        base: 0.175
+        max: 0.35
+      heal_rate:
+        base: 0.73
+        max: 1.46
+      dmg_rate:
+        base: 0.8
+        max: 1.6
+      val_up:
+        base: 4
+        max: 8
+        type: flat
+      duration: 1
+      max_stacks: 2
+    unique_hero: 佐佐成政
+    is_unique: true
+    _action: add
+  武士之鑑:
+    name: 武士之鑑
+    type: 主動
+    rarity: S
+    target: 敵軍全體(3人)
+    activation_rate: 30%
+    description: 適應兵種：騎兵。對敵軍全體施加{status:潰走}狀態（傷害率{var:rout_rate}，{scale:武勇}），持續{var:duration}回合，若目標已處於{status:潰走}狀態，則對其造成兵刃傷害（傷害率{var:dmg_rate}）。
+    brief_description: 全體施加潰走，已潰走者改受兵刃傷害
+    tags:
+    - 兵刃傷害
+    - 群體傷害
+    - 減益
+    - 施加狀態
+    - 主動發動
+    - 武勇系
+    raw_text: 武士之鑑 (S) 種類： 騎兵主動戰法 | 兵刃群體 發動機率： 30% 效果： 對敵軍全體施加潰走狀態（傷害率55%->110%，受武勇影響），持續2回合，若目標已處於潰走狀態，則對其造成兵刃傷害（傷害率72.5%->145%）
+    vars:
+      rout_rate:
+        base: 0.55
+        max: 1.1
+      duration: 2
+      dmg_rate:
+        base: 0.725
+        max: 1.45
+    source_hero: 佐佐成政
+    _action: add
+  野之虎:
+    name: 野之虎
+    type: 突擊
+    rarity: S
+    target: 敵軍群體(2人)
+    activation_rate: 45%
+    description: 戰鬥中，自身普通攻擊變為謀略傷害。普通攻擊後，對敵軍群體（2人）造成謀略傷害（傷害率{var:dmg_rate}，{scale:智略}）。
+    commander_description: 普通攻擊的傷害率提升{var:na_rate_up}（{scale:智略}）。
+    brief_description: 普攻轉謀略，普攻後群體謀略傷害
+    tags:
+    - 謀略傷害
+    - 群體傷害
+    - 增益
+    - 突擊觸發
+    - 智略系
+    - 大將技
+    raw_text: 野之虎 (S) 種類： 突擊戰法 | 謀略群體 發動機率： 45% 效果： 戰鬥中，自身普通攻擊變為謀略傷害。普通攻擊後，對敵軍群體（2人）造成謀略傷害（傷害率114%->228%，受智略影響） 大將技： 普通攻擊的傷害率提升7.5%->15%（受智略影響）
+    vars:
+      dmg_rate:
+        base: 1.14
+        max: 2.28
+      na_rate_up:
+        base: 0.075
+        max: 0.15
+    unique_hero: 長宗我部國親
+    is_unique: true
+    _action: add
+  當機立斷:
+    name: 當機立斷
+    type: 突擊
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 35%
+    description: 普通攻擊後，選擇敵軍單體，解除其{var:dispel_count}個增益狀態，並對其造成謀略傷害（傷害率{var:dmg_rate}，{scale:智略}），{var:repeat_chance}的機率額外執行{var:repeat_count}次。
+    brief_description: 普攻後驅散敵軍增益並造成謀略傷害
+    tags:
+    - 謀略傷害
+    - 單體傷害
+    - 移除狀態
+    - 突擊觸發
+    - 智略系
+    raw_text: 當機立斷 (S) 種類： 突擊戰法 | 謀略單體 發動機率： 35% 效果： 普通攻擊後，選擇敵軍單體，解除其2個增益狀態，並對其造成謀略傷害（傷害率103%->206%，受智略影響），50%的機率額外執行1次
+    vars:
+      dispel_count: 2
+      dmg_rate:
+        base: 1.03
+        max: 2.06
+      repeat_chance: 0.5
+      repeat_count: 1
+    source_hero: 長宗我部國親
+    _action: add
+  雨夜手拍子:
+    name: 雨夜手拍子
+    type: 主動
+    rarity: S
+    target: 敵軍群體(2人)
+    activation_rate: 45%
+    description: 對敵軍群體（2人）造成兵刃傷害（傷害率{var:dmg_rate}），並使自身非自帶主動戰法傷害提升{var:dmg_up}（{scale:武勇}），持續{var:duration}回合，該戰法發動後有{var:cooldown}回合冷卻時間。
+    commander_description: 持續時間內，非自帶主動戰法發動時，恢復自身兵力（恢復率{var:heal_rate}，{scale:武勇}）。
+    brief_description: 群體兵刃傷害並提升非自帶主動戰法傷害
+    tags:
+    - 兵刃傷害
+    - 群體傷害
+    - 增益
+    - 治療
+    - 主動發動
+    - 武勇系
+    - 大將技
+    raw_text: 雨夜手拍子 (S) 種類： 主動戰法 | 兵刃群體 發動機率： 45% 效果： 對敵軍群體（2人）造成兵刃傷害（傷害率55%->110%），並使自身非自帶主動戰法傷害提升17.5%->35%（受武勇影響），持續2回合，該戰法發動後有1回合冷卻時間 大將技： 持續時間內，非自帶主動戰法發動時，恢復自身兵力（恢復率20%->40%，受武勇影響）
+    vars:
+      dmg_rate:
+        base: 0.55
+        max: 1.1
+      dmg_up:
+        base: 0.175
+        max: 0.35
+      duration: 2
+      cooldown: 1
+      heal_rate:
+        base: 0.2
+        max: 0.4
+    unique_hero: 小早川秀包
+    is_unique: true
+    _action: add
+  風聲鶴唳:
+    name: 風聲鶴唳
+    type: 主動
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 35%
+    description: 對敵軍單體造成兵刃傷害（傷害率{var:phys_rate}）和謀略傷害（傷害率{var:tact_rate}，{scale:智略}），並減少其速度{var:spd_down}點，持續{var:duration}回合。
+    brief_description: 單體兵刃加謀略傷害並降低速度
+    tags:
+    - 兵刃傷害
+    - 謀略傷害
+    - 單體傷害
+    - 減益
+    - 降低屬性
+    - 主動發動
+    - 智略系
+    raw_text: 風聲鶴唳 (S) 種類： 主動戰法 | 兵謀單體 發動機率： 35% 效果： 對敵軍單體造成兵刃傷害（傷害率81%->162%）和謀略傷害（傷害率81%->162%，受智略影響），並減少其速度20->40點，持續2回合
+    vars:
+      phys_rate:
+        base: 0.81
+        max: 1.62
+      tact_rate:
+        base: 0.81
+        max: 1.62
+      spd_down:
+        base: 20
+        max: 40
+        type: flat
+      duration: 2
+    source_hero: 小早川秀包
+    _action: add
+  南予智將:
+    name: 南予智將
+    type: 指揮
+    rarity: S
+    target: 敵軍單體
+    activation_rate: 100%
+    description: 戰鬥前{var:early_rounds}回合，使敵我全體造成兵刃傷害降低{var:phys_down}（{scale:智略}）；友軍全體普通攻擊後，自身有{var:proc_rate}機率（{scale:智略}）對敵軍單體造成謀略傷害（傷害率{var:dmg_rate}，{scale:智略}）。
+    brief_description: 前3回合敵我兵刃減傷，友軍普攻後追擊謀略
+    tags:
+    - 謀略傷害
+    - 單體傷害
+    - 減益
+    - 指揮效果
+    - 條件觸發
+    - 智略系
+    raw_text: 南予智將 (S) 種類： 指揮戰法 | 謀略單體 效果： 戰鬥前3回合，使敵我全體造成兵刃傷害降低15%->30%（受智略影響）；友軍全體普通攻擊後，自身有17.5%->35%機率（受智略影響）對敵軍單體造成謀略傷害（傷害率56%->112%，受智略影響）
+    vars:
+      early_rounds: 3
+      phys_down:
+        base: 0.15
+        max: 0.3
+      proc_rate:
+        base: 0.175
+        max: 0.35
+      dmg_rate:
+        base: 0.56
+        max: 1.12
+    unique_hero: 土居清良
+    is_unique: true
+    _action: add
 bingxue:
   強靭:
     vars:
@@ -1826,6 +2086,10 @@ bingxue:
     vars:
       damage_rate: 0.85
 heroes:
+  前田慶次:
+    # 11-11 balance patch: 統率 growth 1.28 → 1.66 (Lv1 64 + 49 × growth: 127 → 145).
+    stats:
+      lea: 145
   お江:
     traits:
     - name: 花枝招展
@@ -3673,3 +3937,131 @@ heroes:
     - name: 知慧Ⅲ
       description: 智略提高3%
       active: true
+  佐佐成政:
+    name: 佐佐成政
+    portrait: https://i.imgur.com/jzapaIS.png
+    rarity: 5
+    cost: 7
+    faction: 織田
+    clan: 織田家
+    gender: 男
+    stats:
+      lea: 157
+      val: 210
+      int: 150
+      pol: 85
+      cha: 78
+      spd: 135
+    unique_skill: 三階菅笠
+    teachable_skill: 武士之鑑
+    assembly_skill: 鬼神兵法·優
+    traits:
+    - name: 騎兵大將
+      description: 部隊的騎兵等級增加3，騎兵等級上限增加1
+      active: true
+    - name: 立山行
+      description: 前3回合受到的傷害降低10%，戰鬥發生時，周圍2格若存在山脈地形，士氣提升5點
+      active: true
+    - name: 砲術Ⅱ
+      description: 部隊的鐵炮等級增加2
+      active: true
+    - name: 牢固Ⅱ
+      description: 受到傷害減少1.6%
+      active: true
+    _action: add
+  長宗我部國親:
+    name: 長宗我部國親
+    portrait: https://i.imgur.com/nIkNCwN.png
+    rarity: 5
+    cost: 7
+    faction: 群雄
+    clan: 長宗我部家
+    gender: 男
+    stats:
+      lea: 163
+      val: 114
+      int: 204
+      pol: 158
+      cha: 134
+      spd: 71
+    unique_skill: 野之虎
+    teachable_skill: 當機立斷
+    assembly_skill: 鬼神兵法·優
+    traits:
+    - name: 土佐基石
+      description: 普通攻擊後，有70%機率獲得10點智略，持續2回合，可疊加4次
+      active: true
+    - name: 槍術Ⅱ
+      description: 部隊的足輕等級增加2
+      active: true
+    - name: 攻勢Ⅲ
+      description: 我軍全體造成傷害增加1.6%
+      active: true
+    - name: 知慧Ⅱ
+      description: 智略提高2.5%
+      active: true
+    _action: add
+  小早川秀包:
+    name: 小早川秀包
+    portrait: https://i.imgur.com/EAVz79B.png
+    rarity: 5
+    cost: 6
+    faction: 群雄
+    clan: 毛利家
+    gender: 男
+    stats:
+      lea: 150
+      val: 182
+      int: 134
+      pol: 94
+      cha: 168
+      spd: 121
+    unique_skill: 雨夜手拍子
+    teachable_skill: 風聲鶴唳
+    assembly_skill: 售出庫藏·優
+    traits:
+    - name: 奮戰Ⅲ
+      description: 本回合未受到普通攻擊時，非自帶主動戰法的發動機率增加3%
+      active: true
+    - name: 砲術Ⅱ
+      description: 部隊的鐵炮等級增加2
+      active: true
+    - name: 血氣Ⅱ
+      description: 造成兵刃傷害增加2.2%
+      active: true
+    - name: 武威Ⅱ
+      description: 武勇提高2.5%
+      active: true
+    _action: add
+  土居清良:
+    name: 土居清良
+    portrait: https://i.imgur.com/5PeJLDC.png
+    rarity: 5
+    cost: 6
+    faction: 群雄
+    clan: 西園寺家
+    gender: 男
+    stats:
+      lea: 153
+      val: 119
+      int: 196
+      pol: 191
+      cha: 156
+      spd: 104
+    unique_skill: 南予智將
+    teachable_skill: 風聲鶴唳
+    assembly_skill: 售出庫藏·優
+    traits:
+    - name: 親民鑑月集
+      description: 根據兵糧產量增加智略，最多16點
+      active: true
+    - name: 破敵Ⅱ
+      description: 造成傷害增加1.6%
+      active: true
+    - name: 砲術Ⅲ
+      description: 部隊的鐵炮等級增加3
+      active: true
+    - name: 防護Ⅱ
+      description: 受到兵刃傷害減少2.2%
+      active: true
+    _action: add
