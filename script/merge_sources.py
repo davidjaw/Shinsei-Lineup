@@ -568,6 +568,12 @@ def merge_traits(
             "game8": entry,
             "cfg": _cfg_block_for_skill(resolver, match.cfg_entry),
         }
+        # cfg.skill.name may spell the tier in ASCII (智慧II) while multi_lang
+        # ids use Ⅱ: take the name from the matched multi_lang row instead.
+        if proto["cfg"] and not proto["cfg"].get("name_zh_hant"):
+            ml = resolver.ml_by_id.get(match.multi_lang_id) or {}
+            proto["cfg"]["name_zh_hant"] = ml.get("zh-hant")
+            proto["cfg"]["name_ja"] = proto["cfg"].get("name_ja") or ml.get("ja")
         out[effective_key] = proto
 
         # Surface a normalization candidate if a low-confidence match looks

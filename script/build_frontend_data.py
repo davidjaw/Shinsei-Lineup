@@ -554,13 +554,48 @@ def postprocess_skill(skill: dict) -> dict:
     return skill
 
 
-def postprocess_hero(hero: dict) -> dict:
+_ROMAN_SUFFIX = re.compile(r"(III|II|IV|I|V)$")
+_ROMAN_WIDE = {"I": "Ⅰ", "II": "Ⅱ", "III": "Ⅲ", "IV": "Ⅳ", "V": "Ⅴ"}
+
+
+def _wide_roman(name: str) -> str:
+    """Trait tier suffix in the game's full-width form (隱忍II → 隱忍Ⅱ)."""
+    return _ROMAN_SUFFIX.sub(lambda m: _ROMAN_WIDE[m.group(1)], name.rstrip())
+
+
+def build_trait_name_map(traits_data: dict, proto_traits: dict) -> dict:
+    """JP key and LLM name → cfg zh-hant trait name. A name that is itself an
+    official cfg name is never remapped."""
+    official = {
+        (p.get("cfg") or {}).get("name_zh_hant") for p in proto_traits.values()
+    } - {None}
+    out: dict[str, str] = {}
+    for jp_key, p in proto_traits.items():
+        cfg_name = (p.get("cfg") or {}).get("name_zh_hant")
+        if not cfg_name:
+            continue
+        llm_name = ((traits_data.get(jp_key) or {}).get("text") or {}).get("name")
+        for alias in (jp_key, llm_name):
+            alias = _wide_roman(alias) if alias else ""
+            if alias and alias not in official:
+                out.setdefault(alias, cfg_name)
+    return out
+
+
+def canonical_trait_name(name: str, name_map: dict) -> str:
+    wide = _wide_roman(name)
+    return name_map.get(wide, wide)
+
+
+def postprocess_hero(hero: dict, trait_names: dict | None = None) -> dict:
     """Normalize a single hero entry after all merges/overrides."""
     # Fix skill name references on heroes
     for field in ("unique_skill", "teachable_skill"):
         if hero.get(field):
             hero[field] = fix_skill_name(hero[field])
     for t in hero.get("traits") or []:
+        if CFG_AUTHORITATIVE and t.get("name"):
+            t["name"] = canonical_trait_name(t["name"], trait_names or {})
         if t.get("description"):
             t["description"] = normalize_status_refs(t["description"])
         if t.get("vars"):
@@ -572,10 +607,12 @@ def postprocess_hero(hero: dict) -> dict:
     return hero
 
 
-def postprocess(heroes: list[dict], skills: list[dict]) -> tuple[list[dict], list[dict]]:
+def postprocess(
+    heroes: list[dict], skills: list[dict], trait_names: dict | None = None,
+) -> tuple[list[dict], list[dict]]:
     """Run all post-processing on final heroes and skills lists."""
     skills = [postprocess_skill(s) for s in skills]
-    heroes = [postprocess_hero(h) for h in heroes]
+    heroes = [postprocess_hero(h, trait_names) for h in heroes]
     heroes.sort(key=lambda h: (-h.get("rarity", 0), -h.get("cost", 0)))
     return heroes, skills
 
@@ -972,7 +1009,8 @@ def main():
     enrich_hero_trait_affinity(heroes, traits_data)
 
     # Post-process: normalize text, fix types, sort
-    heroes, skills = postprocess(heroes, skills)
+    trait_names = build_trait_name_map(traits_data, _load_prototype("traits"))
+    heroes, skills = postprocess(heroes, skills, trait_names)
 
     # Build bingxue catalog + re-key each hero's bingxue from JP direction to
     # CHT direction (handles the 臨戦↔機略 localization swap) so the frontend
@@ -985,13 +1023,15 @@ def main():
             print(f"[warn] bingxue override for unknown option {jp_name!r} ignored")
             continue
         bingxue_data[jp_name] = deep_merge(bingxue_data[jp_name], ov)
+    proto_bingxue = _load_prototype("bingxue") if CFG_AUTHORITATIVE else {}
     bingxue_out = {}
     for jp_name, entry in bingxue_data.items():
         raw = entry.get("raw", {})
         jp_dir = raw.get("direction", "")
         cht_dir = BINGXUE_JP_TO_CHT_DIR.get(jp_dir, jp_dir)
+        cfg_name = ((proto_bingxue.get(jp_name) or {}).get("cfg") or {}).get("name_zh_hant")
         bingxue_out[jp_name] = {
-            "name": entry.get("name") or jp_name,
+            "name": cfg_name or entry.get("name") or jp_name,
             "name_jp": jp_name,
             "direction": cht_dir,
             "direction_jp": jp_dir,
