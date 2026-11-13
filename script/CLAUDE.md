@@ -1,16 +1,5 @@
 # Pipeline scripts
 
-## Post-processing (build_frontend_data.py)
-
-The `postprocess()` function runs after all merges and normalizes:
-- `STATUS_ALIASES` — LLM status name aliases → canonical names
-- `SCALE_ALIASES` — fixes `知略→智略`, English→Chinese stat names
-- `SKILL_NAME_FIXES` — CHT skill name corrections
-- `normalize_status_refs()` — fixes `{status:}` and `{scale:}` templates + plain text `知略→智略`
-- `normalize_vars()` — fixes `vars.*.scale` aliases
-- `ensure_str()` — ensures `activation_rate` is always a string
-- Sort heroes by rarity desc, cost desc
-
 ## LLM Prompts
 
 All prompts share `COMMON_RULES` from `llm_core.py` which enforces:
