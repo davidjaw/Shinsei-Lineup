@@ -35,6 +35,9 @@ Sialia cfg.json ─┘                              │
   `data/heroes_translated.yaml` (gitignored).
 - **Manual overrides**: `data/overrides.yaml` (tracked, applied last, highest priority) and
   `data/statuses.yaml` (tracked, hand-maintained status effects).
+- **Game seasons**: `data/game_seasons.json` (tracked, hand-maintained): the season (S1 S2 S3 PK) of every hero by
+  `name_jp` and of the skills with no hero of their own; the app imports it directly, outside `npm run data`.
+  `src/lib/gameSeason.test.ts` fails when the catalog gains a hero or event skill the table lacks.
 - **Build output**: `.build/heroes.json`, `skills.json`, `statuses.json`, `bingxue.json`
   (gitignored); `dist/index.html` is the single-file bundle.
 - **Translation failure manifest**: `.build/translation_failures.json` — `ok` flag, per-kind summary and
@@ -78,8 +81,8 @@ cloud sync/short shares/proposals/gacha are silently disabled. The client uses d
 
 - All game text in Traditional Chinese (繁體中文); code and comments in English.
 - Hero names: JP in `name_jp`, CHT in `name`. Skill names: JP key in YAML, CHT `name` in translated data.
-- `data/` is gitignored except `overrides.yaml`, `statuses.yaml`, `source_corrections.yaml`, the cfg archive and
-  `cfg/last_diff_summary.txt`.
+- `data/` is gitignored except `overrides.yaml`, `statuses.yaml`, `source_corrections.yaml`, `game_seasons.json`,
+  the cfg archive and `cfg/last_diff_summary.txt`.
 - Never hand-edit `.build/` or `dist/`; regenerate them.
 - Changelog (`src/constants/changelog.ts`): released versions are frozen — never append entries to them. After a
   release, start the next unreleased batch by adding 1 to the patch (`0.4.8` → `0.4.9`). Fold all subsequent
