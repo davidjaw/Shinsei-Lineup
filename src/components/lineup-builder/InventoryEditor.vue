@@ -10,6 +10,7 @@
         <el-tab-pane label="武將庫存" name="heroes" class="h-full flex flex-col overflow-hidden">
           <HeroLibrary
             mode="manage"
+            :game-season="gameSeason"
             :used-heroes="[]"
             :owned-heroes="ownedHeroes"
             @update:ownedHeroes="(val: string[]) => $emit('update:ownedHeroes', val)"
@@ -18,6 +19,7 @@
         <el-tab-pane label="戰法庫存" name="skills" class="h-full flex flex-col overflow-hidden">
           <SkillLibrary
             mode="manage"
+            :game-season="gameSeason"
             :used-skills="new Set()"
             :owned-skills="ownedSkills"
             @update:ownedSkills="(val: string[]) => $emit('update:ownedSkills', val)"
@@ -32,10 +34,12 @@
 import HeroLibrary from '../HeroLibrary.vue'
 import SkillLibrary from '../SkillLibrary.vue'
 
+// `gameSeason` lists only what that season offers; what is owned outside it stays owned (全選 acts on the list shown).
 defineProps<{
   activeTab: string
   ownedHeroes: string[]
   ownedSkills: string[]
+  gameSeason: string
 }>()
 defineEmits<{
   (e: 'update:activeTab', v: string): void

@@ -31,6 +31,8 @@
             :is-drag-target="dragSourceRole !== null && dragSourceRole !== slot.role"
             :skill-dragging="isSkillDragging"
             :conflicting-skill-names="conflictingSkillNames"
+            :game-season="gameSeason"
+            :game-season-mark="gameSeasonMarks[slot.role] ?? null"
             @open-hero-select="$emit('open-hero-select', slot.role)"
             @open-skill-select="(slotIdx: number) => $emit('open-skill-select', slot.role, slotIdx)"
             @skill-drop="(slotIdx: number, skill: Skill) => $emit('skill-drop', slot.role, slotIdx, skill)"
@@ -62,6 +64,7 @@
             :used-heroes="allUsedHeroNames"
             :owned-heroes="ownedHeroes"
             :filter-owned="showOwnedOnly"
+            :game-season="gameSeason"
             @select="(hero: Hero) => $emit('select-hero-from-library', hero)"
             @edit-inventory="$emit('edit-inventory')"
           />
@@ -72,6 +75,7 @@
             :used-skills="allUsedSkillNames"
             :owned-skills="ownedSkills"
             :filter-owned="showOwnedOnly"
+            :game-season="gameSeason"
             @select="(skill: Skill) => $emit('select-skill-from-library', skill)"
             @skill-drag-start="(skill: Skill) => $emit('skill-drag-start', skill)"
             @skill-drag-end="$emit('skill-drag-end')"
@@ -89,6 +93,7 @@ import HeroLibrary from '../HeroLibrary.vue'
 import SkillLibrary from '../SkillLibrary.vue'
 import type { Hero, Skill } from '../../composables/useData'
 import type { Lineup } from '../../composables/useLineups'
+import type { GameSeasonRole, GameSeasonSlotMark } from '../../lib/gameSeasonMisfits'
 
 export type Role = 'main' | 'vice1' | 'vice2'
 export type LibraryTab = 'heroes' | 'skills'
@@ -114,6 +119,9 @@ defineProps<{
   isSkillDragging: boolean
   conflictingSkillNames: Set<string>
   lineupShakeActive: boolean
+  /** The game season the libraries offer, and what on the shown team's slots it does not. */
+  gameSeason: string
+  gameSeasonMarks: Partial<Record<GameSeasonRole, GameSeasonSlotMark>>
 }>()
 
 defineEmits<{

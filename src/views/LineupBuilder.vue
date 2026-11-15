@@ -40,6 +40,8 @@
           :drag-source-role="dragSourceRole"
           :is-skill-dragging="isSkillDragging"
           :conflicting-skill-names="conflictingSkillNames"
+          :game-season="gameSeason"
+          :game-season-marks="gameSeasonMarks"
           @clear-skill-focus="clearSkillFocus"
           @open-hero-select="openHeroSelect"
           @open-skill-select="handleSkillSlotClick"
@@ -81,6 +83,7 @@
         v-model:active-tab="inventoryActiveTab"
         :owned-heroes="tempOwnedHeroes"
         :owned-skills="tempOwnedSkills"
+        :game-season="gameSeason"
         @update:ownedHeroes="val => tempOwnedHeroes = val"
         @update:ownedSkills="val => tempOwnedSkills = val"
       />
@@ -97,6 +100,7 @@
       v-model="skillSelectDialogVisible"
       :used-skills="allUsedSkillNames"
       :owned-skills="ownedSkills"
+      :game-season="gameSeason"
       @select="selectSkillFromDialog"
     />
 
@@ -190,6 +194,8 @@ import { snapshotTeam } from '../lib/lineup'
 import type { ImportConflictResolution } from '../types/group'
 import { useChangelog } from '../composables/useChangelog'
 import { useProfiles } from '../composables/useProfiles'
+import { useGameSeason } from '../composables/useGameSeason'
+import { gameSeasonSlotMarks } from '../lib/gameSeasonMisfits'
 import { consumeInitialHash, normalizeHash } from '../lib/initial-hash'
 
 const router = useRouter()
@@ -239,6 +245,11 @@ const {
   clearInventory,
   startEditingInventory,
 } = useInventory()
+
+// The game season the pickers offer, and what on the shown team it does not: marked where it stands. Saves never
+// carry the season, and the catalog stays whole (useGameSeason.ts).
+const { gameSeason, misfits: gameSeasonMisfits } = useGameSeason()
+const gameSeasonMarks = computed(() => gameSeasonSlotMarks(gameSeasonMisfits.value, currentTeamIndex.value))
 
 const dialogs = useDialogs()
 const { hasUnseen: hasUnseenChangelog } = useChangelog()

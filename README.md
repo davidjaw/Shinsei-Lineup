@@ -15,6 +15,7 @@
 - 武將庫（依 Cost / 勢力多選篩選）
 - 戰法庫（依類型 / 稀有度篩選）
 - 庫存管理（標記已擁有武將/戰法）
+- 賽季選擇（S1 / S2 / S3 / PK，存於本機）：選將、選戰法只列出該賽季可用的，編組中非本賽季的項目會標記並可一鍵移除；賽季表為 `data/game_seasons.json`
 - Override 機制（手動新增未上架武將/戰法）
 - 帳號系統（Google / GitHub 登入、雲端角色配置同步、命名分享連結）— 詳見下方 [帳號系統 / Supabase](#帳號系統--supabase)
 
@@ -147,6 +148,7 @@ script/
 data/
   overrides.yaml           # 手動覆蓋資料（git 追蹤）
   statuses.yaml            # 狀態效果定義（git 追蹤）
+  game_seasons.json        # 武將 / 事件戰法的賽季表（git 追蹤，手動維護）
   *_crawled.yaml           # 爬蟲輸出（gitignored）
   heroes_translated.yaml   # 武將 LLM 翻譯輸出（gitignored）
   skills.yaml / traits.yaml / bingxue.yaml  # 戰法 / 特性 / 兵學正本（LLM 輸出直接寫入）

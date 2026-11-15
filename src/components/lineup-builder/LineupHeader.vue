@@ -103,7 +103,13 @@
         </template>
       </el-dropdown>
 
-      <div v-if="!isEditingInventory && !isCompactView" class="min-w-0 flex-1 sm:flex-none sm:w-48 flex items-center">
+      <!-- The game season the pickers offer. Shown while editing inventory too, which it filters as well.
+           Mobile hides this; the MobileTeamDrawer renders an equivalent. -->
+      <div v-if="!isCompactView" class="hidden md:flex">
+        <GameSeasonControl :clearable="!isEditingInventory" />
+      </div>
+
+      <div v-if="!isEditingInventory && !isCompactView" class="min-w-0 flex-1 sm:flex-none sm:w-40 2xl:w-48 flex items-center">
         <el-input
           :model-value="teamName"
           @update:model-value="(v: string) => $emit('update:teamName', v)"
@@ -260,6 +266,7 @@ import { useProfiles } from '../../composables/useProfiles'
 import { useActiveProfile } from '../../composables/useActiveProfile'
 import { useInventory } from '../../composables/useInventory'
 import UserControls, { type UserMenuCmd } from '../layout/UserControls.vue'
+import GameSeasonControl from './GameSeasonControl.vue'
 
 const props = defineProps<{
   teamName: string

@@ -39,6 +39,8 @@ const { lineups } = useLineups()
 
 const offer = computed(() => gameSeasonOffer(gameSeason.value, heroes.value))
 const misfits = computed(() => gameSeasonMisfits(lineups, offer.value))
+/** How many misfits each team of the active group holds, by its place. */
+const misfitCounts = computed(() => lineups.map((_, i) => misfits.value.filter((m) => m.team === i).length))
 
 /** What `season` would leave out of the active group. */
 const misfitsUnder = (season: string): GameSeasonMisfit[] =>
@@ -62,6 +64,7 @@ export function useGameSeason() {
     gameSeasons: GAME_SEASONS.order,
     offer,
     misfits,
+    misfitCounts,
     misfitsUnder,
     clearMisfits,
     switchGameSeason,
