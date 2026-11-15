@@ -2,7 +2,16 @@
 // Kept dependency-free (no Vue, no Supabase) so it can be imported anywhere
 // without ordering hazards.
 
-import type { Lineup } from '../composables/useLineups'
+import type { Lineup, RoleData } from '../composables/useLineups'
+
+/** Clear a slot the way its ✕ button does (LineupSlot.removeHero): the hero with its 戰法, 突破 and 兵學. */
+export const clearHeroSlot = (role: RoleData): void => {
+  role.hero = null
+  role.skill1 = null
+  role.skill2 = null
+  role.breakthrough = 0
+  role.bingxue = { direction: null, major: null, minors: [] }
+}
 
 /** Deep-clone a Lineup so callers can mutate the snapshot without aliasing
  *  reactive state (or the immutable team_blob coming back from Supabase).

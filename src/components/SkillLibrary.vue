@@ -31,18 +31,10 @@
 
       <div class="flex gap-1 md:gap-2 overflow-x-auto pb-1 px-1 md:px-0">
         <el-select v-model="filterType" placeholder="類型" clearable class="w-28" size="small">
-          <el-option label="指揮" value="指揮" />
-          <!-- ... -->
-          <el-option label="主動" value="主動" />
-          <el-option label="突擊" value="突擊" />
-          <el-option label="被動" value="被動" />
-          <el-option label="兵種" value="兵種" />
-          <el-option label="陣法" value="陣法" />
+          <el-option v-for="type in typeChoices" :key="type" :label="type" :value="type" />
         </el-select>
         <el-select v-model="filterRarity" placeholder="稀有度" clearable class="w-24" size="small">
-          <el-option label="S" value="S" />
-          <el-option label="A" value="A" />
-          <el-option label="B" value="B" />
+          <el-option v-for="rarity in rarityChoices" :key="rarity" :label="rarity" :value="rarity" />
         </el-select>
       </div>
     </div>
@@ -157,12 +149,16 @@ import { TRANSPARENT_GIF, formatRate as _formatRate, isEquippableSkillType } fro
 import SkillDescription from './SkillDescription.vue'
 import BriefDescription from './BriefDescription.vue'
 import SkillTypeMark from './SkillTypeMark.vue'
+import { gameSeasonOffer, offeredSkills } from '../lib/gameSeasonMisfits'
 
 const props = defineProps({
   mode: { type: String as PropType<'browse' | 'select' | 'manage'>, default: 'browse' }, // 'browse' | 'select' | 'manage'
   usedSkills: { type: Object as PropType<Set<string> | string[]>, default: () => [] },
   ownedSkills: { type: Array as PropType<string[]>, default: () => [] },
-  filterOwned: { type: Boolean, default: false }
+  filterOwned: { type: Boolean, default: false },
+  // The lineup page's game season: only what it offers is listed, and only the types and rarities that list has are
+  // offered as filters. Absent, every season's.
+  gameSeason: { type: String as PropType<string | null>, default: null },
 })
 
 const emit = defineEmits(['select', 'update:ownedSkills', 'skill-drag-start', 'skill-drag-end', 'edit-inventory'])
@@ -218,14 +214,26 @@ const handleDragStart = (event: DragEvent, skill: any) => {
   emit('skill-drag-start', skill)
 }
 
-const filteredSkills = computed(() => {
+const SKILL_TYPES = ['指揮', '主動', '突擊', '被動', '兵種', '陣法']
+const RARITIES = ['S', 'A', 'B']
+
+// The equippable skills the game season offers: what the list and its filter choices are drawn from.
+const pool = computed(() => {
   if (!skills.value || !Array.isArray(skills.value)) return []
+  const offer = props.gameSeason ? gameSeasonOffer(props.gameSeason, heroes.value) : null
+  return offeredSkills(skills.value, offer).filter(s => s?.name && !s.is_fixed && isEquippableSkillType(s.type))
+})
+const typeChoices = computed(() => SKILL_TYPES.filter(type => pool.value.some(s => s.type === type)))
+const rarityChoices = computed(() => RARITIES.filter(rarity => pool.value.some(s => s.rarity === rarity)))
 
-  return skills.value.filter(s => {
-    if (!s?.name) return false
-    if (s.is_fixed) return false
-    if (!isEquippableSkillType(s.type)) return false
+// A chosen type or rarity the new season does not have would hide everything: start over.
+watch(() => props.gameSeason, () => {
+  filterType.value = ''
+  filterRarity.value = ''
+})
 
+const filteredSkills = computed(() => {
+  return pool.value.filter(s => {
     if (debouncedSearchQuery.value && !s.name.includes(debouncedSearchQuery.value)) return false
     if (filterType.value && s.type !== filterType.value) return false
     if (filterRarity.value && s.rarity !== filterRarity.value) return false

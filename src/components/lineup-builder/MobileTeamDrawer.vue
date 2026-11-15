@@ -102,6 +102,8 @@
           </template>
         </el-dropdown>
 
+        <GameSeasonControl wide />
+
         <div
           class="mode-pills"
           role="group"
@@ -170,6 +172,7 @@
             <span class="text-sm truncate">{{ team.name }}</span>
           </div>
           <div class="flex items-center gap-1 flex-shrink-0">
+            <TeamSeasonMisfits :team="idx" />
             <span
               class="text-xs tabular-nums"
               :class="teamCost(team) > 20 ? 'text-red-500' : 'text-ink-mute'"
@@ -266,6 +269,8 @@ import { useActiveProfile } from '../../composables/useActiveProfile'
 import { useAuth } from '../../composables/useAuth'
 import { useInventory } from '../../composables/useInventory'
 import TeamMoveButtons from './TeamMoveButtons.vue'
+import TeamSeasonMisfits from './TeamSeasonMisfits.vue'
+import GameSeasonControl from './GameSeasonControl.vue'
 import { useTeamReorder } from './useTeamReorder'
 
 const props = defineProps<{

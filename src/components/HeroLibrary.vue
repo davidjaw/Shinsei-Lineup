@@ -157,6 +157,7 @@ import { ref, computed, PropType, watch } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import { useData, Hero } from '../composables/useData'
 import { TROOP_TYPES } from '../constants/traits'
+import { gameSeasonOffer, offeredHeroes } from '../lib/gameSeasonMisfits'
 import HeroCard from './HeroCard.vue'
 
 const { heroes } = useData()
@@ -166,8 +167,13 @@ const props = defineProps({
   usedHeroes: { type: Object as PropType<Set<string> | string[]>, default: () => [] },
   mode: { type: String as PropType<'select' | 'manage'>, default: 'select' },
   ownedHeroes: { type: Array as PropType<string[]>, default: () => [] },
-  filterOwned: { type: Boolean, default: false }
+  filterOwned: { type: Boolean, default: false },
+  // The lineup page's game season: only what it offers is listed, and the filter choices come from that list.
+  // Absent (the gacha editor), every season's.
+  gameSeason: { type: String as PropType<string | null>, default: null },
 })
+
+const pool = computed(() => offeredHeroes(heroes.value, props.gameSeason ? gameSeasonOffer(props.gameSeason, heroes.value) : null))
 
 const searchQuery = ref('')
 const debouncedSearchQuery = ref('')
@@ -187,12 +193,12 @@ const selectedClans = ref<Set<string>>(new Set())
 const selectedTroopTypes = ref<Set<string>>(new Set())
 
 const factions = computed(() => {
-  return [...new Set(heroes.value.map(h => h.faction))].filter(Boolean).sort()
+  return [...new Set(pool.value.map(h => h.faction))].filter(Boolean).sort()
 })
 
 const clans = computed(() => {
   const counts = new Map<string, number>()
-  for (const h of heroes.value) {
+  for (const h of pool.value) {
     if (!h.clan) continue
     counts.set(h.clan, (counts.get(h.clan) ?? 0) + 1)
   }
@@ -200,7 +206,7 @@ const clans = computed(() => {
 })
 
 const availableCosts = computed(() => {
-  return [...new Set(heroes.value.map(h => h.cost))].sort((a, b) => b - a)
+  return [...new Set(pool.value.map(h => h.cost))].sort((a, b) => b - a)
 })
 
 const toggleCost = (cost: number) => {
@@ -243,8 +249,11 @@ const resetFilters = () => {
   selectedTroopTypes.value = new Set()
 }
 
+// A chosen filter the new season has no chip for would hide everything with nothing to show why: start over.
+watch(() => props.gameSeason, resetFilters)
+
 const filteredHeroes = computed(() => {
-  return heroes.value.filter(h => {
+  return pool.value.filter(h => {
     if (debouncedSearchQuery.value && !h.name.includes(debouncedSearchQuery.value)) return false
     if (selectedFactions.value.size > 0 && !selectedFactions.value.has(h.faction)) return false
     if (selectedCosts.value.size > 0 && !selectedCosts.value.has(h.cost)) return false

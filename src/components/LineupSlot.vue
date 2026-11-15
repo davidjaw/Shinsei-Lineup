@@ -143,6 +143,12 @@
           <el-icon class="text-focus text-xl md:text-3xl"><Sort /></el-icon>
           <span class="text-focus text-[8px] md:text-xs mt-1 font-medium">放置交換</span>
         </div>
+        <span
+          v-if="hero && gameSeasonMark?.hero"
+          class="season-off-tag season-off-hero"
+          :title="offSeasonTitle"
+          data-testid="season-off-hero"
+        >非 {{ gameSeason }}</span>
         <HeroCard v-if="hero" :hero="hero" hide-name class="w-full h-full border-none shadow-none pointer-events-none" />
         <div v-else class="text-ink-mute flex flex-col items-center py-2 md:py-10">
           <el-icon :size="16" class="md:text-3xl"><Plus /></el-icon>
@@ -269,10 +275,10 @@
         >
           <template #reference>
             <div
-              class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border cursor-pointer transition-all"
+              class="relative flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border cursor-pointer transition-all"
               :class="[
                 draggingSlot === 1 ? 'opacity-0' : '',
-                isConflictSkill(skill1)
+                isConflictSkill(skill1) || isOffSeasonSkill(1)
                   ? 'ring-1 md:ring-2 ring-red-500 bg-red-50 border-red-500'
                   : focusedSkillSlot === 1
                     ? 'ring-1 md:ring-2 ring-focus bg-highlight border-focus'
@@ -291,6 +297,7 @@
               @dragleave="(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragOverSlot = null }"
               @drop="(e) => { dragOverSlot = null; handleDrop(e, 1) }"
             >
+              <span v-if="skill1 && isOffSeasonSkill(1)" class="season-off-tag season-off-skill" :title="offSeasonTitle" data-testid="season-off-skill">非 {{ gameSeason }}</span>
               <SkillTypeMark v-if="skill1" :type="skill1.type" size="slot" />
               <div v-else class="w-5 h-5 md:w-8 md:h-8 bg-surface-muted rounded flex items-center justify-center text-ink-mute flex-shrink-0">
                 <el-icon class="text-[10px] md:text-base"><Plus /></el-icon>
@@ -343,10 +350,10 @@
         >
           <template #reference>
             <div
-              class="flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border cursor-pointer transition-all"
+              class="relative flex items-center gap-1 md:gap-2 p-0.5 md:p-2 bg-white rounded border cursor-pointer transition-all"
               :class="[
                 draggingSlot === 2 ? 'opacity-0' : '',
-                isConflictSkill(skill2)
+                isConflictSkill(skill2) || isOffSeasonSkill(2)
                   ? 'ring-1 md:ring-2 ring-red-500 bg-red-50 border-red-500'
                   : focusedSkillSlot === 2
                     ? 'ring-1 md:ring-2 ring-focus bg-highlight border-focus'
@@ -365,6 +372,7 @@
               @dragleave="(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragOverSlot = null }"
               @drop="(e) => { dragOverSlot = null; handleDrop(e, 2) }"
             >
+              <span v-if="skill2 && isOffSeasonSkill(2)" class="season-off-tag season-off-skill" :title="offSeasonTitle" data-testid="season-off-skill">非 {{ gameSeason }}</span>
               <SkillTypeMark v-if="skill2" :type="skill2.type" size="slot" />
               <div v-else class="w-5 h-5 md:w-8 md:h-8 bg-surface-muted rounded flex items-center justify-center text-ink-mute flex-shrink-0">
                 <el-icon class="text-[10px] md:text-base"><Plus /></el-icon>
@@ -429,6 +437,7 @@ import SkillTypeMark from './SkillTypeMark.vue'
 import BingxueSection from './BingxueSection.vue'
 import StatsEditorDialog from './StatsEditorDialog.vue'
 import type { BingxueActive } from '../composables/useLineups'
+import type { GameSeasonSlotMark } from '../lib/gameSeasonMisfits'
 import { Hero, Skill, Trait, useData } from '../composables/useData'
 import { useTemplateParser } from '../composables/useTemplateParser'
 
@@ -450,10 +459,16 @@ const props = defineProps({
   isDragTarget: { type: Boolean, default: false },
   skillDragging: { type: Boolean, default: false },
   conflictingSkillNames: { type: Object as PropType<Set<string>>, default: () => new Set<string>() },
+  // The lineup page's game season, and what on this slot it does not offer (null: everything fits). Marked only;
+  // what is marked stays in place until the user clears it.
+  gameSeason: { type: String, default: '' },
+  gameSeasonMark: { type: Object as PropType<GameSeasonSlotMark | null>, default: null },
 })
 
 const isConflictSkill = (skill: Skill | null | undefined) =>
   !!skill && props.conflictingSkillNames.has(skill.name)
+const isOffSeasonSkill = (slot: 1 | 2) => !!props.gameSeasonMark?.skills.includes(slot)
+const offSeasonTitle = computed(() => `${props.gameSeason} 沒有這一項：留在原位，可以用「移除非本賽季」清掉`)
 
 const { skills } = useData()
 const { parseTextToPlain } = useTemplateParser()
@@ -670,6 +685,40 @@ const handleDrop = (event: DragEvent, targetSlotIdx: number) => {
 </script>
 
 <style scoped>
+/* "非 S1": a hero or skill the picked game season does not offer. */
+.season-off-tag {
+  border-radius: 2px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.season-off-skill {
+  position: absolute;
+  top: -7px;
+  right: 18px;
+  z-index: 5;
+  pointer-events: none;
+}
+.season-off-hero {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  font-size: 11px;
+  padding: 1px 6px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+@media (max-width: 767px) {
+  .season-off-tag { font-size: 8px; padding: 0 2px; }
+  .season-off-hero { font-size: 9px; padding: 0 4px; top: 2px; }
+  .season-off-skill { top: -6px; right: 12px; }
+}
 .breakthrough-star {
   display: inline-flex;
   align-items: center;

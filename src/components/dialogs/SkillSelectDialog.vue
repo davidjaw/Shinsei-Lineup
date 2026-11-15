@@ -12,6 +12,7 @@
         mode="select"
         :used-skills="usedSkills"
         :owned-skills="ownedSkills"
+        :game-season="gameSeason"
         @select="(skill: Skill) => $emit('select', skill)"
       />
     </div>
@@ -26,6 +27,7 @@ defineProps<{
   modelValue: boolean
   usedSkills: Set<string>
   ownedSkills: string[]
+  gameSeason: string
 }>()
 defineEmits<{
   (e: 'update:modelValue', v: boolean): void

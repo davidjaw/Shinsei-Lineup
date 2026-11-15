@@ -34,6 +34,7 @@
           <span class="text-xs truncate">{{ team.name }}</span>
         </div>
         <div class="flex items-center gap-1.5 flex-shrink-0">
+          <TeamSeasonMisfits :team="idx" />
           <span
             class="text-[11px] tabular-nums"
             :class="teamCost(team) > 20 ? 'text-red-500' : 'text-ink-mute'"
@@ -128,6 +129,7 @@ import { Share, Document, Plus, Delete, Position, FullScreen } from '@element-pl
 import { type Lineup, isEmptyTeam, computeTeamCost } from '../../composables/useLineups'
 import { MAX_TEAMS_PER_GROUP } from '../../types/group'
 import TeamMoveButtons from './TeamMoveButtons.vue'
+import TeamSeasonMisfits from './TeamSeasonMisfits.vue'
 import { useTeamReorder } from './useTeamReorder'
 
 const props = defineProps<{

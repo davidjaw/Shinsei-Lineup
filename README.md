@@ -10,11 +10,12 @@
 
 - 160+ 位武將資料（數值、特性、技能、頭像）
 - 260+ 個戰法翻譯（日文 → 繁體中文），含模板化數值顯示
-- 48 種狀態效果定義
-- 互動式編隊器（5 隊編制，主將/副將配置）
+- 49 種狀態效果定義
+- 互動式編隊器（編組，每組最多 10 隊，主將/副將配置）
 - 武將庫（依 Cost / 勢力多選篩選）
 - 戰法庫（依類型 / 稀有度篩選）
 - 庫存管理（標記已擁有武將/戰法）
+- 賽季選擇（S1 / S2 / S3 / PK，存於本機）：選將、選戰法只列出該賽季可用的，編組中非本賽季的項目會標記並可一鍵移除；賽季表為 `data/game_seasons.json`
 - Override 機制（手動新增未上架武將/戰法）
 - 帳號系統（Google / GitHub 登入、雲端角色配置同步、命名分享連結）— 詳見下方 [帳號系統 / Supabase](#帳號系統--supabase)
 
@@ -103,6 +104,9 @@ npm run data       # merge_sources → build_frontend_data → check_build / che
 | 為分享命名 / 在「我的分享」管理 | ✗ | ✓ |
 | 雲端**角色配置**（武將/戰法庫存）同步 | ✗ | ✓ |
 | 多套配置切換、預設配置自動載入 | ✗ | ✓ |
+| 雲端**編組**同步（跨裝置，衝突時提示） | ✗ | ✓ |
+| 精選隊伍投稿 / 投票 | ✗ | ✓ |
+| 抽卡紀錄 | ✗ | ✓ |
 
 ### 登入流程
 
@@ -144,13 +148,15 @@ script/
 data/
   overrides.yaml           # 手動覆蓋資料（git 追蹤）
   statuses.yaml            # 狀態效果定義（git 追蹤）
+  game_seasons.json        # 武將 / 事件戰法的賽季表（git 追蹤，手動維護）
   *_crawled.yaml           # 爬蟲輸出（gitignored）
-  *_translated.yaml        # LLM 翻譯輸出（gitignored）
+  heroes_translated.yaml   # 武將 LLM 翻譯輸出（gitignored）
+  skills.yaml / traits.yaml / bingxue.yaml  # 戰法 / 特性 / 兵學正本（LLM 輸出直接寫入）
 
 src/
   components/              # Vue 元件
   composables/             # Vue 組合式函數
-  lib/                     # Supabase 客戶端（auth.ts, profiles.ts, share.ts, supabase.ts）
+  lib/                     # Supabase 客戶端（auth, profiles, share, lineupGroups, proposals, variants, gachaLog, bans, displayName, supabase）與共用工具
   main.ts                  # 應用程式入口
 
 .build/                    # 前端 JSON（gitignored）
