@@ -39,6 +39,13 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.11',
+    date: '2026-11-16',
+    entries: [
+      { tag: 'data', text: '新增柳生宗嚴、上泉信綱的兵學' },
+    ],
+  },
+  {
     version: '0.5.10',
     date: '2026-11-12',
     entries: [
