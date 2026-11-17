@@ -4,7 +4,7 @@
 #   skills    zh-TW skill name → {slots: {n: var name or literal}, name, description, commander_description}
 #             `slots` settles the cfg text's numbered slots the script cannot line up by itself
 #   traits    zh-TW trait name → {name, description, slots}
-#   bingxue   JP key → {description}, where the crawled text is behind an override
+#   bingxue   JP key → {slots, description}
 
 terms:
   主動發動: 能動発動
@@ -135,12 +135,12 @@ traits:
   獨眼龍: {slots: {1: "10", 2: "15"}}
   鐵炮大將: {slots: {1: lv_up, 2: cap_up}}
   才德兼備: {slots: {1: "40", 2: "28"}}
+  上下一心: {slots: {1: dodge_chance, 2: max_procs}}
   # cfg has no row for it.
   阪東太郎: {name: 坂東太郎, description: 統率が低下または減少している武将に兵刃ダメージを与えた際、55%の確率で自身の武勇が8増加（2ターン持続、最大3回まで重ねがけ可能）}
 
-# Where an override moved the numbers and the crawled ja text still has the old ones.
+# Slots an override moved away from the crawled ja text's numbers.
 bingxue:
-  気勢崩し: {description: 通常攻撃を受けた際、50%の確率で攻撃者の武勇と知略を18減少（1ターン持続）}
-  離間の計: {description: 能動戦法発動後、1.25%の離反・心攻効果を付与（最大4回まで重ねがけ可能）}
-  強靭: {description: 5ターン目に、兵力が50%を超えている場合、自身の与ダメージを3%→6%上昇。兵力が50%以下の場合は被ダメージを3%→6%低下}
-  返り討ちの計: {description: 制御状態を付与された際、90%の確率で敵軍単体にダメージ（ダメージ率85%、武勇・知略の高い方に応じて兵刃または計略ダメージとなる。各戦闘につき3回まで発動可能）}
+  気勢崩し: {slots: {2: valor_penalty}}
+  # 「最多可重疊4次」 in ours.
+  離間の計: {slots: {2: "4"}}

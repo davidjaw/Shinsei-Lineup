@@ -13,8 +13,8 @@ lining the official text up with a text that names or spells out the numbers:
 A slot is settled when every source that reaches it gives the same value. What stays open is listed and that
 skill keeps its zh-TW text (it is left out of the overlay) until `data/ja_overlay.yaml` names the slots.
 
-Trait text is the game8 ja text (short, numbers written in); a trait game8 lacks is read from cfg the same way
-as a skill. Terms (factions, clans, skill types, tags, statuses) are looked up in cfg by their zh-hant spelling;
+Traits and 兵學 are read from cfg the same way (their slots from our description, then from the game8 ja text);
+one cfg has no row for, or whose slots stay open, keeps the game8 ja text, its numbers written in. Terms (factions, clans, skill types, tags, statuses) are looked up in cfg by their zh-hant spelling;
 `data/ja_overlay.yaml` holds the ones cfg lacks and the status descriptions, which are ours.
 
 Usage:
@@ -252,6 +252,7 @@ class Cfg:
         self.skill = {s["id"]: s for s in cfg.get("skill", [])}
         self.skill_by_name = {s["name"]: s for s in cfg.get("skill", [])}
         self.skill_by_shown = {self.hant(s.get("show_name")): s for s in cfg.get("skill", [])}
+        self.skill_by_shown_ja = {self.ja(s.get("show_name")): s for s in cfg.get("skill", []) if s.get("skill_kind") == "天赋"}
 
     def ja(self, hans: str | None) -> str | None:
         return plain((self.by_hans.get(hans or "") or {}).get("ja")) or None
@@ -348,7 +349,21 @@ def contains(more: list[tuple], fewer: list[tuple]) -> bool:
     return True
 
 
+def official_text(c: dict, ours: str, variables: dict | None, game8: str, cfg: Cfg, hand_slots: dict, problems: list[str]) -> str | None:
+    """A trait's or 兵學's cfg text with its slots filled: from our own description (its vars, or numbers written in),
+    and from the game8 ja text for the slots ours does not reach. None when a slot stays open."""
+    slots = Slots(variables or {})
+    hant = cfg.hant(c["tips"])
+    for slot, mark in lined_up(hant, ours) or in_order(hant, ours):
+        slots.add_var(slot, mark.value) if mark.kind == "var" else slots.add_literal(slot, mark.value)
+    for slot, mark in lined_up(cfg.ja(c["tips"]), game8):
+        if slot not in slots.found:
+            slots.add_literal(slot, mark.value)
+    return fill(cfg.ja(c["tips"]), slots, hand_slots, problems, [])
+
+
 def trait_entries(heroes: list[dict], cfg: Cfg, canon: dict, hand: dict, report: dict) -> dict:
+    """Per trait: a hand text, else the official cfg text when every slot settles, else the game8 ja text."""
     out: dict = {}
     for hero in heroes:
         for trait in hero.get("traits") or []:
@@ -359,18 +374,17 @@ def trait_entries(heroes: list[dict], cfg: Cfg, canon: dict, hand: dict, report:
             raw = (canon.get(trait.get("name_jp")) or {}).get("raw") or {}
             c = cfg.skill_named(name, ("特性", "天赋"))
             entry = {"name": by_hand.get("name") or trait.get("name_jp") or (cfg.ja(c["show_name"]) if c else None)}
-            text = by_hand.get("description") or raw.get("description")
-            if text and not by_hand.get("description") and not contains(numbers(text), numbers(trait.get("description", ""), trait.get("vars"))):
-                report["traits_numbers"][name] = {"ja": text, "zh": trait.get("description"), "vars": trait.get("vars")}
+            problems: list[str] = []
+            text = by_hand.get("description")
             if not text and c and cfg.ja(c.get("tips")):
-                slots = Slots(trait.get("vars") or {})
-                hant, ours = cfg.hant(c["tips"]), trait.get("description") or ""
-                for slot, mark in lined_up(hant, ours) or in_order(hant, ours):
-                    slots.add_var(slot, mark.value) if mark.kind == "var" else slots.add_literal(slot, mark.value)
-                problems: list[str] = []
-                text = fill(cfg.ja(c["tips"]), slots, by_hand.get("slots") or {}, problems, [])
-                if problems:
-                    report["traits_open"][name] = {"ja": cfg.ja(c["tips"]), "zh": trait.get("description"), "vars": trait.get("vars"), "problems": problems}
+                text = official_text(c, trait.get("description") or "", trait.get("vars"), raw.get("description") or "", cfg, by_hand.get("slots") or {}, problems)
+            if not text and raw.get("description"):
+                text = raw["description"]
+                report["traits_game8"].append(name)
+            elif problems:
+                report["traits_open"][name] = {"ja": cfg.ja(c["tips"]), "zh": trait.get("description"), "vars": trait.get("vars"), "problems": problems}
+            if text and not by_hand.get("description") and not contains(numbers(text, trait.get("vars")), numbers(trait.get("description", ""), trait.get("vars"))):
+                report["traits_numbers"][name] = {"ja": text, "zh": trait.get("description"), "vars": trait.get("vars")}
             if not entry["name"] or (trait.get("description") and not text):
                 report["traits_missing"].append(name)
             out[name] = {k: v for k, v in {**entry, "description": text}.items() if v}
@@ -410,13 +424,24 @@ def status_entries(statuses: dict, cfg: Cfg, hand: dict, report: dict) -> dict:
     return out
 
 
-def bingxue_entries(bingxue: dict, hand: dict, report: dict) -> dict:
-    """The crawled `description_jp` with its two levels (`2.5%/5%`) as a range the frontend switches by level
-    (`2.5%→5%`), or the hand text where the crawl is behind an override."""
+def bingxue_entries(bingxue: dict, cfg: Cfg, hand: dict, report: dict) -> dict:
+    """Per option (by its JP key): a hand text, else the official cfg text when every slot settles, else the crawled
+    `description_jp` with its two levels (`2.5%/5%`) as a range the frontend switches by level (`2.5%→5%`)."""
     out = {}
     for key, row in bingxue.items():
-        text = (hand.get(key) or {}).get("description") or re.sub(rf"({_NUM})/({_NUM})", r"\1→\2", row.get("description_jp") or "")
-        if not contains(numbers(text), numbers(row.get("description", ""), row.get("vars"))):
+        by_hand = hand.get(key) or {}
+        game8 = re.sub(rf"({_NUM})/({_NUM})", r"\1→\2", row.get("description_jp") or "")
+        c = cfg.skill_by_shown_ja.get(key)
+        problems: list[str] = []
+        text = by_hand.get("description")
+        if not text and c and cfg.ja(c.get("tips")):
+            text = official_text(c, row.get("description") or "", row.get("vars"), game8, cfg, by_hand.get("slots") or {}, problems)
+        if not text:
+            text = game8
+            report["bingxue_game8"].append(key)
+        if problems:
+            report["bingxue_open"][key] = {"ja": cfg.ja(c["tips"]), "zh": row.get("description"), "vars": row.get("vars"), "problems": problems}
+        if not contains(numbers(text, row.get("vars")), numbers(row.get("description", ""), row.get("vars"))):
             report["bingxue_numbers"][key] = {"ja": text, "zh": row.get("description"), "vars": row.get("vars")}
         out[key] = {"description": text}
     return out
@@ -434,7 +459,7 @@ def build() -> tuple[dict, dict]:
     cfg = Cfg()
     report: dict = {
         "terms": [], "statuses": [], "skill_names": [], "skills_no_source": [], "skills_open": {},
-        "traits_missing": [], "traits_open": {}, "traits_numbers": {}, "bingxue_numbers": {}, "value_notes": {},
+        "traits_missing": [], "traits_game8": [], "traits_open": {}, "bingxue_game8": [], "bingxue_open": {}, "traits_numbers": {}, "bingxue_numbers": {}, "value_notes": {},
     }
     status_rows = status_entries(statuses, cfg, hand.get("statuses") or {}, report)
     status_ja = {key: row["name"] for key, row in status_rows.items() if row.get("name")}
@@ -445,7 +470,7 @@ def build() -> tuple[dict, dict]:
         "statuses": status_rows,
         "skills": {name: row for name, row in skill_rows.items() if row},
         "traits": trait_entries(heroes, cfg, traits_canon, hand.get("traits") or {}, report),
-        "bingxue": bingxue_entries(bingxue, hand.get("bingxue") or {}, report),
+        "bingxue": bingxue_entries(bingxue, cfg, hand.get("bingxue") or {}, report),
     }
     report["skills_total"] = len(skills)
     report["skills_described"] = sum(1 for row in skill_rows.values() if row.get("description"))
@@ -458,10 +483,13 @@ def main() -> int:
     (BUILD_DIR / "ja_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1) + "\n", "utf-8")
     print(f"[ja] skills described {report['skills_described']}/{report['skills_total']}, traits {len(overlay['traits'])}, "
           f"terms {len(overlay['terms'])}, statuses {len(overlay['statuses'])}")
+    for label in ("traits_game8", "bingxue_game8"):
+        if report[label]:
+            print(f"[ja] {label}: the game8 text, not cfg's ({len(report[label])}): {'、'.join(report[label])}")
     for label in ("terms", "statuses", "skill_names", "skills_no_source", "traits_missing"):
         if report[label]:
             print(f"[ja] {label} without ja ({len(report[label])}): {'、'.join(report[label])}")
-    for label in ("skills_open", "traits_open", "traits_numbers", "bingxue_numbers", "value_notes"):
+    for label in ("skills_open", "traits_open", "bingxue_open", "traits_numbers", "bingxue_numbers", "value_notes"):
         if report[label]:
             print(f"[ja] {label} ({len(report[label])}): {'、'.join(report[label])}  (see .build/ja_report.json)")
     return 0

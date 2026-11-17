@@ -41,7 +41,7 @@ Sialia cfg.json ─┘                              │
 - **Build output**: `.build/heroes.json`, `skills.json`, `statuses.json`, `bingxue.json`
   (gitignored); `dist/index.html` is the single-file bundle.
 - **Japanese overlay**: `.build/ja.json` (`script/build_ja_overlay.py`, the last step of `npm run data`): the catalog's
-  Japanese, keyed by the zh-TW names. Names, targets and skill descriptions are the official cfg `ja` text, with its
+  Japanese, keyed by the zh-TW names. Names, targets and the skill, trait and 兵學 descriptions are the official cfg `ja` text, with its
   numbered slots tied to the built skill's own vars; `data/ja_overlay.yaml` (tracked) holds what cfg lacks (our tags and
   status descriptions) and the slots the script cannot line up. The script prints what is missing and what needs a
   hand entry; `.build/ja_report.json` has the detail. This site's UI does not read it yet; the paid site exports it.
