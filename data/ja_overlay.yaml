@@ -99,7 +99,7 @@ statuses:
 
 skills:
   武田之赤備: {slots: {1: crit_rate, 2: proc_rate, 3: extra_proc_rate, 4: dmg_rate, 5: stat_debuff, 6: debuff_duration, 7: commander_proc_bonus}}
-  # The base cut is the smaller figure; the side that outnumbers the other gets the larger one.
+  # phys_reduce is the cut both kinds get, strat_reduce what the majority's kind rises to (in game 22% and 26% at level 10).
   智者樂水: {slots: {1: duration, 2: strat_reduce, 3: commander_share, 4: outgoing_reduce, 5: phys_reduce}}
   磐石眈眈: {slots: {1: base_reduction, 2: stack_bonus}}
   軍神: {slots: {1: stack_trigger_chance, 2: dmg_bonus_per_stack, 3: max_stack, 4: max_stack_dmg_bonus}}
@@ -112,8 +112,7 @@ skills:
   # cfg uses one slot for the odd and the even turn's chance; ours holds two figures (20→40 and 19→38, as game8 has).
   歸蝶之舞: {slots: {1: odd_turn_rate, 2: stat_debuff, 3: debuff_duration}}
   剛毅果斷: {slots: {1: assault_buff, 2: tactic_debuff, 3: duration}}
-  # {3}: our description leaves this clause out; the figure is game8's.
-  甲山猛虎: {slots: {1: dmg_rate, 2: duration, 3: "68%→136%"}}
+  甲山猛虎: {slots: {1: dmg_rate, 2: duration, 3: sealed_dmg_rate}}
   金鼓連天: {slots: {1: active_dmg_buff, 2: assault_def_debuff, 3: duration}}
   薩摩鐵炮隊: {slots: {1: base_dmg_buff, 2: hero_dmg_buff}}
   先陣鼓舞: {slots: {1: dmg_rate, 2: unique_activation_buff, 3: buff_duration, 4: commander_buff_bonus}}

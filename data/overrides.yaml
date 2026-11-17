@@ -83,6 +83,10 @@ skills:
   知者楽水:
     # cfg 「9%→18%から12%→24%」 is two level ranges (one per majority branch), not 9%～12%; in-game battle reports print
     # 18.00 / 24.00 at level 10. 11-11 balance patch: 22% / 26% at level 10.
+    # Wording as the game's (owner's screenshot at 已滿級, 2026-11-17): phys_reduce is the cut both kinds get,
+    # strat_reduce what the majority's kind rises to.
+    description: 戰鬥前{var:duration}回合，我軍群體（2人）受到兵刃與謀略傷害降低{var:phys_reduce}（{scale:統率}。若我方智略大於武勇的武將更多，則受到兵刃傷害降低的效果增加至{var:strat_reduce}，否則受到謀略傷害降低的效果增加至{var:strat_reduce}），但造成傷害降低{var:outgoing_reduce}
+    commander_description: 我軍全體首回合分攤{var:commander_share}所受到的傷害
     vars:
       phys_reduce:
         base: 0.11
@@ -90,6 +94,15 @@ skills:
       strat_reduce:
         base: 0.13
         max: 0.26
+  甲山猛虎:
+    # The rise against a target already under 封擊 was missing (game8 68%→136%; in game 136% at level 10, owner's
+    # screenshot 2026-11-17).
+    description: 對敵軍群體（2人）造成兵刃傷害（傷害率{var:dmg_rate}）並使其進入{status:封擊}狀態，持續{var:duration}回合，若敵軍處於{status:封擊}狀態，則傷害率提升至{var:sealed_dmg_rate}
+    vars:
+      sealed_dmg_rate:
+        base: 0.68
+        max: 1.36
+    _action: modify
   豊後の戦陣:
     # In game the 統率 branch at max level raises 主動 activation by 8% (game8 4%→8%; in-game 已滿級 8%; battle reports
     # 96 / 96 at 8%); the stale data had 3%→6%.
