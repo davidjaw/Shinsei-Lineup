@@ -21,6 +21,10 @@ skills:
         type: flat
       steal_duration: 2
       steal_stacks: 2
+      stat_absorb:
+        base: 30
+        max: 30
+        type: flat
       commander_dmg_rate:
         base: 2.48
         max: 2.48
@@ -1056,6 +1060,7 @@ skills:
       stat_inc:
         base: 24
         max: 48
+        type: flat
       duration: 2
     _action: modify
     _name_jp: 電光石火
@@ -1694,6 +1699,31 @@ skills:
       trigger_rate:
         base: 0.25
         max: 0.5
+      main_attr_buff:
+        base: 2.5
+        max: 5
+        type: flat
+    _action: modify
+  # Figures the game8 crawl has behind the game (checked against the nobudb 11-13 roster, 2026-11-17).
+  懐柔:
+    # The rest lasts 3 rounds from round 2 (our text read it as rounds 2 to 3).
+    description: 戰鬥第{var:duration_start}回合起，自軍複數（2～3人）獲得{status:休養}狀態（每回合恢復兵力，恢復率{var:heal_rate}，{scale:智略}），持續{var:duration_end}回合。
+    vars:
+      heal_rate:
+        base: 0.44
+        max: 0.88
+    _action: modify
+  魚目混珠:
+    vars:
+      atk_penalty:
+        base: 0.25
+        max: 0.5
+    _action: modify
+  帰蝶の舞:
+    vars:
+      even_turn_rate:
+        base: 0.2
+        max: 0.4
     _action: modify
   風姿綽約:
     description: 戰鬥中，使友軍群體（2人）武勇提升{var:valor_buff_rate}（{scale:智略}），該效果每回合疊加1層，最多疊加{var:stack_max}層。 每回合行動前，有{var:confusion_chance}機率（{scale:智略}）對敵軍單體施加混亂、封擊、無策、疲弊狀態中的一種（不會重複施加），每個狀態持續{var:status_duration}回合。
@@ -1712,6 +1742,7 @@ skills:
       commander_stat_bonus:
         base: 3
         max: 6
+        type: flat
     _action: modify
   破陣乱舞:
     description: 使自身及友軍武勇最高單體獲得{var:status_rate}（{scale:武勇}）{status:破陣}狀態，持續{var:duration}回合，且自身下次普通攻擊後對目標造成一次額外兵刃傷害（傷害率{var:extra_dmg_rate}），該戰法發動後會進入{var:cooldown}回合冷卻。

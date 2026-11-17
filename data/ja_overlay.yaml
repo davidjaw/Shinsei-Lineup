@@ -1,0 +1,147 @@
+# Hand-kept Japanese for script/build_ja_overlay.py (→ .build/ja.json): what the official cfg does not give.
+#   terms     zh-TW term → ja, for terms cfg has no row for (ours: tags, stat and damage names)
+#   statuses  zh-TW status → {name, description}; the descriptions are ours (statuses.yaml), so their ja is too
+#   skills    zh-TW skill name → {slots: {n: var name or literal}, name, description, commander_description}
+#             `slots` settles the cfg text's numbered slots the script cannot line up by itself
+#   traits    zh-TW trait name → {name, description, slots}
+#   bingxue   JP key → {description}, where the crawled text is behind an override
+
+terms:
+  主動發動: 能動発動
+  被動觸發: 受動発動
+  突擊觸發: 突撃発動
+  回合觸發: ターン発動
+  條件觸發: 条件発動
+  指揮效果: 指揮効果
+  大將技: 大将技
+  兵刃傷害: 兵刃ダメージ
+  謀略傷害: 計略ダメージ
+  真實傷害: 防御無視ダメージ
+  單體傷害: 単体ダメージ
+  群體傷害: 複数ダメージ
+  多段傷害: 連続ダメージ
+  施加狀態: 状態付与
+  移除狀態: 状態解除
+  免疫狀態: 状態耐性
+  提升屬性: 属性上昇
+  降低屬性: 属性低下
+  兵種專屬: 兵種専用
+  兵種戰法: 兵種戦法
+  兵種效果: 兵種効果
+  賽季效果: シーズン効果
+  武勇系: 武勇系
+  智略系: 知略系
+  統率系: 統率系
+  速度系: 速度系
+  魅力系: 魅力系
+  政務系: 政務系
+  武勇: 武勇
+  智略: 知略
+  統率: 統率
+  速度: 速度
+  魅力: 魅力
+  政務: 政務
+  兵刃: 兵刃
+  謀略: 計略
+  真實: 防御無視
+  國衆: 国衆
+  男: 男
+  女: 女
+
+statuses:
+  威壓: {description: ターン全体をスキップし、準備中の戦法を中断}
+  麻痺: {description: ターンと行動後の処理をスキップし、準備中の戦法を中断}
+  封擊: {description: 通常攻撃不可}
+  無策: {description: 能動戦法発動不可、準備中の戦法を中断}
+  混亂: {description: 通常攻撃の対象が敵味方からランダムに選ばれる}
+  疲弊: {description: 与えるダメージがすべて0になる}
+  偽報: {name: 偽報, description: 対象の指揮戦法・受動戦法を無効化し、対象が他の武将に付与済みの指揮・受動効果も解除}
+  畏縮: {description: 指揮戦法・受動戦法を無効化}
+  閃避: {name: 回避, description: 攻撃を回避してダメージを受けず、突撃戦法の発動も防ぐ}
+  抵禦: {name: 鉄壁, description: ダメージを無効化（突撃戦法は発動する）}
+  鐵壁: {description: 攻撃を受けた際、確率でダメージを無効化。1回ごとに回数を消費し、回数またはターンが尽きると解除}
+  必中: {description: 回避と鉄壁を無視}
+  先攻: {description: そのターン最初に行動}
+  連擊: {description: 通常攻撃を2回行う}
+  反擊: {description: 通常攻撃を受けた際、攻撃者に兵刃ダメージ}
+  破陣: {description: 属性差の計算で敵の防御側の属性を無視}
+  亂舞: {description: 通常攻撃が追加の対象にも及ぶ}
+  會心: {description: 兵刃ダメージの会心確率が上昇}
+  奇謀: {description: 計略ダメージの奇策確率が上昇}
+  會心傷害率: {name: 会心ダメージ率, description: 会心時の兵刃ダメージ倍率が上昇（基礎×2.0）}
+  奇謀傷害率: {name: 奇策ダメージ率, description: 奇策時の計略ダメージ倍率が上昇（基礎×2.0）}
+  離反: {description: 兵刃ダメージを与えた際、ダメージ量に応じて兵力を回復}
+  攻心: {description: 計略ダメージを与えた際、ダメージ量に応じて兵力を回復}
+  休養: {description: 毎ターン行動前に負傷兵を回復}
+  禁療: {description: 受ける回復量が低下}
+  火傷: {description: 毎ターン行動前に計略ダメージを受ける（知略依存）}
+  水攻: {description: 毎ターン行動前に計略ダメージを受ける（知略依存）}
+  中毒: {description: 毎ターン行動前に計略ダメージを受ける（知略依存）}
+  潰走: {description: 毎ターン行動前に兵刃ダメージを受ける（武勇依存）}
+  消沉: {description: 毎ターン行動前に計略ダメージを受ける（知略依存）}
+  叛逃: {description: 毎ターン行動前にダメージを受ける（武勇と知略の高い方に依存、防御無視）}
+  洞察: {description: すべての行動制限状態を無効化}
+  免疫: {description: 特定の状態を無効化}
+  援護: {description: 対象への通常攻撃を代わりに受ける}
+  挑釁: {description: 対象の通常攻撃を自身に固定}
+  牽制: {description: 対象の戦法の発動対象を自身に固定}
+  破壞: {name: 破壊, description: 指定部位の装備が無効になる}
+  發動機率增加·主動: {name: 発動確率増加・能動, description: 能動戦法の発動確率が上昇}
+  發動機率增加·突擊: {name: 発動確率増加・突撃, description: 突撃戦法の発動確率が上昇}
+  發動機率增加·其他: {name: 発動確率増加・その他, description: 指定した種類の戦法の発動確率が上昇}
+  霸王: {description: 自身の兵力回復時、回復量に応じて敵軍単体の兵力を減少させる}
+  魔王: {description: 自身の行動後、敵軍武将の兵力が初めて一定値を下回った場合、その武将の兵力をランダムに減少させる}
+  公家嗜好: {description: 敵軍大将が装備する家宝の効果を無効化し、自身がその効果を得る}
+  物外軒: {description: 戦闘開始から数ターンの間、能動戦法・突撃戦法の発動確率が上昇}
+  金城鐵壁: {description: 通常攻撃を受けた際、敵が弱体化状態にあれば確率で兵力を回復}
+  老狐狸: {description: 自身と異なる同一勢力の武将2名と編成した場合、自身がその勢力に変わる}
+  雷電化身: {description: 通常攻撃を受けた際、低確率で攻撃者に麻痺を付与}
+
+skills:
+  武田之赤備: {slots: {1: crit_rate, 2: proc_rate, 3: extra_proc_rate, 4: dmg_rate, 5: stat_debuff, 6: debuff_duration, 7: commander_proc_bonus}}
+  # The base cut is the smaller figure; the side that outnumbers the other gets the larger one.
+  智者樂水: {slots: {1: duration, 2: strat_reduce, 3: commander_share, 4: outgoing_reduce, 5: phys_reduce}}
+  磐石眈眈: {slots: {1: base_reduction, 2: stack_bonus}}
+  軍神: {slots: {1: stack_trigger_chance, 2: dmg_bonus_per_stack, 3: max_stack, 4: max_stack_dmg_bonus}}
+  千軍辟易: {slots: {1: dmg_rate, 2: 威壓_chance}}
+  # {2}: game8 「一揆発動後の1ターン」.
+  一切皆空: {slots: {1: rebellion_damage_rate, 2: "1", 3: commander_damage_bonus, 4: recovery_rate}}
+  天下御免: {slots: {1: extra_dmg_rate, 2: steal_duration, 3: stat_absorb, 4: lea_steal, 5: commander_dmg_rate}}
+  相模之獅: {slots: {2: shield_count, 3: shield_rate, 4: dmg_rate, 5: heal_rate}}
+  破竹之勢: {slots: {1: crit_rate, 2: crit_damage_buff, 3: crit_damage_stack, 4: max_stacks, 5: commander_max_stacks}}
+  # cfg uses one slot for the odd and the even turn's chance; ours holds two figures (20→40 and 19→38, as game8 has).
+  歸蝶之舞: {slots: {1: odd_turn_rate, 2: stat_debuff, 3: debuff_duration}}
+  剛毅果斷: {slots: {1: assault_buff, 2: tactic_debuff, 3: duration}}
+  # {3}: our description leaves this clause out; the figure is game8's.
+  甲山猛虎: {slots: {1: dmg_rate, 2: duration, 3: "68%→136%"}}
+  金鼓連天: {slots: {1: active_dmg_buff, 2: assault_def_debuff, 3: duration}}
+  薩摩鐵炮隊: {slots: {1: base_dmg_buff, 2: hero_dmg_buff}}
+  先陣鼓舞: {slots: {1: dmg_rate, 2: unique_activation_buff, 3: buff_duration, 4: commander_buff_bonus}}
+  耐苦成剛: {slots: {1: valor_buff, 2: max_stacks, 3: damage_rate, 4: support_duration}}
+  甲斐弓騎兵: {slots: {1: speed_increase, 2: skill_rate_increase, 3: prep_skill_rate_increase}}
+  一徹意志: {slots: {1: leadership_buff, 2: shield_duration, 3: shield_count, 4: shield_duration}}
+  樓岸一番: {slots: {1: damage_rate, 2: atk_debuff, 3: debuff_duration, 4: extended_duration}}
+  # {3}: 「未來2回攻擊」 in ours, 「次2回」 in game8.
+  月盈中天: {slots: {1: collapse_damage, 2: collapse_duration, 3: "2", 4: damage_reduction}}
+  # {2}: 「持續1回合」 in ours.
+  追亡逐北: {slots: {1: dmg_rate, 2: "1"}}
+  # Ours alone (no cfg text): 評定眾 and season effects.
+  背水之陣: {description: 指定部隊がプレイヤーとの戦闘で受けるダメージが低下（士気依存）し、士気の消費速度が上昇}
+  別動奇襲: {description: プレイヤーとの戦闘が引き分けになった場合、敵軍部隊の被ダメージが上昇}
+  成果加俸·優: {description: 出陣部隊にレベル40を超える武将が1名いるごとに、戦闘で得る経験値が上昇}
+  習熟練達: {name: 習熟練達, description: シーズン効果。武将レベルに応じて戦闘で得る経験値が上昇。レベルに満たない場合は無効}
+  武田精銳: {name: 武田精鋭, description: シーズン効果。部隊の会心が上昇}
+
+traits:
+  獨眼龍: {slots: {1: "10", 2: "15"}}
+  鐵炮大將: {slots: {1: lv_up, 2: cap_up}}
+  才德兼備: {slots: {1: "40", 2: "28"}}
+  # cfg has no row for it.
+  阪東太郎: {name: 坂東太郎, description: 統率が低下または減少している武将に兵刃ダメージを与えた際、55%の確率で自身の武勇が8増加（2ターン持続、最大3回まで重ねがけ可能）}
+
+# Where an override moved the numbers and the crawled ja text still has the old ones.
+bingxue:
+  気勢崩し: {description: 通常攻撃を受けた際、50%の確率で攻撃者の武勇と知略を18減少（1ターン持続）}
+  離間の計: {description: 能動戦法発動後、1.25%の離反・心攻効果を付与（最大4回まで重ねがけ可能）}
+  強靭: {description: 5ターン目に、兵力が50%を超えている場合、自身の与ダメージを3%→6%上昇。兵力が50%以下の場合は被ダメージを3%→6%低下}
+  返り討ちの計: {description: 制御状態を付与された際、90%の確率で敵軍単体にダメージ（ダメージ率85%、武勇・知略の高い方に応じて兵刃または計略ダメージとなる。各戦闘につき3回まで発動可能）}

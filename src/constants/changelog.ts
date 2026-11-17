@@ -39,6 +39,14 @@ export const TAG_COLORS: Record<ChangelogTag, string> = {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '0.5.12',
+    date: '2026-11-17',
+    entries: [
+      { tag: 'fix', text: '修正戰法數值：懷柔（恢復率 44%→88%，自第 2 回合起持續 3 回合）、魚目混珠（造成傷害降低 25%→50%）、歸蝶之舞（偶數回合機率 20%→40%）' },
+      { tag: 'fix', text: '天下御免、一心一德、同氣連枝、電光石火的屬性增減改以點數顯示（先前誤顯示為百分比）' },
+    ],
+  },
+  {
     version: '0.5.11',
     date: '2026-11-16',
     entries: [

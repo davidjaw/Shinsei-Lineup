@@ -40,6 +40,11 @@ Sialia cfg.json ─┘                              │
   `src/lib/gameSeason.test.ts` fails when the catalog gains a hero or event skill the table lacks.
 - **Build output**: `.build/heroes.json`, `skills.json`, `statuses.json`, `bingxue.json`
   (gitignored); `dist/index.html` is the single-file bundle.
+- **Japanese overlay**: `.build/ja.json` (`script/build_ja_overlay.py`, the last step of `npm run data`): the catalog's
+  Japanese, keyed by the zh-TW names. Names, targets and skill descriptions are the official cfg `ja` text, with its
+  numbered slots tied to the built skill's own vars; `data/ja_overlay.yaml` (tracked) holds what cfg lacks (our tags and
+  status descriptions) and the slots the script cannot line up. The script prints what is missing and what needs a
+  hand entry; `.build/ja_report.json` has the detail. This site's UI does not read it yet; the paid site exports it.
 - **Translation failure manifest**: `.build/translation_failures.json` — `ok` flag, per-kind summary and
   copy/paste `suggested_actions`.
 
@@ -81,7 +86,7 @@ cloud sync/short shares/proposals/gacha are silently disabled. The client uses d
 
 - All game text in Traditional Chinese (繁體中文); code and comments in English.
 - Hero names: JP in `name_jp`, CHT in `name`. Skill names: JP key in YAML, CHT `name` in translated data.
-- `data/` is gitignored except `overrides.yaml`, `statuses.yaml`, `source_corrections.yaml`, `game_seasons.json`,
+- `data/` is gitignored except `overrides.yaml`, `statuses.yaml`, `ja_overlay.yaml`, `source_corrections.yaml`, `game_seasons.json`,
   the cfg archive and `cfg/last_diff_summary.txt`.
 - Never hand-edit `.build/` or `dist/`; regenerate them.
 - Changelog (`src/constants/changelog.ts`): released versions are frozen — never append entries to them. After a

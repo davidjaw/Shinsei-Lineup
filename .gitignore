@@ -37,6 +37,7 @@ __pycache__/
 data/*
 !data/overrides.yaml
 !data/statuses.yaml
+!data/ja_overlay.yaml
 !data/game_seasons.json
 # Refactor: cfg-pipeline manual files + version archive are committed.
 !data/source_corrections.yaml

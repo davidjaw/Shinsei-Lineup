@@ -6,7 +6,7 @@
   "scripts": {
     "refresh": "uv run script/refresh_sources.py",
     "refresh:cfg": "uv run script/refresh_sources.py --skip-crawl",
-    "data": "uv run script/merge_sources.py && uv run script/build_frontend_data.py && uv run script/check_build.py && uv run script/check_coverage.py && uv run script/check_cfg_drift.py",
+    "data": "uv run script/merge_sources.py && uv run script/build_frontend_data.py && uv run script/check_build.py && uv run script/check_coverage.py && uv run script/check_cfg_drift.py && uv run script/build_ja_overlay.py",
     "dev": "npm run data && vite",
     "dev:supabase-dev": "npm run data && vite --mode dev",
     "build": "npm run data && vite build",
